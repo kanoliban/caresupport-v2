@@ -8,4 +8,5 @@ dist/
 .env
 families/
 !simulation/families/
+!fork/simulation/families/
 !fork/workspace/families/
