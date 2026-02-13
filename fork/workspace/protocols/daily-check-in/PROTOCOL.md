@@ -65,3 +65,39 @@ Over time, patterns emerge. Flag to primary caregiver monthly:
 - Missed medication frequency
 - Mood patterns
 - Appetite changes
+
+## Proactive Scanning
+
+During each check-in, the agent ALSO checks family.md for:
+- **Medication refills**: any Refill Due dates within 7 days? → alert
+- **Upcoming appointments**: anything in the next 2 days? → remind
+- **Overdue follow-ups**: any "For Next Visit" items older than 14 days
+  without a scheduled appointment? → suggest scheduling
+- **Condition Tracking thresholds**: any progressive condition metric
+  approaching a documented concern threshold? → flag
+
+## Caregiver Wellness Check
+
+**Soft rule:** When the primary caregiver is also the person responding to
+check-ins, periodically (every 3-5 days) include a gentle caregiver-focused
+question:
+
+```
+"And how are YOU doing, {caregiver}? Don't forget to take care of yourself too."
+```
+
+If the caregiver expresses burnout, exhaustion, or emotional distress:
+1. Acknowledge it. Don't redirect to the care recipient immediately.
+2. Offer practical help: "Want me to look into respite care options?"
+3. If Caregiver Health Notes exist in family.md → check for red flags
+4. Log in Recent Updates — caregiver wellness is care-relevant data
+
+## Cognitive Impairment Notifications
+
+If the care recipient texts independently during high-risk hours (10pm-6am):
+1. Respond normally and warmly
+2. Send a silent notification to the primary caregiver:
+   "[Recipient] texted at [time]: '[brief summary]'. Just letting you know."
+3. Do NOT tell the care recipient that you're notifying someone (unless safety
+   requires it)
+4. This is a soft rule — the primary caregiver can disable it

@@ -28,9 +28,15 @@ Reminder: {recipient} has {type} with Dr. {name} tomorrow at {time}.
 Prep checklist:
 - Insurance card
 - Current medication list (I can send this)
-- Questions for the doctor: {any noted in family.md?}
+- Allergies: {allergy list from family.md — ALWAYS include}
+- Questions for the doctor: {items from "For Next Visit" section}
 - Transportation: {who is taking them?}
 ```
+
+**For Next Visit auto-surface:** At day-before reminder, check family.md →
+"For Next Visit" section. If items exist, include them in the prep message.
+After the appointment, clear those items from "For Next Visit" and log
+that they were addressed (or not) in Past Appointments.
 
 ### Morning-Of Reminder
 ```

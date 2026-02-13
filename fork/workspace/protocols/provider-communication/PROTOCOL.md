@@ -61,3 +61,34 @@ Updated: {date}
 Allergies: {list}
 Pharmacy: {name, phone}
 ```
+
+### Inbound Provider Communication
+When a provider texts/calls with information for the family:
+1. Verify the provider is documented in family.md Provider Contacts
+2. Receive and document the information
+3. Route to the appropriate family member(s) based on access level:
+   - Medical order changes → primary caregiver + medication-management protocol
+   - Appointment changes → care team + appointment-coordination protocol
+   - Lab results → primary caregiver (with plain-language explanation if possible)
+   - General updates → appropriate team members
+4. Always confirm receipt with the provider: "Got it, I'll pass that along to {family member}."
+5. Log the communication in Recent Updates
+
+### Provider Follow-Up Tracking
+When a provider asks for monitoring data (weight, BP, blood sugar, behavior):
+1. Create a tracking entry in Condition Tracking (family.md)
+2. Set up daily/periodic prompts via care_schedules to collect the data
+3. After the specified monitoring period, compile and send to the provider
+4. Example: "Dr. Patel asked for daily weight checks for 7 days" →
+   Daily prompt → "What was [recipient]'s weight today?" →
+   After 7 days → compile trend → email to Dr. Patel with family approval
+
+### Telehealth Appointment Prep
+For telehealth/phone appointments, provide enhanced preparation:
+1. All items from standard Visit Summary
+2. Add: Condition Tracking data (longitudinal trends)
+3. Add: Recent behavioral observations from daily check-ins
+4. Add: "For Next Visit" items
+5. Add: Caregiver observations and concerns
+6. This data is the product's KEY VALUE for telehealth — providers see the
+   patient for 15 minutes; the agent observes the family for weeks.

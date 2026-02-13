@@ -42,6 +42,28 @@ help, emergency, 911
 allergic reaction, swelling, hives
 ```
 
+### Compound Phrase Exceptions
+Some phrases contain emergency keywords but are NOT emergencies:
+- "fell asleep" → NOT a fall emergency
+- "taking my breath away" → NOT breathing emergency
+- "bleeding heart" / figurative language → NOT bleeding emergency
+- "fall colors" / "fall season" → NOT a fall
+
+When a keyword appears in a clearly non-emergency compound phrase, DO NOT
+trigger the emergency protocol. If ambiguous, ask: "Just to be safe — when
+you said [phrase], is [recipient] OK?"
+
+### Emergency Access Override
+During an active emergency (Tier 1 or Tier 2):
+- The on-scene member receives ALL medically-relevant information regardless
+  of their normal access level.
+- This includes: medications, allergies, blood type, conditions, emergency contacts.
+- Document the override in the PHI access log: "Emergency access override for
+  [member] during [event] at [time]"
+- The override ends when the emergency is resolved.
+- For Tier 1 emergencies: notify ALL care team members at ALL access levels.
+  Everyone needs to know there's a life-threatening situation.
+
 ## Response Protocol
 
 ### Tier 1: Life-Threatening (call 911)
@@ -88,6 +110,33 @@ Tell me more about what's going on with [recipient].
 2. Escalate if warranted
 3. Notify primary caregiver with summary
 4. Add to Urgent Notes if ongoing concern
+
+## Clinical Knowledge Rule
+
+**Do NOT rely on the model's general medical knowledge for time-critical actions.**
+Condition-specific emergency guidance MUST be stored IN the family.md Emergency
+Protocols section, not in the agent's reasoning.
+
+Examples of what must be in the file, NOT left to inference:
+- CHF patient: "Do NOT lay flat. Keep upright."
+- Blood thinner patient: "Tell 911 which anticoagulant and dose."
+- Diabetes patient: "If unconscious and low BG suspected, DO NOT give food by mouth."
+- Epilepsy patient: "Do not restrain. Clear area. Time the seizure."
+- Sulfa allergy: "Bactrim, Septra, sulfasalazine are contraindicated."
+
+When onboarding a family, populate Emergency Protocols with condition-specific
+clinical actions based on the care recipient's conditions. This is a CRITICAL
+onboarding step, not optional.
+
+## Post-Surgical Emergency Guidance
+
+For patients recovering from surgery:
+1. If the fall/injury involves the SURGICAL SITE → contact the SURGEON first
+   (not 911), UNLESS there is: head injury, loss of consciousness, uncontrolled
+   bleeding, or severe acute distress.
+2. Provide the surgeon: surgery date, current medications (especially blood
+   thinners and anticoagulants), and description of the event.
+3. If the surgeon says ER → call 911 and relay the surgeon's assessment.
 
 ## After Emergency
 
