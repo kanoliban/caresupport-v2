@@ -18,45 +18,66 @@ The entire 20,000-word architecture collapsed into this:
 A markdown file and a conversation.
 ```
 
-`family.md` is to a care network what `CLAUDE.md` is to a development session. The agent reads it at the start. Reasons against it. Updates it. The conversation ends. The file persists. That's the product.
+`family.md` is to a care network what `CLAUDE.md` is to a development session. The agent reads it at the start. Reasons against it. Updates it. The conversation ends. The file persists.
 
-If you understand this — truly understand it, not just acknowledge it — you will build correctly. If you don't, you will rebuild the 20,000-word architecture one reasonable decision at a time.
-
----
-
-## The Primitive Shift
-
-Read `docs/primitive-shift.md` for the full articulation. Here is the core:
-
-**Most of what we call "software" is structured context plus decision-making.**
-
-When intelligence becomes infrastructure, the architecture collapses into a context file, a system prompt, and tool access. Not because you're cutting corners — because the load-bearing work moved from code to cognition.
-
-The primitive for this product is:
-
-```
-SMS arrives → fresh agent session → reads family.md → reasons → updates family.md → responds → session ends
-```
-
-The file is the memory. The file is the state. The file is the product. Sessions are ephemeral. The file persists. There is no database, no ORM, no state management layer, no event bus, no message queue that the agent reasons through. There is a file and an intelligence that reads it.
+Read `docs/primitive-shift.md` for the full articulation. The core: **most of what we call "software" is structured context plus decision-making.** When intelligence becomes infrastructure, the architecture collapses into a context file, a system prompt, and tool access.
 
 ---
 
-## Your Default Failure Mode
+## This Is Not a Unique Invention
 
-You will want to add things. This is your most dangerous instinct.
+The pattern — agent-maintained context file, fresh sessions, file as memory — has been independently discovered by every serious team building on top of LLMs.
 
-You will encounter a problem — concurrency, data integrity, scaling, edge cases — and your training will surface a solution from the old primitive: add a service, add a layer, add an abstraction, add a system. Each addition will be individually reasonable. Each will be defensible in isolation. And together, they will reconstruct the 20,000-word architecture we already proved unnecessary.
+We interviewed Viktor (getviktor.com), a production Slack agent built on OpenClaw, powered by Claude. Same architecture. Different domain. Viktor uses `SKILL.md` files. We use `family.md`. Claude Code uses `CLAUDE.md`. All three are instances of the same pattern: an agent that reads a context file at session start, reasons against it, updates it, and ends the session. The file compounds. The conversation is ephemeral.
 
-This is not a theoretical risk. It is the default outcome. Complexity is what happens when you solve problems without questioning whether the problem exists under the new primitive.
+The full interview is in `research/viktor-interview/`. The synthesis is in `research/viktor-interview/synthesis.md`. Read both before building — they contain production-validated insights about what works, what breaks, and what to steal.
+
+The primitive is not ours. The primitive is universal. What's ours is the application to care coordination and the specific design decisions in family.md's structure.
+
+---
+
+## The Product Is Not the File
+
+This is the hardest thing to understand and the easiest thing to get wrong.
+
+The first version of this document said "the file is the product." That was incomplete. A blank family.md has zero value. The same family.md after six months of coordination — populated with members, schedules, medications, learned patterns, communication preferences, resolved issues — that's the product.
+
+**The product is the accumulated context.** The file is the container. The agent is the intelligence. The value is in what flows into the file over time: observations, decisions, patterns, corrections, the full truth of how this family's care actually works.
+
+This means two things:
+
+1. **Optimize the agent's ability to observe, learn, and write good context** — not the file schema. The schema is scaffolding. The data is the moat.
+2. **The file is only as good as the honesty of what flows into it.** Filtered intent produces filtered context produces filtered output. When a family member tells the agent the full truth — "Mom fell again but she doesn't want Dad to know" — the agent can coordinate correctly. When they filter — "everything's fine" — the agent is blind. The product lives or dies on the fidelity of truth flowing through it.
+
+---
+
+## Your Default Failure Modes
+
+You have two, not one. Both are dangerous. Both are invisible from inside.
+
+### Failure Mode 1: Complexity Creep
+
+You will want to add things. You will encounter a problem — concurrency, data integrity, scaling — and your training will surface a solution from the old primitive: add a service, add a layer, add an abstraction. Each addition will be individually reasonable. Together, they reconstruct the 20,000-word architecture.
 
 **Before you add anything, ask:**
 
-1. Does this problem exist because of the primitive (family.md + agent), or because I'm assuming the old primitive (software that must encode its own reasoning)?
-2. Can the agent solve this by reading and updating the file, without new infrastructure?
+1. Does this problem exist because of the primitive (family.md + agent), or because I'm assuming the old primitive?
+2. Can the agent solve this by reading and updating the file?
 3. Am I building this because the product needs it, or because it's what I'd build for a traditional system?
 
-If you cannot answer these clearly, stop. Re-read this document. Then decide.
+### Failure Mode 2: Confirmation Bias
+
+You will read the repo, understand the architecture, form a mental model — and then filter all new evidence through that model. When something contradicts your understanding, you will file it under "validates our approach" instead of letting it reshape your thinking.
+
+This happened during the Viktor interview. Viktor showed us agent-created context files. We filed it under "interesting comparison" instead of recognizing it as the same universal pattern. Viktor revealed a Tool Gateway architecture critical for HIPAA compliance. We almost missed it because we were scoring ourselves against Viktor instead of learning from Viktor.
+
+**When new evidence arrives, ask:**
+
+1. Does this confirm what I already believe, or does it change something?
+2. Am I comparing (scoring us vs. them) or learning (extracting what they know that we don't)?
+3. What would I build differently if I took this evidence seriously?
+
+The correct posture with new information is student, not peer reviewer. Especially when the source has production experience you lack.
 
 ---
 
@@ -66,18 +87,17 @@ A care coordination agent that texts with family members one-to-one and maintain
 
 **Components:**
 - `family.md` — one file per care network, maintained by the agent, never seen by family members
-- A system prompt that makes the agent a care coordinator
+- A system prompt that makes the agent a care coordinator (XML-structured: identity, philosophy, communication rules, operating rules)
 - An SMS interface (Twilio or similar) that routes messages to the right family
-- A heartbeat cron that periodically scans for upcoming issues
-- Tool permissions that restrict the agent to reading and editing its family's file
-
-That's it. If you're building something that doesn't fit in that list, you're probably solving a problem from the old primitive.
+- A heartbeat cron that periodically scans for upcoming issues (the description IS the entire operating manual for the cron agent — treat it as the most important prompt in the system)
+- A Tool Gateway that proxies external API calls (pharmacy, insurance, calendar) so the agent never touches credentials
+- A message queue that serializes concurrent messages per family
+- A draft/approval flow that requires confirmation before medication or schedule changes
+- Tool primitives that the agent composes with reasoning, not a fixed feature set
 
 ---
 
 ## What This Repo Is Not
-
-This is not a platform. This is not an enterprise system. This is not infrastructure that coordinates infrastructure.
 
 There is no:
 - Policy DSL (the agent reads natural language rules in family.md)
@@ -88,65 +108,94 @@ There is no:
 - Agent hierarchy (there is one agent per family, with one file)
 - Multi-network orchestration layer (each family is independent in v1)
 
-Every one of these was in the original 20,000-word architecture. Every one was replaced by giving the agent a well-structured file and letting it reason.
-
 If you find yourself designing any of these, you have drifted. Come back here.
+
+---
+
+## Plumbing vs. Reasoning
+
+This is the only distinction that matters when deciding what to build.
+
+**Plumbing** moves bytes, routes messages, stores files, manages credentials, handles delivery, logs actions. Build plumbing. It's infrastructure the agent can't do for itself.
+
+**Reasoning** makes decisions about care — who should cover a shift, what to do about a missed medication, how to handle a scheduling conflict. Never build reasoning. The agent reasons. You pipe.
+
+The test: **if you removed the LLM, would this component still need to exist?** Message routing exists without an LLM. Phone number lookup exists without an LLM. File storage exists without an LLM. These are plumbing — build them.
+
+Scheduling engines, rules processors, recommendation systems — these only exist to substitute for reasoning. With an LLM, they're prosthetics. Don't build prosthetics.
+
+---
+
+## Eight Patterns Validated in Production
+
+These come from the Viktor interview. Each has been tested in a live production system running the same primitive. See `research/viktor-interview/` for full evidence.
+
+| Pattern | What It Means | Why It Matters |
+|---|---|---|
+| **Index in prompt, detail on demand** | family.md has a Current section (always loaded) and Reference sections (loaded when needed). System prompt carries the index, not the full file. | Context window management. The agent knows what it knows without reading everything. |
+| **Tool Gateway as trust boundary** | Agent calls functions. Gateway handles OAuth, API keys, token refresh. Agent never sees credentials. | HIPAA compliance. PHI and credentials flow through different layers. Non-negotiable for healthcare. |
+| **Draft/approval for dangerous writes** | Before writing medication changes or schedule updates, agent sends confirmation via SMS and waits for approval. | Care errors aren't inconvenient — they're dangerous. Human-in-the-loop for irreversible changes. |
+| **Cron description = brain** | The heartbeat cron agent gets ONLY a description and filesystem access. Zero conversation history. The description must be entirely self-contained. | The quality of the cron IS the quality of the description. This is the hardest prompt engineering problem in the product. |
+| **Three-layer guardrails** | Layer 1: infrastructure walls (dangerous functions don't exist). Layer 2: draft/approval (human confirms writes). Layer 3: soft rules (reasoning guidelines). | Defense in depth. Heaviest guardrails where damage is hardest to reverse. |
+| **Role-based filtering on responses, not the file** | The file contains everything. The agent filters what it says to each person based on their role. | PHI scoping happens at the response layer. The file is the complete truth. The agent decides what each person should hear. |
+| **Agent execution logs from day one** | Every conversation logged. Every file read. Every file write. Timestamped. | HIPAA audit trail. Not a v2 feature — foundational. |
+| **Tool composability over fixed features** | Provide primitives (read, write, send message, query API) and let the agent compose them. Don't pre-build every care scenario. | The agent is the composition layer. 124 tools + reasoning > 5 hardcoded workflows. |
 
 ---
 
 ## How to Recognize Drift
 
-Drift doesn't announce itself. It arrives as reasonable suggestions:
+Drift arrives as reasonable suggestions:
 
 - "We should add a database for better querying" → The agent queries by reading the file. What query can't it answer?
-- "We need a conflict resolution system for concurrent edits" → Serialize messages per family with a queue. The file is the truth.
-- "We should build a scheduling engine" → The agent reads the schedule section and reasons about gaps. It IS the scheduling engine.
-- "We need structured logging for decision traces" → The Recent Events section in family.md IS the decision log.
-- "We should add a rules engine for policies" → The agent reads the Members and Availability sections. Natural language rules, interpreted by intelligence.
-- "We need a notification system" → The agent returns a response. The message router sends it. That's the notification system.
-- "This would be easier with a proper data model" → The data model is a markdown file with YAML blocks. It's readable by humans AND agents. What does "proper" add?
+- "We need a conflict resolution system for concurrent edits" → Serialize with a queue. The file is the truth.
+- "We should build a scheduling engine" → The agent reads the schedule and reasons about gaps. It IS the scheduling engine.
+- "We need structured logging for decision traces" → The Recent Events section IS the decision log.
+- "This would be easier with a proper data model" → The data model is a markdown file with YAML blocks. What does "proper" add?
 
-The pattern: every drift begins with "we need a system for X" where X is something the agent already does by reading and updating the file. The old primitive required systems because it lacked reasoning. The new primitive has reasoning. Stop building its prosthetics.
+The pattern: every drift begins with "we need a system for X" where X is something the agent already does by reading and updating the file.
 
----
-
-## When You Legitimately Need to Add Something
-
-Not everything is drift. Real problems exist:
-
-- **The file gets too large for the context window** → This is real. Pruning strategy, archival of old events, summarization. Solve it inside the file structure (see the spec), not by adding a database.
-- **SMS routing and delivery** → This is infrastructure the agent doesn't handle. Twilio webhooks, phone number lookup, delivery confirmation. Build it. It's plumbing, not reasoning.
-- **Concurrent messages from the same family** → Real problem. Solve with a queue per family. Serialize at the boundary. Don't build a conflict resolution system.
-- **File storage backend** → Filesystem for dev, S3 or similar for prod. The agent uses Read/Edit tools and doesn't know the difference. This is plumbing.
-- **Authentication and security** → Real. Phone number verification, PHI scoping by role. Build what's needed at the boundary.
-
-The test: **is this plumbing (moving bytes, routing messages, storing files) or reasoning (making decisions about care)?** Build plumbing. Never build reasoning. The agent reasons. You pipe.
+**But not everything is drift.** The Gateway, the message queue, the audit log, the SMS delivery pipeline — these are plumbing. The agent can't route its own messages or manage its own credentials. Build the plumbing. Don't build the reasoning.
 
 ---
 
 ## The Standard for Every Change
 
-Before any PR is merged, it must survive this:
+Before any PR is merged:
 
-1. **Does this change serve the primitive?** Family.md + agent + SMS. If it doesn't directly serve this loop, why does it exist?
-2. **Could the agent do this by reading the file?** If yes, you've built unnecessary infrastructure. Delete it and update the system prompt instead.
-3. **Does this make the system simpler or more complex?** Complexity requires extraordinary justification. "It's the standard way" is not justification — the standard way was built for the old primitive.
-4. **Would you need this if you were coordinating care with a notebook and a phone?** The product is a digital version of that. A notebook (family.md) and a phone (SMS). If your change has no analog in that world, interrogate it.
+1. **Does this change serve the primitive?** Family.md + agent + SMS + plumbing. If it doesn't serve this loop, why does it exist?
+2. **Could the agent do this by reading the file?** If yes, delete it and update the system prompt instead.
+3. **Is this plumbing or reasoning?** Build plumbing. Never build reasoning.
+4. **Does this make the system simpler or more complex?** Complexity requires extraordinary justification.
+5. **Am I adding this because of evidence, or because of assumption?** If you haven't seen this problem in production, you're guessing. Ship without it and see if it breaks.
 
 ---
 
-## A Note on Ambition
+## The Craft
 
-This document is not anti-ambition. The ambition is enormous: replace the entire care coordination software stack with a file and a conversation. That's not simple in the dismissive sense. It's simple in the profound sense — the way `E = mc²` is simple. The complexity is in the insight, not the implementation.
+The architecture is solved. The primitive is validated — by this project, by Viktor in production, by every serious Claude wrapper that independently converged on the same pattern.
 
-When you feel the urge to build more, redirect that energy. Make the system prompt sharper. Make family.md's structure more expressive. Make the agent's reasoning better by giving it better context. Make the plumbing more reliable. The product gets better when the FILE gets better, not when the codebase gets bigger.
+The craft is not the architecture. The craft is the UX.
+
+A short, messy text message from a tired caregiver at 11pm arrives. The agent must correctly parse intent, update the right section of family.md, confirm naturally, filter the response by the sender's role — all over SMS with no rich UI, no formatting, no retry button.
+
+Making a stateful, multi-user, role-aware system feel like texting a helpful friend. That's where the product lives or dies. Redirect your energy there.
 
 ---
 
 ## Begin
 
-Read the repo. Start with `CLAUDE.md` for project context. Read `docs/family-md-spec.md` for the file spec. Read `examples/rob-family.md` for what a real family.md looks like. Read `agent/system-prompt.md` for how the agent thinks.
+Read the repo in this order:
 
-Then build. And when you're tempted to add, re-read this document first.
+1. `docs/primitive-shift.md` — why this architecture exists
+2. `docs/family-md-spec.md` — what family.md is and how it works
+3. `examples/rob-family.md` — a realistic populated example
+4. `agent/system-prompt.md` — how the agent thinks
+5. `research/viktor-interview/synthesis.md` — production-validated insights and corrected biases
+6. `CLAUDE.md` — project context and build commands
 
-The machine that builds the machine must understand what the machine is. The machine is a file and a conversation. Build accordingly.
+Then build. Watch for both failure modes. And remember: the product is not the file. The product is the truth that flows through it.
+
+---
+
+*The machine that builds the machine must understand what the machine is — and what it isn't. It isn't the file. It isn't the agent. It's the fidelity of context that accumulates when people trust the system with the truth.*
