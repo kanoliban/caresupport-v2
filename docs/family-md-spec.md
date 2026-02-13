@@ -2,9 +2,23 @@
 
 ## What It Is
 
-A markdown file maintained by the care coordination agent. One file per care network. The single source of truth for everything the agent knows about this family's care.
+A markdown file maintained by the care coordination agent. One file per care network. The live operational state of this family's care.
 
 Family members never see this file directly. They interact with the agent via SMS. The agent reads family.md at the start of every interaction and updates it before responding.
+
+### family.md vs SKILL.md
+
+These are different concepts. Both exist in the architecture.
+
+| | family.md | SKILL.md |
+|---|---|---|
+| **Contains** | Operational state of one care network | Agent knowledge, capabilities, how-tos |
+| **Changes** | Every interaction | Rarely — when the agent learns something new |
+| **Purpose** | Tell the agent what's happening now | Teach the agent how to do things |
+| **One per** | Family | Capability domain |
+| **Viktor equivalent** | None — Viktor doesn't maintain ongoing care relationships | Exactly SKILL.md (adopted wholesale) |
+
+family.md is our new concept. SKILL.md is Viktor's proven pattern, adopted without modification. The agent reads SKILL.md files to know HOW to coordinate care. It reads family.md to know WHAT is happening in THIS family right now.
 
 ## File Location
 

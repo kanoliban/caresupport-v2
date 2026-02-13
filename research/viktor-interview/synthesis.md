@@ -2,6 +2,8 @@
 
 *Written after reading all 13 rounds with the full harness of truth: we are here to learn, steal, and build — not to validate or score ourselves.*
 
+**Critical distinction established after this synthesis was first written:** SKILL.md and family.md are NOT the same thing. SKILL.md = agent knowledge (how to do things). family.md = operational state (what's happening now). Viktor has SKILL.md. Viktor does NOT have family.md. We adopt SKILL.md wholesale from Viktor and introduce family.md as our new concept. Don't conflate them.
+
 ---
 
 ## My Biases, Named

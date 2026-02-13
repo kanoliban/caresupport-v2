@@ -2,9 +2,12 @@
 
 ## What This Is
 
-CareSupport is a care coordination agent that texts with family members 1-to-1 and maintains a persistent context file (`family.md`) per care network.
+CareSupport is a care coordination agent that texts with family members 1-to-1. It uses two types of persistent files:
 
-One file. One conversation at a time. That's the entire product.
+- **SKILL.md** files — agent knowledge: how to coordinate care, how to handle medications, how to communicate over SMS. Relatively static. Adopted wholesale from Viktor/OpenClaw's production-tested pattern.
+- **family.md** — operational state for one care network: members, schedule, medications, active issues, recent events. Changes every interaction. Our new concept — Viktor doesn't have this because it doesn't maintain ongoing care relationships.
+
+These are different things. Don't conflate them.
 
 ## How It Works
 
@@ -22,18 +25,29 @@ SMS arrives ("Marta: Can't make Tuesday 2pm")
 
 Every interaction follows this loop. No session persistence, no database, no state outside the file.
 
-## The Primitive: `family.md`
+## Two File Types
 
-`family.md` is everything the agent knows about a care network. It's a markdown file with embedded YAML blocks for structured data. The agent reads it at the start of every interaction and updates it before responding.
+### SKILL.md — Agent Knowledge
 
-One file per family. The spec lives in `docs/family-md-spec.md`. A realistic example lives in `examples/rob-family.md`.
+SKILL.md files teach the agent how to do things. They are the same format and pattern as Viktor/OpenClaw (production-tested, don't reinvent):
 
-### Why One File
+- `skills/care-coordination/SKILL.md` — how to coordinate care
+- `skills/medication-management/SKILL.md` — how to handle med changes
+- `skills/sms-communication/SKILL.md` — how to communicate over SMS
+- `company/SKILL.md` — about CareSupport as an organization
 
-- **Context window friendly**: One read loads all relevant state
-- **Atomic updates**: Edit tool does surgical string replacement — no partial writes
-- **Human auditable**: A coordinator could read the file and understand everything
-- **Portable**: Filesystem for dev, S3 for prod, database for scale — the agent doesn't care
+Each has YAML frontmatter with a name and description. Descriptions are loaded into the system prompt as an index. Full files read on demand when relevant.
+
+### family.md — Operational State
+
+`family.md` is the live operational state of one care network. Members, this week's schedule, active medications, unresolved issues, recent events. It changes every interaction. One file per family.
+
+The spec lives in `docs/family-md-spec.md`. A realistic example lives in `examples/rob-family.md`.
+
+**Why family.md is distinct from SKILL.md:**
+- SKILL.md = knowledge (what to do, how to do it). Changes rarely.
+- family.md = state (what's happening right now). Changes every interaction.
+- Viktor has SKILL.md. Viktor does NOT have family.md. This is our new concept.
 
 ## Agent Behavior
 
@@ -78,11 +92,22 @@ npm run dev           # Development (requires ANTHROPIC_API_KEY)
 caresupport-family/
 ├── CLAUDE.md                     # You're reading it
 ├── docs/
-│   └── family-md-spec.md        # The spec: what family.md is, how it works
+│   ├── family-md-spec.md        # The spec: what family.md is, how it works
+│   ├── primitive-shift.md       # Why this architecture exists
+│   └── the-machine-that-builds-the-machine.md  # How to build without drifting
 ├── examples/
 │   └── rob-family.md            # Realistic populated example
 ├── agent/
 │   └── system-prompt.md         # Agent system prompt template
+├── research/
+│   └── viktor-interview/        # Production validation from Viktor/OpenClaw
+├── skills/                       # SKILL.md files — agent knowledge (Viktor's pattern)
+│   ├── care-coordination/SKILL.md
+│   ├── medication-management/SKILL.md
+│   └── sms-communication/SKILL.md
+├── families/                     # family.md files — operational state per network
+│   └── {family_id}/family.md
+├── company/SKILL.md              # About CareSupport
 ├── package.json
 ├── tsconfig.json
 └── src/
@@ -94,7 +119,8 @@ caresupport-family/
 | Decision | Choice | Why |
 |----------|--------|-----|
 | Session model | Fresh per SMS | File is memory; session resume leaks context across users, costs grow linearly |
-| Persistence | family.md (one file per network) | CLAUDE.md pattern — agent reads at start, updates at end |
+| Knowledge persistence | SKILL.md files (Viktor's pattern wholesale) | Agent knowledge, capabilities, protocols — read on demand |
+| State persistence | family.md (one file per network) | Operational state — agent reads at start, updates at end |
 | Structured data | YAML blocks inside markdown | Readable, parseable, less corruption-prone than raw JSON in markdown |
 | Concurrency | Queue per family | Serialize within a family; parallel across families |
 | Tools | Read + Edit (built-in) | Simpler than Memory Tool; direct control; Edit does surgical replacement |

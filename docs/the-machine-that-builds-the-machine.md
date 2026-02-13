@@ -28,11 +28,28 @@ Read `docs/primitive-shift.md` for the full articulation. The core: **most of wh
 
 The pattern — agent-maintained context file, fresh sessions, file as memory — has been independently discovered by every serious team building on top of LLMs.
 
-We interviewed Viktor (getviktor.com), a production Slack agent built on OpenClaw, powered by Claude. Same architecture. Different domain. Viktor uses `SKILL.md` files. We use `family.md`. Claude Code uses `CLAUDE.md`. All three are instances of the same pattern: an agent that reads a context file at session start, reasons against it, updates it, and ends the session. The file compounds. The conversation is ephemeral.
+We interviewed Viktor (getviktor.com), a production Slack agent built on OpenClaw, powered by Claude. Same architecture. Different domain. Same pattern: an agent that reads context files at session start, reasons against them, updates them, and ends the session. The files compound. The conversation is ephemeral.
 
-The full interview is in `research/viktor-interview/`. The synthesis is in `research/viktor-interview/synthesis.md`. Read both before building — they contain production-validated insights about what works, what breaks, and what to steal.
+Viktor's scaffolding — `SKILL.md` files, workspace structure, cron system, tool gateway — is production-tested. We adopt it wholesale. We don't reinvent proven infrastructure. See `research/viktor-interview/` for the full interview and `research/viktor-interview/synthesis.md` for the synthesis.
 
-The primitive is not ours. The primitive is universal. What's ours is the application to care coordination and the specific design decisions in family.md's structure.
+What's new — what Viktor doesn't have — is `family.md`: an operational state file for an ongoing care relationship. Viktor's `SKILL.md` files store knowledge (what things are, how to do things). `family.md` stores live state (what's happening right now in this care network). These are different concepts, and both exist in our architecture:
+
+- **SKILL.md** = Agent knowledge. How to coordinate care. How to handle medication changes. How to communicate over SMS. Relatively static. Taken directly from Viktor's pattern.
+- **family.md** = Operational state. This family's members, this week's schedule, active medications, unresolved issues, recent events. Changes every interaction. Our new concept.
+
+```
+skills/                           # SKILL.md — agent knowledge (Viktor's pattern, wholesale)
+  care-coordination/SKILL.md      # How to coordinate care
+  medication-management/SKILL.md  # How to handle med changes
+  scheduling/SKILL.md             # How to manage schedules
+  sms-communication/SKILL.md      # How to communicate over SMS
+families/
+  kano/
+    family.md                     # Operational state — THIS family, right now
+company/SKILL.md                  # About CareSupport as an organization
+```
+
+Do not conflate these. SKILL.md is not family.md. family.md is not SKILL.md. If you catch yourself treating them as the same thing, stop — you're collapsing a critical architectural distinction.
 
 ---
 

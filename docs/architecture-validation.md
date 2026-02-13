@@ -18,7 +18,7 @@ Viktor's architecture:
 - **Proactive behavior:** Cron scheduling for autonomous recurring tasks
 - **Workspace:** `/work` directory for scripts, files, and reusable workflows
 
-Viktor independently converged on the same architecture as CareSupport's family.md — because the primitive demands it.
+Viktor independently converged on the same scaffolding pattern (SKILL.md files, fresh sessions, file-based persistence) — because the primitive demands it. What Viktor does NOT have is `family.md`: an operational state file for an ongoing care relationship. SKILL.md stores knowledge. family.md stores live state. These are different concepts — both exist in our architecture.
 
 ---
 
@@ -36,7 +36,7 @@ The differences make Viktor's feedback more valuable, not less. A general-purpos
 
 ### Round 1: "Show me your skill files."
 
-We asked Viktor to share the actual contents of `company/SKILL.md` — its equivalent of family.md.
+We asked Viktor to share the actual contents of `company/SKILL.md` — its knowledge file about the workspace it serves. Note: SKILL.md (knowledge) and family.md (operational state) are different concepts. SKILL.md stores what things ARE. family.md stores what's HAPPENING.
 
 **What Viktor shared:**
 

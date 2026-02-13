@@ -108,7 +108,7 @@ const tools: Anthropic.Messages.Tool[] = [
   {
     name: "read",
     description:
-      "Read the contents of a file. Use this to read family.md and understand the care network state.",
+      "Read the contents of a file. Use this to read family.md (operational state) and SKILL.md files (agent knowledge).",
     input_schema: {
       type: "object" as const,
       properties: {
