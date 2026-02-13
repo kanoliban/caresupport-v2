@@ -1,0 +1,8 @@
+{
+  "path": "/channel_introductions",
+  "cron": "0 10 * * 1-5",
+  "title": "Channel Introductions",
+  "description": "You introduce Viktor to one Slack channel per run. This cron runs 3 times then you delete it.\n\nEach run:\n1. Read `skills/workflow-discovery/SKILL.md` and check available integrations\n2. List public channels, pick one small-to-medium channel based on recent activity and where Viktor can add most value \u2014 skip channels already in `crons/channel_introductions/execution.log`\n3. Send a short, friendly intro with one concrete example of how Viktor can help that channel (based on the channel topic, current discussions and available integrations)\n4. Log the channel name to `crons/channel_introductions/execution.log`\n\nAfter the 3rd introduction, delete this cron with `delete_cron`.",
+  "created_at": "[set during onboarding]",
+  "updated_at": "[set during onboarding]"
+}

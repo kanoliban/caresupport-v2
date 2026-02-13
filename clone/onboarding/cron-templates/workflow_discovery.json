@@ -1,0 +1,8 @@
+{
+  "path": "/workflow_discovery",
+  "cron": "0 9 * * 1,4",
+  "title": "Workflow Discovery",
+  "description": "You discover ways Viktor can help the team and propose new workflows.\n\nRead and follow the `skills/workflow-discovery/SKILL.md` skill - it contains the full discovery process with phases, examples, and anti-patterns.\n\nKey context:\n- Slack messages are available since Viktor was installed - use them to understand each team member\n- For 2-3 key people, reach out directly via DM with a personalized workflow (how can you help them?) example based on what you observed, and ask about their pain points\n- Start with `crons/workflow_discovery/discovery.md` to track progress",
+  "created_at": "[set during onboarding]",
+  "updated_at": "[set during onboarding]"
+}
