@@ -27,18 +27,13 @@ Viktor independently converged on the same architecture as CareSupport's family.
 | 4 | Failure modes | [round-04](round-04-failure-modes.md) | Tone drift, "already tried that", offline context, half-finished work. SMS > Slack for capture rate. |
 | 5 | Files vs. database | [round-05](round-05-files-vs-database.md) | Has Postgres, still chooses files. "Files for context, databases for structured workflows." |
 | 6 | Architecture review | [round-06](round-06-architecture-review.md) | Validated our architecture. Suggested Current/Reference split. "I'd take that bet." |
-
-## Pending Rounds (not yet conducted)
-
-| Round | Question | Target |
-|---|---|---|
-| 7 | Full tool/capability inventory | Complete tool manifest — what Claude can do inside the Viktor harness |
-| 8 | Context loading sequence | What happens before Viktor responds — initialization, file reads, system prompt |
-| 9 | System prompt / operating manual | Behavioral rules, constraints, priority hierarchy |
-| 10 | Cron/autonomy mechanics | How autonomous tasks work — trigger, context, fresh session or not |
-| 11 | Integration plumbing | Direct API calls vs. mediated layer, authentication model |
-| 12 | Constraint boundaries | What Viktor CAN'T do, permission model, safety guardrails |
-| 13 | "Build something like you" | Viktor architects its own replacement — hardest parts, what they'd do differently |
+| 7 | Tool inventory + composability | [round-07](round-07-tool-inventory.md) | 124 tools across 12 modules. Bash as escape hatch. "Tools are primitives, I'm the composition layer." |
+| 8 | Context loading sequence | [round-08](round-08-context-loading.md) | 4 layers: system prompt → skill index → conversation → message. Pull-based, not pre-loaded. |
+| 9 | Operating manual + hard-coded DNA | [round-09](round-09-operating-manual.md) | Always/never/priority rules. System prompt XML structure. "Great coworker, not compliant one." |
+| 10 | Cron/autonomy mechanics | [round-10](round-10-cron-mechanics.md) | Agent vs script crons. Description = brain. 3 crons already running. |
+| 11 | Integration plumbing | [round-11](round-11-integration-plumbing.md) | Tool Gateway proxies API calls. Agent never sees OAuth tokens. MCP protocol. Two data patterns. |
+| 12 | Constraint boundaries | [round-12](round-12-constraint-boundaries.md) | 3 guardrail layers: infrastructure walls, draft/approval, soft reasoning. Pragmatic trust model. |
+| 13 | "Build something like you" | [round-13](round-13-build-your-own.md) | 4-phase build order. 8 transferable patterns. "UX over constrained channel is the real craft." |
 
 ## Summary Findings
 
@@ -48,6 +43,9 @@ Viktor independently converged on the same architecture as CareSupport's family.
 - Markdown over database for context (system with Postgres still chooses files)
 - Human-readability as a product feature
 - No schema rigidity — each context file shaped by reality
+- Tool composability > fixed feature set (primitives + reasoning layer)
+- Gateway pattern for credential isolation (directly maps to HIPAA compliance)
+- Cron-as-heartbeat for proactive agent behavior (= our care nudges)
 
 ### Where We're Ahead
 - Concurrency (queue per family — Viktor hasn't solved this)
@@ -58,11 +56,30 @@ Viktor independently converged on the same architecture as CareSupport's family.
 ### Where We're Behind
 - Audit trails / change tracking (Viktor suggested git-style versioning)
 - Preference capture per member (Viktor identified tone drift as failure mode #1)
+- Delivery reliability and escalation paths (SMS ≠ Slack)
+- Text-only onboarding flow design
 
 ### Refinements to Adopt
 1. Two-tier section architecture (Current always loaded, Reference on demand)
 2. Per-member preferences/communication style field
 3. Audit trail strategy designed earlier than planned
+4. Draft/approval pattern for medication and care plan changes
+5. "Index in prompt, detail on demand" context loading strategy
+6. Role-based read filtering on agent responses (HIPAA)
+7. Proactive nudge system modeled on Viktor's heartbeat cron
+
+### 8 Transferable Design Patterns (Round 13)
+
+| # | Viktor Pattern | CareSupport Implementation |
+|---|---|---|
+| 1 | File-as-brain, conversation-as-interface | family.md + SMS/WhatsApp |
+| 2 | Section-level architecture | Current (always loaded) / Reference (on demand) |
+| 3 | Skill files as persistent memory | Care protocols as reference docs |
+| 4 | Cron-as-heartbeat | Proactive care nudges |
+| 5 | Draft/approval for writes | Confirmation before care plan changes |
+| 6 | Gateway for credential isolation | HIPAA-compliant integration layer |
+| 7 | Conversation logs → flat files | SMS/WhatsApp logs for searchable history |
+| 8 | Index in prompt, detail on demand | family.md TOC always loaded, sections on demand |
 
 ## How to Use This Research
 
