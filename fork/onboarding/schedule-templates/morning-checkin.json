@@ -1,0 +1,10 @@
+{
+  "path": "/{family_id}/morning-checkin",
+  "title": "Morning Check-In",
+  "schedule_type": "agent",
+  "cron": "0 8 * * *",
+  "description": "Morning wellness check-in for the {family_name} family.\n\n1. Read families/{family_id}/family.md — load Current section\n2. Identify who is currently with {care_recipient} (check Care Team + This Week schedule)\n3. Message that person: 'Good morning {caregiver}. How did {care_recipient} sleep last night? Any concerns this morning?'\n4. Wait for response. Log in Recent Updates.\n5. If concerning (poor sleep, pain, confusion): add to Urgent Notes, notify primary caregiver\n6. Remind of today's schedule from This Week section\n7. If medications are due in the morning: trigger medication reminder if not already scheduled",
+  "notify": "[current_caregiver_phone]",
+  "created_at": "[set during family onboarding]",
+  "updated_at": "[set during family onboarding]"
+}

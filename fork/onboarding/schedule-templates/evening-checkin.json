@@ -1,0 +1,10 @@
+{
+  "path": "/{family_id}/evening-checkin",
+  "title": "Evening Check-In",
+  "schedule_type": "agent",
+  "cron": "0 20 * * *",
+  "description": "Evening wellness summary for the {family_name} family.\n\n1. Read families/{family_id}/family.md — load Current section\n2. Compile today's events from Recent Updates: meals, medications, mood, any incidents\n3. Message primary caregiver with day summary:\n   'Evening update for {care_recipient}:\n   - Meals: {status}\n   - Meds: {all confirmed or list missed}\n   - Mood: {from today's reports}\n   - Tomorrow: {first appointment or notable item}\n   Any concerns tonight?'\n4. Log response in Recent Updates\n5. If anything was missed (meds, meals): add to Urgent Notes with plan for tomorrow",
+  "notify": "[primary_caregiver_phone]",
+  "created_at": "[set during family onboarding]",
+  "updated_at": "[set during family onboarding]"
+}

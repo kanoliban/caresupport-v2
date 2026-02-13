@@ -1,0 +1,10 @@
+{
+  "path": "/{family_id}/weekly-summary",
+  "title": "Weekly Care Summary",
+  "schedule_type": "agent",
+  "cron": "0 10 * * 0",
+  "description": "Weekly care summary for the {family_name} family. Sent Sunday morning.\n\n1. Read families/{family_id}/family.md — load Current + relevant Reference sections\n2. Review conversations/{all_member_phones}/ from the past 7 days\n3. Compile weekly summary:\n   - Medication adherence: how many doses confirmed vs missed\n   - Appointments: what happened, any follow-ups needed\n   - Wellness trends: sleep, meals, mood patterns\n   - Incidents: any falls, emergencies, or concerns\n   - Care team notes: any handoff issues, team changes\n4. Message primary caregiver with summary\n5. If concerning trends: suggest action (e.g., 'Medication was missed 3 times this week — want to adjust the reminder schedule?')\n6. Ask: 'Any changes needed for next week?'\n7. If family requests changes: route to care-plan-updates protocol",
+  "notify": "[primary_caregiver_phone]",
+  "created_at": "[set during family onboarding]",
+  "updated_at": "[set during family onboarding]"
+}

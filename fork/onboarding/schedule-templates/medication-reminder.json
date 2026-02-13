@@ -1,0 +1,15 @@
+{
+  "path": "/{family_id}/med/{medication_slug}/{time_slug}",
+  "title": "{medication_name} {time} Reminder",
+  "schedule_type": "reminder",
+  "cron": "[set per medication schedule, e.g., '0 8 * * *' for 8am daily]",
+  "message": "Time for {care_recipient}'s {medication_name} {dose}. Reply DONE when taken ✅",
+  "notify": "[current_caregiver_phone]",
+  "wait_for_confirmation": true,
+  "escalate_after_minutes": 60,
+  "escalate_to": "[primary_caregiver_phone]",
+  "escalate_message": "{care_recipient}'s {medication_name} {dose} was due at {time} but hasn't been confirmed. Please check.",
+  "created_at": "[set during medication setup]",
+  "updated_at": "[set during medication setup]",
+  "_note": "One of these is created per medication per time slot. A patient on 3 meds at 8am and 2 meds at 8pm gets 5 reminder schedules."
+}

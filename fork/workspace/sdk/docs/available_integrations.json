@@ -1,0 +1,18 @@
+[
+  {"name": "Twilio", "slug": "twilio", "description": "SMS/MMS/Voice messaging", "type": "core", "required": true},
+  {"name": "Apple Business Chat", "slug": "apple_business_chat", "description": "iMessage integration for iOS families", "type": "core", "required": false},
+  {"name": "Surescripts", "slug": "surescripts", "description": "E-prescribing network — medication lookup, interaction checking, refill requests", "type": "healthcare"},
+  {"name": "Epic MyChart", "slug": "epic_mychart", "description": "Patient portal — lab results, visit summaries, appointment scheduling", "type": "healthcare"},
+  {"name": "Cerner", "slug": "cerner", "description": "Electronic health records — patient data, clinical documents", "type": "healthcare"},
+  {"name": "FHIR (Generic)", "slug": "fhir_generic", "description": "Any FHIR-compliant health system endpoint", "type": "healthcare"},
+  {"name": "CoverMyMeds", "slug": "covermymeds", "description": "Prior authorization automation for prescriptions", "type": "healthcare"},
+  {"name": "GoodRx", "slug": "goodrx", "description": "Medication pricing and discount coupons", "type": "healthcare"},
+  {"name": "DailyMed (NIH)", "slug": "dailymed", "description": "FDA label information for drugs — uses, dosing, warnings", "type": "healthcare"},
+  {"name": "DrugBank", "slug": "drugbank", "description": "Comprehensive drug interaction database", "type": "healthcare"},
+  {"name": "Google Calendar", "slug": "google_calendar", "description": "Appointment scheduling and reminders", "type": "utility"},
+  {"name": "Apple Calendar", "slug": "apple_calendar", "description": "Calendar integration for iOS families", "type": "utility"},
+  {"name": "SendGrid", "slug": "sendgrid", "description": "Email delivery for provider communication", "type": "utility"},
+  {"name": "Google Maps", "slug": "google_maps", "description": "Provider location lookup, driving directions to appointments", "type": "utility"},
+  {"name": "Stripe", "slug": "stripe", "description": "Subscription billing for CareSupport service", "type": "internal"},
+  {"name": "PostHog", "slug": "posthog", "description": "Analytics — family engagement, feature usage", "type": "internal"}
+]
