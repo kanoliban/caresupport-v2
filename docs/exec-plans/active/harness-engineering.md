@@ -4,7 +4,7 @@
 
 **Source:** OpenAI "Harness Engineering" article (Feb 11, 2026) + gap analysis against current repo.
 
-**Status:** Wave 2 Step 4 complete (heartbeat cron). Step 5 next.
+**Status:** Wave 2 Step 5 complete (maintenance cron). Step 6 next.
 
 ---
 
@@ -42,7 +42,7 @@ Component by component. Each step is a separate commit with tests.
 | 2.2 | Close file-update loop + delivery verification | 2.1 | ✅ Done — edit-not-write, backup, validate, rollback, 61 tests |
 | 2.3 | Confirmation/approval pipeline | 2.2 | ✅ Done — classify, gate, store, resolve, detect YES/NO, 75 tests |
 | 2.4 | Heartbeat cron (real code) | 2.2 | ✅ Done — deterministic scanner, 5 alert types, 56 tests |
-| 2.5 | Maintenance cron (garbage collection) | 2.2 | Not started |
+| 2.5 | Maintenance cron (garbage collection) | 2.2 | ✅ Done — prune, validate consistency, backup, 53 tests |
 | 2.6 | Structural tests | 2.1-2.5 | Not started |
 
 ## Decision Log
