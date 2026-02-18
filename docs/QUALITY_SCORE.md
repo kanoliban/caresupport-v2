@@ -2,7 +2,7 @@
 
 Honest grades for each layer of the system. Updated after each Wave 2 step.
 
-Last updated: 2026-02-18 (Wave 2, Step 5 — Maintenance Cron)
+Last updated: 2026-02-18 (Wave 2, Step 6 — Structural Tests / Final)
 
 ---
 
@@ -63,10 +63,10 @@ Last updated: 2026-02-18 (Wave 2, Step 5 — Maintenance Cron)
 |-----------|-------|-------|
 | Simulation (offline validation) | **A** | 52 conversations, 99.5% score, zero safety failures. |
 | Unit tests | **A** | 348 tests (role_filter: 67, phi_audit: 36, family_editor: 61, approval_pipeline: 75, heartbeat: 56, maintenance: 53). All passing. |
-| Structural tests | **A-** | 36 handler enforcement tests. Verify imports, call sites, data flow, file update wiring, AI schema, approval pipeline wiring. All passing. |
+| Structural tests | **A** | 118 structural tests (handler enforcement: 36, CI-ready structural: 82). Verify imports, call sites, enforcement order, no hardcoded paths, AGENTS.md accuracy, circular imports, test coverage existence, documentation existence. All passing. |
 | Integration tests | **F** | None exist. |
 | CI/CD | **F** | Not set up. |
 
 ## Overall
 
-**Design: A. Infrastructure: A-. All behavioral systems built and tested: enforcement, file updates, confirmation, heartbeat, maintenance. 384 tests. CI-ready structural tests remain.**
+**Design: A. Infrastructure: A. All six behavioral systems built and tested. 466 tests across 8 suites, all passing. CI-ready. Structural integrity verified.**

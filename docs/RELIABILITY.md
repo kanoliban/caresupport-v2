@@ -19,6 +19,7 @@ Last updated: 2026-02-18 (Wave 1)
 | Heartbeat cron (unit) | 56 | YAML parsing, uncovered shifts, tentative shifts, med coverage gaps, appointment logistics, past/future filtering, severity sorting, SMS format, all-clear, mixed scenario |
 | Maintenance cron (unit) | 53 | Recent events 90→50, resolved issues removed, past shifts removed, today kept, past appointments removed, orphan member detection, missing section, full run, dry run, backup, nothing-to-prune, SMS format |
 | Handler enforcement (structural) | 36 | Imports, call sites, data flow, leakage blocking, file update wiring, AI schema, approval pipeline, zero-PHI response |
+| CI structural integrity | 82 | No hardcoded paths (11 files), config import, pre-filter order, post-check gate, PHI audit completeness, enforcement modules exist + imported, AGENTS.md accuracy (11 items), syntax (23 files), test coverage, documentation, mechanical approval, no circular imports, enforcement order (7 steps) |
 | Phone routing (unit) | 0 | 0% |
 | Twilio integration (integration) | 0 | 0% |
 | End-to-end (SMS in → SMS out) | 0 | 0% |

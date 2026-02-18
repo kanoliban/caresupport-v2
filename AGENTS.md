@@ -28,7 +28,9 @@ agent/                    ← System prompt template
 examples/                 ← rob-family.md — reference populated family
 runtime/                  ← SMS pipeline (README.md has data flow diagram)
   config.py               ← All paths and settings. Import this, not hardcode.
-  scripts/                ← sms_handler, poll_inbound, twilio_proxy, sms_gateway
+  enforcement/            ← Mechanical safety layer (role_filter, phi_audit, family_editor, approval_pipeline)
+  scripts/                ← sms_handler, poll_inbound, twilio_proxy, heartbeat, maintenance
+  tests/                  ← 466 tests across 8 suites (run all: see Build & Run)
 fork/                     ← CareSupport adaptation of Viktor's architecture
   system-prompt.md        ← Production system prompt (forked from Viktor)
   PRODUCTION-PLAN.md      ← Phase 0-4 rollout plan
@@ -45,6 +47,12 @@ clone/                    ← Viktor factory default (reference snapshot)
 **Understand the architecture →** `ARCHITECTURE.md` then `docs/design-docs/core-beliefs.md`
 
 **Work on the SMS pipeline →** `runtime/README.md` then `runtime/config.py`
+
+**Understand the enforcement layer →** `runtime/enforcement/` — four modules that mechanically gate all SMS interactions:
+  - `role_filter.py` — pre-filters context by access level, post-checks for leakage
+  - `phi_audit.py` — HIPAA-compliant logging for every PHI access
+  - `family_editor.py` — edit-not-write file updates with backup and rollback
+  - `approval_pipeline.py` — YES/NO confirmation for medication/member changes
 
 **Add or modify a care protocol →** `fork/workspace/protocols/` — each has a PROTOCOL.md
 
@@ -77,8 +85,17 @@ clone/                    ← Viktor factory default (reference snapshot)
 # Type check (TS prototype)
 npm install && npx tsc --noEmit
 
+# Run ALL tests (CI-ready)
+cd runtime && for t in role_filter phi_audit family_editor approval_pipeline heartbeat maintenance handler_enforcement structural; do python -m tests.test_$t; done
+
 # Run SMS handler (Python runtime)
 cd runtime/scripts && python sms_handler.py --from "+1..." --body "test" --dry-run
+
+# Run heartbeat scan
+cd runtime/scripts && python heartbeat.py --family-dir /path --hours 48 --json
+
+# Run maintenance
+cd runtime/scripts && python maintenance.py --family-dir /path --dry-run
 
 # Process inbound messages
 cd runtime/scripts && python poll_inbound.py
