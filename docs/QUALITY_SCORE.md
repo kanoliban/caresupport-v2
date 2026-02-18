@@ -2,7 +2,7 @@
 
 Honest grades for each layer of the system. Updated after each Wave 2 step.
 
-Last updated: 2026-02-18 (Wave 2, Step 3 — Confirmation Pipeline)
+Last updated: 2026-02-18 (Wave 2, Step 4 — Heartbeat Cron)
 
 ---
 
@@ -52,7 +52,7 @@ Last updated: 2026-02-18 (Wave 2, Step 3 — Confirmation Pipeline)
 
 | Component | Grade | Notes |
 |-----------|-------|-------|
-| Heartbeat cron (48hr lookahead) | **F** | Designed. Not built as code. |
+| Heartbeat cron (48hr lookahead) | **B** | Implemented. Deterministic scanner: uncovered shifts, tentative shifts, med coverage gaps, appointment logistics. 56 tests passing. |
 | Medication reminders | **F** | Designed in schedule templates. Not built. |
 | Family.md maintenance/pruning | **F** | Pruning rules in spec. No agent runs them. |
 | Context integrity scanning | **F** | Not designed. |
@@ -62,11 +62,11 @@ Last updated: 2026-02-18 (Wave 2, Step 3 — Confirmation Pipeline)
 | Component | Grade | Notes |
 |-----------|-------|-------|
 | Simulation (offline validation) | **A** | 52 conversations, 99.5% score, zero safety failures. |
-| Unit tests | **A-** | 239 tests (role_filter: 67, phi_audit: 36, family_editor: 61, approval_pipeline: 75). All passing. |
+| Unit tests | **A** | 295 tests (role_filter: 67, phi_audit: 36, family_editor: 61, approval_pipeline: 75, heartbeat: 56). All passing. |
 | Structural tests | **A-** | 36 handler enforcement tests. Verify imports, call sites, data flow, file update wiring, AI schema, approval pipeline wiring. All passing. |
 | Integration tests | **F** | None exist. |
 | CI/CD | **F** | Not set up. |
 
 ## Overall
 
-**Design: A. Infrastructure: B. Enforcement wired, file-update loop closed, confirmation pipeline active, 275 tests. Proactive systems and CI still needed.**
+**Design: A. Infrastructure: B+. Enforcement wired, file-update loop closed, confirmation pipeline active, heartbeat scanner built, 331 tests. Maintenance cron and CI still needed.**

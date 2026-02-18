@@ -16,6 +16,7 @@ Last updated: 2026-02-18 (Wave 1)
 | PHI audit (unit) | 36 | All event types, HIPAA fields, JSONL format, file location |
 | Family editor (unit) | 61 | Append, prepend, replace, resolve_issue, backup, rollback, validation, surgical edits, multi-update |
 | Approval pipeline (unit) | 75 | Classification, durable storage, unapproved blocked, YES/NO triggers, unauthorized blocked, expiration, detection, SMS format |
+| Heartbeat cron (unit) | 56 | YAML parsing, uncovered shifts, tentative shifts, med coverage gaps, appointment logistics, past/future filtering, severity sorting, SMS format, all-clear, mixed scenario |
 | Handler enforcement (structural) | 36 | Imports, call sites, data flow, leakage blocking, file update wiring, AI schema, approval pipeline, zero-PHI response |
 | Phone routing (unit) | 0 | 0% |
 | Twilio integration (integration) | 0 | 0% |
