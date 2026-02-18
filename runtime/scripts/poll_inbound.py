@@ -21,10 +21,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, '/work/sdk')
-sys.path.insert(0, '/work/scripts/caresupport')
+# Use shared config — no hardcoded paths
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
+from config import paths, ensure_sdk_path
+ensure_sdk_path()
 
-PROCESSED_FILE = Path("/work/scripts/caresupport/.processed_sids.json")
+PROCESSED_FILE = paths.processed_sids()
 
 
 def load_processed_sids() -> set:

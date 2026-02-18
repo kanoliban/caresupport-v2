@@ -25,13 +25,18 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, '/work/sdk')
+# Use shared config — no hardcoded paths
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import paths, ensure_sdk_path
+ensure_sdk_path()
 
 # ─── Phone → Family Resolution ───────────────────────────────────────────
 
 def resolve_phone(phone: str) -> dict | None:
     """Look up phone number in all family routing tables."""
-    families_dir = Path("/work/families")
+    families_dir = paths.families
+    if not families_dir.exists():
+        return None
     for family_dir in families_dir.iterdir():
         routing_file = family_dir / "phone_routing.json"
         if routing_file.exists():
@@ -72,7 +77,7 @@ def load_family_context(family_dir: str) -> str:
 
 def load_recent_conversations(phone: str, limit: int = 20) -> str:
     """Load recent conversation history for this phone number."""
-    conv_dir = Path(f"/work/conversations/{phone}")
+    conv_dir = paths.conversations / phone
     if not conv_dir.exists():
         return "[No conversation history]"
     
@@ -92,7 +97,7 @@ def load_recent_conversations(phone: str, limit: int = 20) -> str:
 def log_message(phone: str, direction: str, body: str, family_id: str = ""):
     """Log a message to the conversation history."""
     now = datetime.now(timezone.utc)
-    month_file = Path(f"/work/conversations/{phone}/{now.strftime('%Y-%m')}.log")
+    month_file = paths.conversation_log(phone, now.strftime('%Y-%m'))
     month_file.parent.mkdir(parents=True, exist_ok=True)
     
     timestamp = now.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -103,9 +108,10 @@ def log_message(phone: str, direction: str, body: str, family_id: str = ""):
     
     # Also log to family timeline if family_id is known
     if family_id:
-        timeline_dir = Path(f"/work/families/{family_id}/timeline")
+        timeline_dir = paths.family_dir(family_id) / "timeline"
         timeline_dir.mkdir(parents=True, exist_ok=True)
-        timeline_file = timeline_dir / f"{now.strftime('%Y-%m')}.log"
+        timeline_file = paths.family_timeline(family_id, now.strftime('%Y-%m'))
+        timeline_file.parent.mkdir(parents=True, exist_ok=True)
         
         # Resolve name from phone
         member = resolve_phone(phone)

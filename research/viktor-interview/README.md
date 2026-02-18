@@ -84,8 +84,8 @@ Viktor independently converged on the same architecture as CareSupport's family.
 ## How to Use This Research
 
 This directory is raw interview material. For the synthesized conclusions, see:
-- `docs/architecture-validation.md` — full synthesis with CareSupport mapping
-- `docs/primitive-shift.md` — the underlying insight
-- `docs/the-machine-that-builds-the-machine.md` — building guidelines for agents
+- `docs/design-docs/architecture-validation.md` — full synthesis with CareSupport mapping
+- `docs/design-docs/primitive-shift.md` — the underlying insight
+- `docs/design-docs/the-machine-that-builds-the-machine.md` — building guidelines for agents
 
 Future interview rounds should be added as `round-NN-topic.md` files and indexed in this README.

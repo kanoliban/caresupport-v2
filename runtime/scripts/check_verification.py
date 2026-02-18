@@ -11,13 +11,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, '/work/sdk')
+# Use shared config — no hardcoded paths
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import twilio, paths, ensure_sdk_path
+ensure_sdk_path()
 
-ACCOUNT_SID = "ACe6bfbd5b18c9d2fe0eadd1039080ac5e"
+ACCOUNT_SID = twilio.account_sid
 LOCAL_PHONE = "+16513721746"
 TOLLFREE_PHONE = "+18442007742"
 LIBAN_PHONE = "+16517037981"
-STATUS_FILE = Path("/work/scripts/caresupport/.verification_status.json")
+STATUS_FILE = paths.processed_sids().parent / ".verification_status.json"
 
 
 def load_status() -> dict:

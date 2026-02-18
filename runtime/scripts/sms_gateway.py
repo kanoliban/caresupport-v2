@@ -29,16 +29,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
-sys.path.insert(0, '/work/sdk')
-sys.path.insert(0, '/work/scripts/caresupport')
+# Use shared config — no hardcoded paths
+sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
+from config import twilio, paths, ensure_sdk_path
+ensure_sdk_path()
 
-# Load config
-_config_path = Path("/work/scripts/caresupport/config.json")
-with open(_config_path) as f:
-    CONFIG = json.load(f)
-
-ACCOUNT_SID = CONFIG["twilio_account_sid"]
-CARESUPPORT_PHONE = CONFIG["caresupport_phone"]
+ACCOUNT_SID = twilio.account_sid
+CARESUPPORT_PHONE = twilio.phone_number
 
 
 def _parse_response(result: dict) -> dict:
@@ -165,7 +163,7 @@ async def process_inbound():
     """
     from sms_handler import handle_sms
     
-    PROCESSED_FILE = Path("/work/scripts/caresupport/.processed_sids.json")
+    PROCESSED_FILE = paths.processed_sids()
     
     # Load processed SIDs
     processed_sids = set()

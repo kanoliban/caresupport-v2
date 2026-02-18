@@ -13,18 +13,14 @@ import sys
 from urllib.parse import urlencode
 from pathlib import Path
 
-sys.path.insert(0, '/work/sdk')
+# Use shared config — no hardcoded paths
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import twilio, ensure_sdk_path
+ensure_sdk_path()
 
-# Load config
-_config = {}
-_config_path = Path("/work/scripts/caresupport/config.json")
-if _config_path.exists():
-    with open(_config_path) as f:
-        _config = json.load(f)
-
-ACCOUNT_SID = _config.get("twilio_account_sid", "")
-CARESUPPORT_PHONE = _config.get("caresupport_phone", "")
-BASE_URL = f"https://api.twilio.com/2010-04-01/Accounts/{ACCOUNT_SID}"
+ACCOUNT_SID = twilio.account_sid
+CARESUPPORT_PHONE = twilio.phone_number
+BASE_URL = twilio.base_url
 
 
 def _parse_response(result: dict) -> dict:
@@ -156,7 +152,7 @@ async def update_phone_webhook(sms_url: str, sms_method: str = "POST") -> dict:
     """
     from sdk.tools.pd_twilio import pd_twilio_proxy_post
     
-    phone_sid = _config.get("twilio_phone_sid", "")
+    phone_sid = twilio.phone_sid
     if not phone_sid:
         return {"error": "Phone SID not configured"}
     

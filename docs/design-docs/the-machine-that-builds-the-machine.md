@@ -20,7 +20,7 @@ A markdown file and a conversation.
 
 `family.md` is to a care network what `CLAUDE.md` is to a development session. The agent reads it at the start. Reasons against it. Updates it. The conversation ends. The file persists.
 
-Read `docs/primitive-shift.md` for the full articulation. The core: **most of what we call "software" is structured context plus decision-making.** When intelligence becomes infrastructure, the architecture collapses into a context file, a system prompt, and tool access.
+Read `docs/design-docs/primitive-shift.md` for the full articulation. The core: **most of what we call "software" is structured context plus decision-making.** When intelligence becomes infrastructure, the architecture collapses into a context file, a system prompt, and tool access.
 
 ---
 
@@ -204,8 +204,8 @@ Making a stateful, multi-user, role-aware system feel like texting a helpful fri
 
 Read the repo in this order:
 
-1. `docs/primitive-shift.md` — why this architecture exists
-2. `docs/family-md-spec.md` — what family.md is and how it works
+1. `docs/design-docs/primitive-shift.md` — why this architecture exists
+2. `docs/design-docs/family-md-spec.md` — what family.md is and how it works
 3. `examples/rob-family.md` — a realistic populated example
 4. `agent/system-prompt.md` — how the agent thinks
 5. `research/viktor-interview/synthesis.md` — production-validated insights and corrected biases
