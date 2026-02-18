@@ -2,7 +2,7 @@
 
 Honest grades for each layer of the system. Updated after each Wave 2 step.
 
-Last updated: 2026-02-18 (Wave 2, Step 1 — Mechanical Enforcement)
+Last updated: 2026-02-18 (Wave 2, Step 2 — File Update Loop)
 
 ---
 
@@ -31,7 +31,7 @@ Last updated: 2026-02-18 (Wave 2, Step 1 — Mechanical Enforcement)
 | Component | Grade | Notes |
 |-----------|-------|-------|
 | Phone → family resolution | **C** | Works for single family. Hardcoded paths being migrated to config. |
-| SMS handler (inbound → response) | **B** | Role filter wired (pre-filter + post-check). PHI audit wired. Leakage blocking active. Still doesn't apply file updates. |
+| SMS handler (inbound → response) | **B+** | Role filter wired. PHI audit wired. File updates applied (backup → edit → validate). Leakage blocking active. |
 | SMS gateway (Twilio integration) | **C** | Functional for send/receive. Draft approval flow not implemented. |
 | Inbound poller | **C** | Polls and processes. No family serialization. No delivery verification. |
 | Twilio proxy | **B** | Works. Handles send, list, check operations. |
@@ -62,11 +62,11 @@ Last updated: 2026-02-18 (Wave 2, Step 1 — Mechanical Enforcement)
 | Component | Grade | Notes |
 |-----------|-------|-------|
 | Simulation (offline validation) | **A** | 52 conversations, 99.5% score, zero safety failures. |
-| Unit tests | **B** | 103 tests (role_filter: 67, phi_audit: 36). All passing. |
-| Structural tests | **B** | 19 handler enforcement tests. Verify imports, call sites, data flow, zero-PHI response. All passing. |
+| Unit tests | **B+** | 164 tests (role_filter: 67, phi_audit: 36, family_editor: 61). All passing. |
+| Structural tests | **B+** | 28 handler enforcement tests. Verify imports, call sites, data flow, file update wiring, AI schema. All passing. |
 | Integration tests | **F** | None exist. |
 | CI/CD | **F** | Not set up. |
 
 ## Overall
 
-**Design: A. Infrastructure: C+. Enforcement layer wired and tested. File updates, proactive systems, and CI still needed.**
+**Design: A. Infrastructure: B-. Enforcement wired, file-update loop closed, 192 tests. Proactive systems and CI still needed.**

@@ -14,7 +14,8 @@ Last updated: 2026-02-18 (Wave 1)
 | SMS handler (unit) | 0 | 0% — handler orchestration not unit-tested (structural tests verify wiring) |
 | Role filter (unit) | 67 | Section parsing, 4 access levels, pre-filter, post-check, pattern detection |
 | PHI audit (unit) | 36 | All event types, HIPAA fields, JSONL format, file location |
-| Handler enforcement (structural) | 19 | Imports, call sites, data flow, leakage blocking, zero-PHI response |
+| Family editor (unit) | 61 | Append, prepend, replace, resolve_issue, backup, rollback, validation, surgical edits, multi-update |
+| Handler enforcement (structural) | 28 | Imports, call sites, data flow, leakage blocking, file update wiring, AI schema, zero-PHI response |
 | Phone routing (unit) | 0 | 0% |
 | Twilio integration (integration) | 0 | 0% |
 | End-to-end (SMS in → SMS out) | 0 | 0% |

@@ -13,8 +13,9 @@ Pipeline:
     4. ENFORCEMENT: Log PHI access (audit trail)
     5. Call the AI agent to generate a response
     6. ENFORCEMENT: Scan response for leakage (post-check)
-    7. Log the interaction
-    8. Return the response
+    7. PERSISTENCE: Apply family_file_updates (backup → edit → validate)
+    8. Log the interaction
+    9. Return the response
 
 It does NOT send the SMS — the caller (cron or bridge) handles delivery.
 """
@@ -40,6 +41,11 @@ from enforcement.role_filter import (
     can_approve,
 )
 from enforcement.phi_audit import PHIAuditLogger
+from enforcement.family_editor import (
+    apply_updates,
+    parse_update_instructions,
+    FileUpdate,
+)
 
 # Initialize audit logger with config path
 _audit = PHIAuditLogger(log_dir=paths.logs)
@@ -175,8 +181,12 @@ Their relationship to care recipient: {member['relationship']}
    family file, but always confirm before committing someone.
 5. If you need to coordinate with other family members (e.g., "Can someone take
    Degitu to work tomorrow?"), note that you'll text them — don't assume their answer.
-6. Update the family file when you learn new information (schedules, preferences,
-   medical updates). Express this as what you've noted, not technical details.
+6. Update the family file when you learn new information. Use structured updates:
+   - "append" to add entries to Schedule, Recent Events, Patterns, etc.
+   - "prepend" to add urgent items at the top of a section.
+   - "replace" to change specific text (provide exact old_content + new content).
+   - "resolve_issue" to mark an Active Issues item as done (provide identifying text).
+   Always log what happened to Recent Events (prepend with timestamp and description).
 7. If the care recipient (Degitu) texts you directly, respond to HER — she is
    cognitively intact and can advocate for her own needs.
 8. The coordinator (Liban) gets summaries and escalations. Don't overwhelm others
@@ -228,8 +238,34 @@ async def generate_response(system_context: str, user_message: str) -> str:
                     "description": "Other family members who need to be texted as part of this coordination"
                 },
                 "family_file_updates": {
-                    "type": "string",
-                    "description": "Any updates that should be made to the family file based on this interaction"
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "section": {
+                                "type": "string",
+                                "enum": ["schedule", "medications", "appointments",
+                                         "availability", "active_issues", "recent_events",
+                                         "patterns", "members", "care_recipient"],
+                                "description": "Which section of the family file to update"
+                            },
+                            "operation": {
+                                "type": "string",
+                                "enum": ["append", "prepend", "replace", "resolve_issue"],
+                                "description": "append: add to end. prepend: add after header. replace: swap old_content for content. resolve_issue: mark a [ ] item as [x]."
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The text to add, or the new text for replacements"
+                            },
+                            "old_content": {
+                                "type": "string",
+                                "description": "For replace operations only: the exact text being replaced"
+                            }
+                        },
+                        "required": ["section", "operation", "content"]
+                    },
+                    "description": "Structured updates to apply to the family file. Each entry targets a specific section with a specific operation."
                 }
             },
             "required": ["sms_response"]
@@ -382,7 +418,25 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
         leakage_clean=True,
     )
 
-    # 10. Log outbound response
+    # 10. PERSISTENCE: Apply family_file_updates (backup → edit → validate)
+    file_update_result = None
+    raw_updates = result.get("family_file_updates", [])
+    if raw_updates and isinstance(raw_updates, list) and len(raw_updates) > 0:
+        family_md_path = Path(member.get("family_dir", "")) / "family.md"
+        if family_md_path.exists():
+            updates = parse_update_instructions(raw_updates)
+            if updates:
+                edit_result = apply_updates(family_md_path, updates)
+                file_update_result = {
+                    "success": edit_result.success,
+                    "backup_path": edit_result.backup_path,
+                    "updates_applied": edit_result.updates_applied,
+                    "updates_skipped": edit_result.updates_skipped,
+                    "sections_modified": edit_result.sections_modified,
+                    "errors": edit_result.errors,
+                }
+
+    # 11. Log outbound response
     if sms_response:
         log_message(from_phone, "OUTBOUND", sms_response, family_id)
 
@@ -390,7 +444,7 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
         "success": True,
         "response": sms_response,
         "needs_outreach": result.get("needs_outreach", []),
-        "family_file_updates": result.get("family_file_updates", ""),
+        "family_file_updates": file_update_result,
         "internal_notes": result.get("internal_notes", ""),
         "member": member,
         "enforcement": {

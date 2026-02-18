@@ -10,7 +10,7 @@ Known gaps, honest. Updated after each Wave 2 step.
 |------|----------|--------|--------|
 | role_filter `_redact_sections()` not implemented | `runtime/enforcement/role_filter.py` | PHI could leak to unauthorized members | ✅ Fixed — pre-filter + post-check + 67 tests |
 | phi_audit not wired into handler | `runtime/enforcement/phi_audit.py` | No HIPAA audit trail for interactions | ✅ Fixed — all event types wired + 36 tests |
-| family_file_updates not applied | `runtime/scripts/sms_handler.py` | Agent generates state updates that evaporate | Open — Wave 2 Step 2 |
+| family_file_updates not applied | `runtime/enforcement/family_editor.py` | Agent generates state updates that evaporate | ✅ Fixed — structured updates, edit-not-write, backup + rollback, 61 tests |
 | No confirmation/approval pipeline | `runtime/scripts/` | Medication changes not gated by human approval | Open — Wave 2 Step 3 |
 | Hardcoded `/work/` paths in runtime | `runtime/scripts/*.py` | Scripts break outside specific environment | ✅ Fixed — Wave 1 (runtime/config.py) |
 
