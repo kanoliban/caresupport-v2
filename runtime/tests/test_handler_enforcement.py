@@ -46,6 +46,7 @@ def test_handler_imports_enforcement():
     role_filter_imported = False
     phi_audit_imported = False
     family_editor_imported = False
+    approval_pipeline_imported = False
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -55,10 +56,13 @@ def test_handler_imports_enforcement():
                 phi_audit_imported = True
             if node.module and "family_editor" in node.module:
                 family_editor_imported = True
+            if node.module and "approval_pipeline" in node.module:
+                approval_pipeline_imported = True
 
     assert_true(role_filter_imported, "Handler imports from enforcement.role_filter")
     assert_true(phi_audit_imported, "Handler imports from enforcement.phi_audit")
     assert_true(family_editor_imported, "Handler imports from enforcement.family_editor")
+    assert_true(approval_pipeline_imported, "Handler imports from enforcement.approval_pipeline")
 
 
 def test_handler_calls_filter_family_context():
@@ -151,6 +155,20 @@ def test_handler_ai_schema_has_structured_updates():
     assert_true('"enum": ["schedule"' in source, "Sections are enumerated in schema")
 
 
+def test_handler_has_approval_pipeline():
+    """The handler MUST wire the approval pipeline into the update flow."""
+    print("\n── Structural: Approval Pipeline ──")
+    source = HANDLER_PATH.read_text()
+
+    assert_true("classify_updates" in source, "Handler calls classify_updates")
+    assert_true("create_pending" in source, "Handler calls create_pending")
+    assert_true("detect_approval_response" in source, "Handler detects approval responses")
+    assert_true("resolve_approval" in source, "Handler resolves approvals")
+    assert_true("pending_confirmations" in source, "Handler returns pending_confirmations")
+    assert_true("_handle_approval_response" in source, "Handler has approval response early-return")
+    assert_true("approvals_required" in source, "Enforcement metadata tracks approvals_required")
+
+
 # ─── Test: Unknown Number Response ────────────────────────────────────────
 
 def test_unknown_number_response_has_zero_phi():
@@ -189,6 +207,7 @@ if __name__ == "__main__":
     test_unknown_number_response_has_zero_phi()
     test_handler_calls_apply_updates()
     test_handler_ai_schema_has_structured_updates()
+    test_handler_has_approval_pipeline()
 
     print(f"\n{'=' * 60}")
     print(f"RESULTS: {_passed} passed, {_failed} failed")

@@ -46,6 +46,15 @@ from enforcement.family_editor import (
     parse_update_instructions,
     FileUpdate,
 )
+from enforcement.approval_pipeline import (
+    classify_updates,
+    create_pending,
+    get_pending_for_approver,
+    resolve_approval,
+    detect_approval_response,
+    format_confirmation_sms,
+    expire_stale,
+)
 
 # Initialize audit logger with config path
 _audit = PHIAuditLogger(log_dir=paths.logs)
@@ -280,6 +289,99 @@ async def generate_response(system_context: str, user_message: str) -> str:
     return json.dumps(result.result)
 
 
+# ─── Approval Helpers ─────────────────────────────────────────────────────
+
+def _get_approver_phones(family_dir: Path) -> list[str]:
+    """Get phone numbers of members who can approve changes (full access)."""
+    routing_file = family_dir / "phone_routing.json"
+    if not routing_file.exists():
+        return []
+    with open(routing_file) as f:
+        routing = json.load(f)
+    return [
+        m["phone"] for m in routing.get("members", [])
+        if can_approve(m.get("access_level", ""))
+    ]
+
+
+def _handle_approval_response(member: dict, body: str, family_dir: Path) -> dict | None:
+    """Check if this inbound SMS is a YES/NO approval response.
+
+    Returns a handler result dict if it is, or None to continue normal flow.
+    """
+    is_approved, approval_id_hint = detect_approval_response(body)
+    if is_approved is None:
+        return None  # Not an approval response
+
+    # Check if this member has pending approvals
+    pending = get_pending_for_approver(family_dir, member["phone"])
+    if not pending:
+        return None  # No pending approvals — treat as normal message
+
+    # Find the right approval
+    target = None
+    if approval_id_hint:
+        # Try matching by ID hint
+        for a in pending:
+            if a.id.startswith(approval_id_hint) or a.id == approval_id_hint:
+                target = a
+                break
+    if target is None and len(pending) == 1:
+        # Only one pending — assume it's about this one
+        target = pending[0]
+    if target is None:
+        # Multiple pending, no clear match — can't resolve
+        return None
+
+    # Resolve the approval
+    result = resolve_approval(
+        family_dir=family_dir,
+        approval_id=target.id,
+        approved=is_approved,
+        by_phone=member["phone"],
+    )
+
+    # Build the response SMS
+    if result["action"] == "approved":
+        response = f"✅ Approved: {target.description[:150]}. Change applied."
+    elif result["action"] == "rejected":
+        response = f"❌ Rejected: {target.description[:150]}. No changes made."
+    elif result["action"] == "expired":
+        response = f"⏰ That approval has expired. Please ask to resubmit."
+    else:
+        response = f"Could not process approval: {result['action']}."
+
+    # Log
+    log_message(member["phone"], "INBOUND_APPROVAL", body, member.get("family_id", ""))
+    log_message(member["phone"], "OUTBOUND", response, member.get("family_id", ""))
+
+    # Audit
+    _audit.log_response_sent(
+        family_id=member.get("family_id", ""),
+        recipient_phone=member["phone"],
+        recipient_role=member.get("role", "unknown"),
+        access_level=member.get("access_level", "full"),
+        response_length=len(response),
+        leakage_clean=True,
+    )
+
+    return {
+        "success": True,
+        "response": response,
+        "needs_outreach": [],
+        "family_file_updates": result.get("edit_result"),
+        "pending_confirmations": [],
+        "internal_notes": f"Approval {result['action']}: {target.id}",
+        "member": member,
+        "enforcement": {
+            "approval_response": True,
+            "action": result["action"],
+            "approval_id": target.id,
+            "phi_access_logged": True,
+        },
+    }
+
+
 # ─── Main Handler ─────────────────────────────────────────────────────────
 
 BLOCKED_RESPONSE = (
@@ -327,10 +429,16 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
         }
 
     family_id = member["family_id"]
+    family_dir = Path(member.get("family_dir", ""))
     access_level = member.get("access_level", "schedule")
 
     # 2. Log inbound message
     log_message(from_phone, "INBOUND", body, family_id)
+
+    # 2.5 ENFORCEMENT: Check if this is an approval response (early return)
+    approval_response = _handle_approval_response(member, body, family_dir)
+    if approval_response is not None:
+        return approval_response
 
     # 3. Load context
     raw_family_context = load_family_context(member.get("family_dir", ""))
@@ -418,23 +526,49 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
         leakage_clean=True,
     )
 
-    # 10. PERSISTENCE: Apply family_file_updates (backup → edit → validate)
+    # 10. PERSISTENCE: Apply family_file_updates (with approval gating)
     file_update_result = None
+    pending_confirmations = []
     raw_updates = result.get("family_file_updates", [])
     if raw_updates and isinstance(raw_updates, list) and len(raw_updates) > 0:
-        family_md_path = Path(member.get("family_dir", "")) / "family.md"
+        family_md_path = family_dir / "family.md"
         if family_md_path.exists():
             updates = parse_update_instructions(raw_updates)
             if updates:
-                edit_result = apply_updates(family_md_path, updates)
-                file_update_result = {
-                    "success": edit_result.success,
-                    "backup_path": edit_result.backup_path,
-                    "updates_applied": edit_result.updates_applied,
-                    "updates_skipped": edit_result.updates_skipped,
-                    "sections_modified": edit_result.sections_modified,
-                    "errors": edit_result.errors,
-                }
+                # ENFORCEMENT: classify into auto-apply vs. needs-approval
+                classified = classify_updates(updates)
+
+                # Auto-apply safe updates immediately
+                if classified.auto_apply:
+                    edit_result = apply_updates(family_md_path, classified.auto_apply)
+                    file_update_result = {
+                        "success": edit_result.success,
+                        "backup_path": edit_result.backup_path,
+                        "updates_applied": edit_result.updates_applied,
+                        "updates_skipped": edit_result.updates_skipped,
+                        "sections_modified": edit_result.sections_modified,
+                        "errors": edit_result.errors,
+                    }
+
+                # Create pending approvals for gated updates
+                if classified.needs_approval:
+                    approver_phones = _get_approver_phones(family_dir)
+                    for update, reason in classified.needs_approval:
+                        desc = f"{reason}: {update.content[:120]}"
+                        approval = create_pending(
+                            family_dir=family_dir,
+                            update=update,
+                            description=desc,
+                            requester_phone=from_phone,
+                            requester_name=member.get("name", "Unknown"),
+                            approver_phones=approver_phones,
+                        )
+                        pending_confirmations.append({
+                            "approval_id": approval.id,
+                            "description": approval.description,
+                            "confirmation_sms": format_confirmation_sms(approval),
+                            "approver_phones": approver_phones,
+                        })
 
     # 11. Log outbound response
     if sms_response:
@@ -445,6 +579,7 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
         "response": sms_response,
         "needs_outreach": result.get("needs_outreach", []),
         "family_file_updates": file_update_result,
+        "pending_confirmations": pending_confirmations,
         "internal_notes": result.get("internal_notes", ""),
         "member": member,
         "enforcement": {
@@ -454,6 +589,7 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
             "leakage_detected": False,
             "response_blocked": False,
             "phi_access_logged": True,
+            "approvals_required": len(pending_confirmations),
         },
     }
 

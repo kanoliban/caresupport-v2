@@ -25,7 +25,7 @@ All 12 hard rules are currently enforced by prompt only. None have mechanical en
 
 | Rule | Mechanical enforcement | Status |
 |------|----------------------|--------|
-| No medication changes without caregiver + prescriber | Confirmation pipeline | Wave 2 Step 3 |
+| No medication changes without caregiver + prescriber | Confirmation pipeline | ✅ Wired — medication/member changes gated, durable storage, YES/NO resolution |
 | No PHI to unauthorized access levels | Role filter | ✅ Wired — pre-filter + post-check + leakage blocking |
 | Emergency keyword → emergency protocol | Keyword detector | Wave 2 (future) |
 | Log PHI access | PHI audit logger | ✅ Wired — every interaction logged |
