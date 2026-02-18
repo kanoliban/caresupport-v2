@@ -4,7 +4,7 @@
 
 **Source:** OpenAI "Harness Engineering" article (Feb 11, 2026) + gap analysis against current repo.
 
-**Status:** Wave 1 complete. Wave 2 not started.
+**Status:** Wave 2 Step 1 complete (mechanical enforcement). Step 2 next.
 
 ---
 
@@ -38,7 +38,7 @@ Component by component. Each step is a separate commit with tests.
 
 | Step | Description | Depends on | Status |
 |------|-------------|------------|--------|
-| 2.1 | Wire role_filter + phi_audit into handler | Wave 1 | Not started |
+| 2.1 | Wire role_filter + phi_audit into handler | Wave 1 | ✅ Done — 122 tests, all passing |
 | 2.2 | Close file-update loop + delivery verification | 2.1 | Not started |
 | 2.3 | Confirmation/approval pipeline | 2.2 | Not started |
 | 2.4 | Heartbeat cron (real code) | 2.2 | Not started |

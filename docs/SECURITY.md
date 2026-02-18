@@ -10,8 +10,8 @@ Last updated: 2026-02-18 (Wave 1)
 
 | Requirement | Status | How |
 |-------------|--------|-----|
-| PHI audit trail | ⚠️ Code exists, not wired | `fork/workspace/sdk/utils/phi_audit.py` — Wave 2 Step 1 |
-| Access controls (role-based) | ⚠️ Code exists, not wired | `fork/workspace/sdk/utils/role_filter.py` — Wave 2 Step 1 |
+| PHI audit trail | ✅ Wired and tested | `runtime/enforcement/phi_audit.py` — logs every interaction (36 tests) |
+| Access controls (role-based) | ✅ Wired and tested | `runtime/enforcement/role_filter.py` — pre-filters context + post-checks outbound (67 tests) |
 | Encryption in transit | ✅ Enforced | HTTPS for all API calls, TLS for SMS via Twilio |
 | Encryption at rest | ❌ Not enforced | Filesystem storage, no encryption layer |
 | BAA with model provider | ❌ Not in place | Required before production PHI handling |
@@ -26,9 +26,9 @@ All 12 hard rules are currently enforced by prompt only. None have mechanical en
 | Rule | Mechanical enforcement | Status |
 |------|----------------------|--------|
 | No medication changes without caregiver + prescriber | Confirmation pipeline | Wave 2 Step 3 |
-| No PHI to unauthorized access levels | Role filter | Wave 2 Step 1 |
+| No PHI to unauthorized access levels | Role filter | ✅ Wired — pre-filter + post-check + leakage blocking |
 | Emergency keyword → emergency protocol | Keyword detector | Wave 2 (future) |
-| Log PHI access | PHI audit logger | Wave 2 Step 1 |
+| Log PHI access | PHI audit logger | ✅ Wired — every interaction logged |
 | No SSN/CC/insurance ID in family.md | Content scanner | Wave 2 (future) |
 | Full access ≠ medication change authority | Confirmation pipeline | Wave 2 Step 3 |
 | Emergency access override (documented) | Override logger | Wave 2 (future) |
@@ -44,7 +44,7 @@ All 12 hard rules are currently enforced by prompt only. None have mechanical en
 |-------|--------|
 | Phone → member resolution | ✅ Implemented (JSON lookup) |
 | Member → access level | ✅ Implemented (in routing table) |
-| Access level → content filtering | ⚠️ Class exists, not wired |
+| Access level → content filtering | ✅ Wired and tested |
 | Agent → family.md isolation | ❌ Prompt-level only |
 | Agent → API credentials | ✅ Managed by Tool Gateway |
 
@@ -53,7 +53,7 @@ All 12 hard rules are currently enforced by prompt only. None have mechanical en
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
 | Cross-family data leakage | Family isolation (infra-level) | ❌ Prompt-level only |
-| Unauthorized PHI access | Role filter | ⚠️ Not wired |
+| Unauthorized PHI access | Role filter | ✅ Pre-filter + post-check + leakage blocking |
 | Medication error from stale data | Pre-send verification | ❌ Not built |
 | Social engineering via SMS | Unknown number handling | ✅ Implemented |
 | Agent hallucination of medical info | "Never fabricate" hard rule | Prompt-level only |

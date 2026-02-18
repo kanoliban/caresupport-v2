@@ -10,3 +10,4 @@ families/
 !simulation/families/
 !fork/simulation/families/
 !fork/workspace/families/
+__pycache__/

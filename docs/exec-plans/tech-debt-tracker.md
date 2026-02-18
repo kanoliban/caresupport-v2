@@ -8,8 +8,8 @@ Known gaps, honest. Updated after each Wave 2 step.
 
 | Item | Location | Impact | Status |
 |------|----------|--------|--------|
-| role_filter `_redact_sections()` not implemented | `fork/workspace/sdk/utils/role_filter.py` | PHI could leak to unauthorized members | Open — Wave 2 Step 1 |
-| phi_audit not wired into handler | `fork/workspace/sdk/utils/phi_audit.py` | No HIPAA audit trail for interactions | Open — Wave 2 Step 1 |
+| role_filter `_redact_sections()` not implemented | `runtime/enforcement/role_filter.py` | PHI could leak to unauthorized members | ✅ Fixed — pre-filter + post-check + 67 tests |
+| phi_audit not wired into handler | `runtime/enforcement/phi_audit.py` | No HIPAA audit trail for interactions | ✅ Fixed — all event types wired + 36 tests |
 | family_file_updates not applied | `runtime/scripts/sms_handler.py` | Agent generates state updates that evaporate | Open — Wave 2 Step 2 |
 | No confirmation/approval pipeline | `runtime/scripts/` | Medication changes not gated by human approval | Open — Wave 2 Step 3 |
 | Hardcoded `/work/` paths in runtime | `runtime/scripts/*.py` | Scripts break outside specific environment | ✅ Fixed — Wave 1 (runtime/config.py) |
@@ -18,7 +18,7 @@ Known gaps, honest. Updated after each Wave 2 step.
 
 | Item | Location | Impact | Status |
 |------|----------|--------|--------|
-| Zero tests | `runtime/` | No verification that enforcement runs | Open — Wave 2 Step 6 |
+| Zero tests | `runtime/tests/` | No verification that enforcement runs | ✅ Fixed — 122 tests (role_filter: 67, phi_audit: 36, handler: 19) |
 | No heartbeat cron (real code) | — | Proactive scanning is conceptual only | Open — Wave 2 Step 4 |
 | No family.md pruning agent | — | File grows unbounded over time | Open — Wave 2 Step 5 |
 | Outreach delivery not verified | `runtime/scripts/poll_inbound.py` | Outreach messages sent without confirmation | Open — Wave 2 Step 2 |

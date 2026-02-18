@@ -11,15 +11,15 @@ Last updated: 2026-02-18 (Wave 1)
 | Layer | Tests | Coverage |
 |-------|-------|----------|
 | Agent reasoning (simulation) | 52 conversations | 99.5% pass rate across 5 families, 14 protocols |
-| SMS handler (unit) | 0 | 0% |
-| Role filter (unit) | 0 | 0% |
-| PHI audit (unit) | 0 | 0% |
+| SMS handler (unit) | 0 | 0% — handler orchestration not unit-tested (structural tests verify wiring) |
+| Role filter (unit) | 67 | Section parsing, 4 access levels, pre-filter, post-check, pattern detection |
+| PHI audit (unit) | 36 | All event types, HIPAA fields, JSONL format, file location |
+| Handler enforcement (structural) | 19 | Imports, call sites, data flow, leakage blocking, zero-PHI response |
 | Phone routing (unit) | 0 | 0% |
 | Twilio integration (integration) | 0 | 0% |
 | End-to-end (SMS in → SMS out) | 0 | 0% |
-| Structural (enforcement wired correctly) | 0 | 0% |
 
-The simulation validated the *reasoning*. Nothing validates the *plumbing*.
+The simulation validated the *reasoning*. The enforcement tests now validate *safety plumbing*.
 
 ## Failure Modes
 
