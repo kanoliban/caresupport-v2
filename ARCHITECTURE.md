@@ -6,26 +6,29 @@ Top-level map of CareSupport's domains, layers, and dependency directions.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        SMS (Twilio)                                 │
+│              iMessage/RCS/SMS (Linq primary, Twilio fallback)       │
 │                    inbound ↓     ↑ outbound                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  ┌─────────────┐    ┌────────────────┐    ┌──────────────────┐     │
-│  │  Plumbing    │    │  Reasoning     │    │  Enforcement     │     │
-│  │             │    │                │    │                  │     │
-│  │ poll_inbound│───▶│ sms_handler    │───▶│ role_filter      │     │
-│  │ twilio_proxy│    │ (AI agent)     │    │ phi_audit        │     │
-│  │ sms_gateway │    │                │    │ confirmation     │     │
-│  └──────┬──────┘    └───────┬────────┘    └────────┬─────────┘     │
-│         │                   │                      │               │
-│         │                   ▼                      │               │
-│         │           ┌──────────────┐               │               │
-│         │           │  State       │               │               │
-│         │           │              │               │               │
-│         └──────────▶│ family.md    │◀──────────────┘               │
-│                     │ conversations│                               │
-│                     │ audit logs   │                               │
-│                     └──────────────┘                               │
+│  ┌──────────────────┐  ┌────────────────┐  ┌──────────────────┐   │
+│  │  Plumbing         │  │  Reasoning     │  │  Enforcement     │   │
+│  │                   │  │                │  │                  │   │
+│  │ webhook_receiver──│─▶│ sms_handler    │─▶│ role_filter      │   │
+│  │ linq_gateway      │  │ (AI agent)     │  │ phi_audit        │   │
+│  │ reaction_handler  │  │                │  │ family_editor    │   │
+│  │ ─ ─ ─ ─ ─ ─ ─ ─ │  │                │  │ approval_pipeline│   │
+│  │ poll_inbound (SMS)│  │                │  │                  │   │
+│  │ twilio_proxy (SMS)│  │                │  │                  │   │
+│  └──────┬────────────┘  └───────┬────────┘  └────────┬─────────┘   │
+│         │                       │                    │             │
+│         │                       ▼                    │             │
+│         │               ┌──────────────┐             │             │
+│         │               │  State       │             │             │
+│         │               │              │             │             │
+│         └──────────────▶│ family.md    │◀────────────┘             │
+│                         │ conversations│                           │
+│                         │ audit logs   │                           │
+│                         └──────────────┘                           │
 │                                                                     │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │  Proactive Systems (crons)                                   │   │
@@ -45,13 +48,14 @@ Top-level map of CareSupport's domains, layers, and dependency directions.
 
 ## Domains
 
-### 1. SMS Plumbing
-Moves bytes between Twilio and the agent. No intelligence.
+### 1. Transport Plumbing
+Moves bytes between messaging providers and the agent. No intelligence.
 
 - **Location:** `runtime/scripts/`
-- **Components:** `poll_inbound.py`, `twilio_proxy.py`, `sms_gateway.py`
-- **Config:** `runtime/config.py`
-- **Docs:** `runtime/README.md`
+- **Primary (iMessage):** `webhook_receiver.py` (push), `linq_gateway.py` (send), `reaction_handler.py` (tapbacks)
+- **Fallback (SMS):** `poll_inbound.py` (cron poll), `twilio_proxy.py` (send), `sms_gateway.py` (send)
+- **Config:** `runtime/config.py` (LinqConfig + TwilioConfig)
+- **Docs:** `runtime/README.md`, `docs/references/linq-setup.md`
 
 ### 2. Agent Reasoning
 The AI that reads family.md, understands the message, and generates a response.
