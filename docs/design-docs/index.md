@@ -15,3 +15,4 @@
 | [family-md-spec.md](family-md-spec.md) | ✅ Verified | What family.md is, how it works, how it grows, pruning rules, role scoping. Validated across 52 simulated conversations. |
 | [the-machine-that-builds-the-machine.md](the-machine-that-builds-the-machine.md) | 🔨 Active | How to build without drifting. Failure modes, patterns, the standard for every change. Being extended with harness engineering practices. |
 | [architecture-validation.md](architecture-validation.md) | ✅ Verified | Viktor interview synthesis mapped to CareSupport. Production-validated patterns and corrected biases. |
+| [dashboard/](dashboard/) | 📋 Draft | Generative UI dashboard with Tambo. Technical analysis, component specs, architecture, creative vision. The dashboard that emerges from conversation. |
