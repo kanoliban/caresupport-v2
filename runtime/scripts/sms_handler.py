@@ -256,7 +256,11 @@ def build_system_context(member: dict, family_context: str,
 
     # Load externalized identity (SOUL.md at repo root)
     soul_path = Path(__file__).parent.parent.parent / "SOUL.md"
-    soul_text = soul_path.read_text().strip() if soul_path.exists() else "You are CareSupport — a care coordination agent."
+    if soul_path.exists():
+        soul_text = soul_path.read_text().strip()
+    else:
+        print(f"[CareSupport] WARNING: SOUL.md not found at {soul_path}. Agent running without identity constraints.", file=sys.stderr)
+        soul_text = "You are CareSupport — a care coordination agent."
 
     # Load lessons from past corrections
     lessons_text = ""
@@ -438,28 +442,12 @@ async def generate_response(system_context: str, user_message: str, member_name:
 
 # ─── Learning Persistence ────────────────────────────────────────────────
 
-def _persist_lessons(corrections: list[str], max_entries: int = 20) -> None:
-    """Append self-corrections to lessons.md, capping at max_entries."""
+def _persist_lessons(corrections: list[str]) -> None:
+    """Append self-corrections to lessons.md via shared learning module."""
     if not corrections:
         return
-    lessons_path = paths.lessons
-    lessons_path.parent.mkdir(parents=True, exist_ok=True)
-
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    new_lines = [f"- [{now}] {c.strip()}" for c in corrections if isinstance(c, str) and c.strip()]
-    if not new_lines:
-        return
-
-    content = lessons_path.read_text() if lessons_path.exists() else "# Lessons\n"
-    lines = content.strip().split("\n")
-    header_lines = [l for l in lines if not l.startswith("- [")]
-    entry_lines = [l for l in lines if l.startswith("- [")]
-
-    entry_lines.extend(new_lines)
-    if len(entry_lines) > max_entries:
-        entry_lines = entry_lines[-max_entries:]
-
-    lessons_path.write_text("\n".join(header_lines) + "\n" + "\n".join(entry_lines) + "\n")
+    from learning import append_lessons
+    append_lessons(paths.lessons, corrections)
 
 
 def _persist_member_updates(member: dict, raw_updates: list[dict]) -> dict | None:
@@ -593,7 +581,7 @@ BLOCKED_RESPONSE = (
 )
 
 
-async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
+async def handle_sms(from_phone: str, body: str, dry_run: bool = False, service: str = "SMS") -> dict:
     """
     Main entry point: process an inbound SMS and return the response.
 
@@ -638,12 +626,12 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
     # SERIALIZATION: Acquire per-family lock before touching family.md
     # Prevents race conditions when two messages arrive for the same family
     with family_lock(family_id, phone=from_phone):
-        return await _process_message(member, family_id, family_dir, access_level, from_phone, body, dry_run)
+        return await _process_message(member, family_id, family_dir, access_level, from_phone, body, dry_run, service)
 
 
 async def _process_message(member: dict, family_id: str, family_dir: Path,
                            access_level: str, from_phone: str, body: str,
-                           dry_run: bool) -> dict:
+                           dry_run: bool, service: str = "SMS") -> dict:
     """Process a message under the family lock. All family.md reads/writes are serialized."""
 
     log_prefix = "[CareSupport]"
@@ -678,7 +666,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     # 6. Build system context with FILTERED family data
     system_context = build_system_context(
         member, filtered_context, conversation_history,
-        member_context=member_context,
+        service=service, member_context=member_context,
     )
 
     # 7. Generate response
@@ -750,7 +738,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     file_update_result = None
     pending_confirmations = []
     raw_updates = result.get("family_file_updates", [])
-    if raw_updates and isinstance(raw_updates, list) and len(raw_updates) > 0:
+    if raw_updates and isinstance(raw_updates, list):
         family_md_path = family_dir / "family.md"
         if family_md_path.exists():
             updates = parse_update_instructions(raw_updates)
@@ -799,7 +787,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     # 12. PERSISTENCE: Apply member_updates to member profile
     raw_member_updates = result.get("member_updates", [])
     member_update_result = None
-    if raw_member_updates and isinstance(raw_member_updates, list) and len(raw_member_updates) > 0:
+    if raw_member_updates and isinstance(raw_member_updates, list):
         member_update_result = _persist_member_updates(member, raw_member_updates)
         if member_update_result and member_update_result.get("updates_applied", 0) > 0:
             print(f"{log_prefix} 📝 Updated member profile ({member_update_result['updates_applied']} change(s))")

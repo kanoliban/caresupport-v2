@@ -63,25 +63,13 @@ def review_conversations(hours: int = 24) -> None:
 
 
 def add_lesson(lesson: str) -> None:
-    """Append a lesson to lessons.md."""
-    lessons_path = paths.lessons
-    lessons_path.parent.mkdir(parents=True, exist_ok=True)
-
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    new_line = f"- [{now}] {lesson.strip()}"
-
-    content = lessons_path.read_text() if lessons_path.exists() else "# Lessons\n"
-    lines = content.strip().split("\n")
-    header_lines = [l for l in lines if not l.startswith("- [")]
-    entry_lines = [l for l in lines if l.startswith("- [")]
-
-    entry_lines.append(new_line)
-    if len(entry_lines) > 20:
-        entry_lines = entry_lines[-20:]
-
-    lessons_path.write_text("\n".join(header_lines) + "\n" + "\n".join(entry_lines) + "\n")
-    print(f"Added lesson: {new_line}")
-    print(f"Total lessons: {len(entry_lines)}")
+    """Append a lesson to lessons.md via shared learning module."""
+    from learning import append_lessons
+    count = append_lessons(paths.lessons, [lesson])
+    if count:
+        print(f"Added lesson: {lesson.strip()}")
+    else:
+        print("No lesson added (empty input).")
 
 
 if __name__ == "__main__":

@@ -112,7 +112,7 @@ async def poll_and_process():
                 await start_typing(chat_id)
 
                 # Run through AI handler (enforcement pipeline)
-                result = await handle_sms(from_phone, body)
+                result = await handle_sms(from_phone, body, service=service)
 
                 if result["success"] and result["response"]:
                     # Send response via Linq
