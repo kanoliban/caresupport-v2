@@ -53,7 +53,7 @@ def save_processed_ids(ids: set):
 
 async def poll_and_process():
     """Main polling loop: check for new messages, process them, respond."""
-    from linq_gateway import list_chats, get_chat_messages, send_message, start_typing, mark_as_read
+    from linq_gateway import list_chats, get_chat_messages, send_message, start_typing, mark_as_read, create_chat
     from sms_handler import handle_sms
 
     now = datetime.now(timezone.utc)
@@ -127,11 +127,14 @@ async def poll_and_process():
                         for outreach in result["needs_outreach"]:
                             phone = outreach.get("phone", "")
                             outreach_msg = outreach.get("message", "")
+                            name = outreach.get("name", phone)
                             if phone and outreach_msg:
-                                print(f"{log_prefix}     Outreach to {outreach.get('name', phone)}: '{outreach_msg[:60]}...'")
-                                # NOTE: Outreach to other members requires finding/creating
-                                # their chat_id. For now, log the intent.
-                                # TODO: Implement outreach via create_chat() for new members
+                                print(f"{log_prefix}     Outreach to {name}: '{outreach_msg[:60]}...'")
+                                outreach_result = await create_chat(phone, outreach_msg)
+                                if outreach_result.get("success"):
+                                    print(f"{log_prefix}     ✅ Outreach sent to {name}")
+                                else:
+                                    print(f"{log_prefix}     ⚠️ Outreach failed for {name}: {json.dumps(outreach_result, default=str)[:200]}")
 
                     # Log family file updates
                     if result.get("family_file_updates"):
