@@ -1,0 +1,16 @@
+{
+  "family_id": "kano",
+  "members": {
+    "+16517037981": {
+      "name": "Liban",
+      "role": "primary_caregiver",
+      "access_level": "full",
+      "active": true,
+      "chat_id": "1965f2b5-c5e6-4a08-80e9-9224b8a20d88"
+    }
+  },
+  "care_recipient": "Degitu",
+  "status": "active",
+  "created": "2026-02-25",
+  "notes": "Cold start. All care details to be learned through conversation."
+}
