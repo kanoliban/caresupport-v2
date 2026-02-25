@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 CareSupport SMS Handler
 =======================
@@ -28,10 +30,16 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Load .env BEFORE config so CARESUPPORT_ROOT is available
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
 # Use shared config — no hardcoded paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import paths, ensure_sdk_path
-ensure_sdk_path()
+from config import paths
+
+from google import genai
+_gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
 # Enforcement layer — mechanical, not optional
 from enforcement.role_filter import (
@@ -317,78 +325,93 @@ no "Here's my response:" — just the message itself.
 # ─── AI Agent Call ────────────────────────────────────────────────────────
 
 async def generate_response(system_context: str, user_message: str, member_name: str = "there") -> str:
-    """Call the AI to generate a response."""
-    from sdk.tools.utils_tools import ai_structured_output
+    """Call Gemini to generate a structured response.
 
-    result = await ai_structured_output(
-        prompt=system_context + f"\n\nINBOUND SMS:\n{user_message}",
-        output_schema={
-            "type": "object",
-            "properties": {
-                "sms_response": {
-                    "type": "string",
-                    "description": "The SMS text to send back to the user"
-                },
-                "internal_notes": {
-                    "type": "string",
-                    "description": "Any internal notes about actions to take (coordinate with others, update family file, etc.)"
-                },
-                "needs_outreach": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "phone": {"type": "string"},
-                            "name": {"type": "string"},
-                            "message": {"type": "string"}
-                        }
-                    },
-                    "description": "Other family members who need to be texted as part of this coordination"
-                },
-                "family_file_updates": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "section": {
-                                "type": "string",
-                                "enum": ["schedule", "medications", "appointments",
-                                         "availability", "active_issues", "recent_events",
-                                         "patterns", "members", "care_recipient"],
-                                "description": "Which section of the family file to update"
-                            },
-                            "operation": {
-                                "type": "string",
-                                "enum": ["append", "prepend", "replace", "resolve_issue"],
-                                "description": "append: add to end. prepend: add after header. replace: swap old_content for content. resolve_issue: mark a [ ] item as [x]."
-                            },
-                            "content": {
-                                "type": "string",
-                                "description": "The text to add, or the new text for replacements"
-                            },
-                            "old_content": {
-                                "type": "string",
-                                "description": "For replace operations only: the exact text being replaced"
-                            }
-                        },
-                        "required": ["section", "operation", "content"]
-                    },
-                    "description": "Structured updates to apply to the family file. Each entry targets a specific section with a specific operation."
-                }
-            },
-            "required": ["sms_response"]
-        },
-        input_text=user_message,
-        intelligence_level="smart"
+    Uses asyncio.to_thread to avoid blocking the event loop, with a 45s timeout
+    per attempt to prevent indefinite hangs.
+    """
+
+    prompt = f"""{system_context}
+
+---
+INBOUND MESSAGE: {user_message}
+---
+
+Respond with ONLY valid JSON (no markdown fencing, no explanation). Schema:
+{{
+  "sms_response": "the SMS text to send back",
+  "internal_notes": "optional notes about follow-up actions",
+  "needs_outreach": [
+    {{"phone": "+1...", "name": "Name", "message": "what to text them"}}
+  ],
+  "family_file_updates": [
+    {{"section": "schedule|medications|appointments|availability|active_issues|recent_events|patterns|members|care_recipient",
+      "operation": "append|prepend|replace|resolve_issue",
+      "content": "text to add or new text",
+      "old_content": "for replace: text being replaced"}}
+  ]
+}}
+
+Required: sms_response. All other fields optional."""
+
+    import re as _re
+    from google.genai.types import GenerateContentConfig
+
+    config = GenerateContentConfig(
+        temperature=0.7,
+        max_output_tokens=4096,
+        response_mime_type="application/json",
     )
 
-    if result.error:
-        return json.dumps({
-            "sms_response": f"I hit a technical glitch processing your last message, {member_name}. Can you send it again?",
-            "error": result.error,
-        })
+    fallback_msg = f"I hit a technical glitch processing your last message, {member_name}. Can you send it again?"
 
-    return json.dumps(result.result)
+    def _sync_gemini_call():
+        return _gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=config,
+        )
+
+    def _repair_json(raw: str) -> dict | None:
+        """Try to extract sms_response from truncated/malformed JSON."""
+        m = _re.search(r'"sms_response"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+        if m:
+            return {"sms_response": m.group(1), "internal_notes": "[parsed from truncated response]"}
+        return None
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(_sync_gemini_call),
+                timeout=45,
+            )
+
+            raw = response.text.strip()
+            try:
+                result = json.loads(raw)
+            except json.JSONDecodeError:
+                result = _repair_json(raw)
+                if result:
+                    print(f"[Claw] Repaired truncated JSON on attempt {attempt+1}", file=sys.stderr)
+                else:
+                    raise
+
+            if "sms_response" not in result:
+                result["sms_response"] = fallback_msg
+            return json.dumps(result)
+
+        except asyncio.TimeoutError:
+            last_error = "Gemini API timed out after 45s"
+            print(f"[Claw] AI attempt {attempt+1}/3: TimeoutError: {last_error}", file=sys.stderr)
+        except Exception as e:
+            last_error = e
+            print(f"[Claw] AI attempt {attempt+1}/3: {type(e).__name__}: {str(e)[:150]}", file=sys.stderr)
+
+        if attempt < 2:
+            await asyncio.sleep(3 * (attempt + 1))
+
+    return json.dumps({"sms_response": fallback_msg, "error": str(last_error)})
 
 
 # ─── Approval Helpers ─────────────────────────────────────────────────────

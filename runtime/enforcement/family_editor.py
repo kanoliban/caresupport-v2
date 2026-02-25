@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Family File Editor — Mechanical enforcement of edit-not-write semantics.
 
