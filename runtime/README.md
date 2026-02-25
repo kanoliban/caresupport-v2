@@ -1,11 +1,11 @@
 # Runtime — Messaging Pipeline
 
-The plumbing that connects messaging providers to the CareSupport agent.
+The plumbing that connects Linq (iMessage-first) to the CareSupport agent.
 
-Two transport paths: Linq (iMessage-first, primary) and Twilio (SMS fallback).
-Both route through the same handler and enforcement pipeline.
+All messages route through the same handler and enforcement pipeline regardless
+of transport (iMessage, RCS, SMS fallback — Linq handles protocol selection).
 
-## Data Flow — Primary (Linq / iMessage)
+## Data Flow — Primary (Linq Webhook / Real-Time)
 
 ```
 Inbound message arrives via Linq webhook (real-time push)
@@ -22,6 +22,7 @@ Inbound message arrives via Linq webhook (real-time push)
 │     └─ message.failed → alert                │
 │  4. For inbound messages:                    │
 │     ├─ Start typing indicator (iMessage)     │
+│     ├─ Acquire family lock (serialization)   │
 │     ├─ Call sms_handler.handle_sms()         │
 │     ├─ Send response via linq_gateway        │
 │     └─ Handle outreach + approval requests   │
@@ -29,92 +30,102 @@ Inbound message arrives via Linq webhook (real-time push)
 └──────────────────────────────────────────────┘
 ```
 
-## Data Flow — Fallback (Twilio / SMS)
+## Data Flow — Fallback (Linq Polling)
 
 ```
-Inbound SMS arrives at Twilio
+Cron fires every 30-60 seconds
         │
         ▼
-┌─── poll_inbound.py (cron, every 30-60s) ───┐
+┌─── poll_inbound.py (cron) ──────────────────┐
 │                                              │
-│  1. Lists recent messages via twilio_proxy   │
-│  2. Filters to unprocessed (by SID)         │
-│  3. For each new message:                    │
-│     └─ calls sms_handler.handle_sms()       │
-│  4. Sends response via twilio_proxy          │
-│  5. Sends outreach to other members          │
-│  6. Marks SIDs as processed                  │
+│  1. Lists active chats from Linq API         │
+│  2. Checks each chat for new messages        │
+│  3. Filters to unprocessed (by message ID)   │
+│  4. For each new message:                    │
+│     ├─ mark_as_read() + start_typing()       │
+│     └─ calls sms_handler.handle_sms()        │
+│  5. Sends response via linq_gateway          │
+│  6. Marks message IDs as processed           │
 └──────────────────────────────────────────────┘
         │
         ▼
 ┌─── sms_handler.py ──────────────────────────┐
 │                                              │
-│  1. resolve_phone() → family, member, role   │
-│  2. load_family_context() → family.md text   │
-│  3. load_recent_conversations() → history    │
-│  4. build_system_context() → full prompt     │
-│  5. generate_response() → AI call            │
-│  6. log_message() → conversation log         │
+│  1. resolve_member() → family, member, role  │
+│  2. Acquire per-family lock (serialization)  │
+│  3. load_family_context() → family.md text   │
+│  4. load_recent_conversations() → history    │
+│  5. ENFORCEMENT:                             │
+│     ├─ Pre-filter by access level            │
+│     ├─ PHI audit: log context load           │
+│     ├─ Check for approval responses          │
+│     ├─ Classify updates (approval pipeline)  │
+│     └─ Post-check for leakage               │
+│  6. build_system_context() → full prompt     │
+│  7. generate_response() → AI call            │
+│  8. apply_updates() → family.md edits        │
+│  9. log_message() → conversation log         │
 │                                              │
 │  Returns:                                    │
-│    - sms_response (text to send back)        │
+│    - response (text to send back)            │
 │    - needs_outreach (other people to text)   │
-│    - family_file_updates (⚠️ NOT APPLIED)    │
+│    - family_file_updates (applied)           │
 │    - internal_notes                          │
+│    - enforcement metadata                    │
 └──────────────────────────────────────────────┘
         │
         ▼
-┌─── twilio_proxy.py ─────────────────────────┐
+┌─── linq_gateway.py ─────────────────────────┐
 │                                              │
-│  Wraps Twilio REST API via Pipedream proxy:  │
-│    send_sms(to, body)                        │
-│    list_inbound_messages(limit)              │
-│    list_outbound_messages(limit)             │
-│    get_message(sid)                          │
-│    get_account_balance()                     │
-│    update_phone_webhook(url)                 │
-└──────────────────────────────────────────────┘
-
-┌─── sms_gateway.py ──────────────────────────┐
-│                                              │
-│  Alternative gateway using custom API        │
-│  integration (direct Twilio REST, not        │
-│  Pipedream proxy). Draft approval support.   │
-│                                              │
-│  CLI: send, poll, check, process, balance    │
+│  Linq Partner API V3 client:                 │
+│    send_message(chat_id, body)               │
+│    create_chat(to_phone, body)               │
+│    start_typing(chat_id)                     │
+│    mark_as_read(chat_id)                     │
+│    add_reaction(message_id, type)            │
+│    list_chats()                              │
+│    get_chat_messages(chat_id, limit)         │
+│    list_phone_numbers()                      │
+│    verify_webhook_signature(payload, ...)    │
 └──────────────────────────────────────────────┘
 ```
 
 ## Scripts
 
-| Script | Transport | Purpose | Entry point |
-|--------|-----------|---------|-------------|
-| `sms_handler.py` | Agnostic | Core: phone → enforcement → AI → response | `handle_sms(from_phone, body)` |
-| `webhook_receiver.py` | Linq | Real-time webhook handler (push) | `handle_webhook_event(type, data)` |
-| `linq_gateway.py` | Linq | Linq Partner API V3 client | `send_message()`, `create_chat()` |
-| `reaction_handler.py` | Linq | Tapback → approval pipeline bridge | `handle_reaction(msg_id, type)` |
-| `poll_inbound.py` | Twilio | Cron: polls Twilio, processes new messages | `poll_and_process()` |
-| `twilio_proxy.py` | Twilio | Library: Twilio API wrapper (Pipedream) | `send_sms()`, `list_inbound_messages()` |
-| `sms_gateway.py` | Twilio | Library: Twilio API wrapper (Custom API) | `send_sms()`, `list_inbound()` |
+| Script | Purpose | Entry point |
+|--------|---------|-------------|
+| `sms_handler.py` | Core: phone → lock → enforcement → AI → response | `handle_sms(from_phone, body)` |
+| `webhook_receiver.py` | Real-time Linq webhook handler (push) | `handle_webhook_event(type, data)` |
+| `linq_gateway.py` | Linq Partner API V3 client | `send_message()`, `create_chat()` |
+| `reaction_handler.py` | Tapback → approval pipeline bridge | `handle_reaction(msg_id, type)` |
+| `poll_inbound.py` | Fallback: polls Linq API for new messages | `poll_and_process()` |
+| `heartbeat.py` | 48-hour lookahead scanner | `run_heartbeat()` |
+| `maintenance.py` | GC + consistency validation | `run_maintenance()` |
+
+## Enforcement Layer
+
+Five modules in `runtime/enforcement/` — mechanical, not optional:
+
+| Module | What it does |
+|--------|-------------|
+| `role_filter.py` | Pre-filters context by access level, post-checks for leakage |
+| `phi_audit.py` | HIPAA-compliant logging for every PHI access |
+| `family_editor.py` | Edit-not-write file updates with backup and rollback |
+| `approval_pipeline.py` | YES/NO (or 👍) confirmation for medication/member changes |
+| `message_lock.py` | Per-family file lock — serializes concurrent message processing |
+
+The structural tests (`test_structural.py`) verify all 5 modules are wired into the handler.
+If any module is removed or unwired, CI fails.
 
 ## Configuration
 
 All paths and settings in `runtime/config.py`. No hardcoded absolute paths in scripts.
 
 ```python
-from config import paths, twilio, linq, linq_paths, ensure_sdk_path
+from config import paths, linq, linq_paths, ensure_sdk_path
 
 ensure_sdk_path()
 family_file = paths.family_file("kano")
-```
-
-### Twilio credentials: `runtime/scripts/config.json`
-```json
-{
-    "twilio_account_sid": "AC...",
-    "caresupport_phone": "+1...",
-    "twilio_phone_sid": "PN..."
-}
 ```
 
 ### Linq credentials: `runtime/scripts/linq_config.json`
@@ -127,36 +138,30 @@ family_file = paths.family_file("kano")
 }
 ```
 
-## Known Issues
-
-See `docs/exec-plans/tech-debt-tracker.md` for the full list. Key ones:
-
-- ✅ ~~`family_file_updates` never applied~~ — Fixed: family_editor with backup/rollback
-- ✅ ~~Role filter not wired~~ — Fixed: pre-filter + post-check in handler
-- ✅ ~~PHI audit not wired~~ — Fixed: all event types logged
-- ✅ ~~SMS-only transport~~ — Fixed: Linq (iMessage/RCS/SMS) as primary, Twilio as fallback
-- Two Twilio gateways (twilio_proxy + sms_gateway) — consolidate eventually
-- No per-family message queue (concurrent messages could race on family.md)
-
 ## How to Run
 
 ```bash
-# Process inbound messages (one-shot)
+# Process inbound messages (poll mode)
 cd runtime/scripts && python poll_inbound.py
 
-# Send a test SMS
-cd runtime/scripts && python sms_gateway.py send --to "+1..." --body "test"
+# Send a test message via Linq
+cd runtime/scripts && python linq_gateway.py create --to "+1..." --body "test"
 
-# Check Twilio balance
-cd runtime/scripts && python sms_gateway.py balance
+# List assigned phone numbers
+cd runtime/scripts && python linq_gateway.py phones
+
+# List active chats
+cd runtime/scripts && python linq_gateway.py list-chats
 
 # Test handler without AI call
 cd runtime/scripts && python sms_handler.py --from "+1..." --body "test" --dry-run
+
+# Run all tests
+cd runtime && PYTHONPATH=. python -m pytest tests/ -v
 ```
 
 ## Dependencies
 
 - Python 3.11+
 - `/work/sdk/` — Viktor's SDK (tools, structured output)
-- Twilio account (credentials in config.json)
-- Pipedream Twilio integration OR custom API integration
+- Linq Partner API account (token in linq_config.json)

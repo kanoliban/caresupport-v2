@@ -181,6 +181,7 @@ def test_all_enforcement_modules_exist():
         "phi_audit.py",
         "family_editor.py",
         "approval_pipeline.py",
+        "message_lock.py",
     ]
 
     for module in expected_modules:
@@ -201,7 +202,7 @@ def test_handler_imports_all_enforcement():
                 module_name = node.module.split(".")[-1]
                 imported_modules.add(module_name)
 
-    expected = {"role_filter", "phi_audit", "family_editor", "approval_pipeline"}
+    expected = {"role_filter", "phi_audit", "family_editor", "approval_pipeline", "message_lock"}
     for module in expected:
         assert_true(module in imported_modules, f"Handler imports enforcement.{module}")
 

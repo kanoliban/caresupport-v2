@@ -29,11 +29,11 @@ examples/                 ← rob-family.md — reference populated family
 runtime/                  ← Messaging pipeline (README.md has data flow diagram)
   config.py               ← All paths and settings. Import this, not hardcode.
   enforcement/            ← Mechanical safety layer (role_filter, phi_audit, family_editor, approval_pipeline)
-  scripts/                ← sms_handler, poll_inbound, twilio_proxy, heartbeat, maintenance
+  scripts/                ← sms_handler, poll_inbound, linq_gateway, webhook_receiver, heartbeat, maintenance
   scripts/linq_gateway.py ← Linq Partner API V3 client (iMessage/RCS/SMS)
   scripts/webhook_receiver.py ← Real-time webhook handler (routes to sms_handler)
   scripts/reaction_handler.py ← Tapback → approval pipeline integration
-  tests/                  ← 466+ tests across 8+ suites (run all: see Build & Run)
+  tests/                  ← tests across 12 suites (run: PYTHONPATH=. python -m pytest tests/ -v)
 fork/                     ← CareSupport adaptation of Viktor's architecture
   system-prompt.md        ← Production system prompt (forked from Viktor)
   PRODUCTION-PLAN.md      ← Phase 0-4 rollout plan

@@ -6,7 +6,7 @@ Top-level map of CareSupport's domains, layers, and dependency directions.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│              iMessage/RCS/SMS (Linq primary, Twilio fallback)       │
+│              iMessage/RCS/SMS via Linq Partner API V3               │
 │                    inbound ↓     ↑ outbound                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
@@ -16,9 +16,8 @@ Top-level map of CareSupport's domains, layers, and dependency directions.
 │  │ webhook_receiver──│─▶│ sms_handler    │─▶│ role_filter      │   │
 │  │ linq_gateway      │  │ (AI agent)     │  │ phi_audit        │   │
 │  │ reaction_handler  │  │                │  │ family_editor    │   │
-│  │ ─ ─ ─ ─ ─ ─ ─ ─ │  │                │  │ approval_pipeline│   │
-│  │ poll_inbound (SMS)│  │                │  │                  │   │
-│  │ twilio_proxy (SMS)│  │                │  │                  │   │
+│  │ poll_inbound      │  │                │  │ approval_pipeline│   │
+│  │                   │  │                │  │ message_lock     │   │
 │  └──────┬────────────┘  └───────┬────────┘  └────────┬─────────┘   │
 │         │                       │                    │             │
 │         │                       ▼                    │             │
@@ -53,8 +52,8 @@ Moves bytes between messaging providers and the agent. No intelligence.
 
 - **Location:** `runtime/scripts/`
 - **Primary (iMessage):** `webhook_receiver.py` (push), `linq_gateway.py` (send), `reaction_handler.py` (tapbacks)
-- **Fallback (SMS):** `poll_inbound.py` (cron poll), `twilio_proxy.py` (send), `sms_gateway.py` (send)
-- **Config:** `runtime/config.py` (LinqConfig + TwilioConfig)
+- **Polling fallback:** `poll_inbound.py` (cron poll, uses linq_gateway)
+- **Config:** `runtime/config.py` (LinqConfig)
 - **Docs:** `runtime/README.md`, `docs/references/linq-setup.md`
 
 ### 2. Agent Reasoning

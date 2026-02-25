@@ -55,6 +55,7 @@ from enforcement.approval_pipeline import (
     format_confirmation_sms,
     expire_stale,
 )
+from enforcement.message_lock import family_lock
 
 # Initialize audit logger with config path
 _audit = PHIAuditLogger(log_dir=paths.logs)
@@ -499,6 +500,17 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
     family_id = member["family_id"]
     family_dir = Path(member.get("family_dir", ""))
     access_level = member.get("access_level", "schedule")
+
+    # SERIALIZATION: Acquire per-family lock before touching family.md
+    # Prevents race conditions when two messages arrive for the same family
+    with family_lock(family_id, phone=from_phone):
+        return await _process_message(member, family_id, family_dir, access_level, from_phone, body, dry_run)
+
+
+async def _process_message(member: dict, family_id: str, family_dir: Path,
+                           access_level: str, from_phone: str, body: str,
+                           dry_run: bool) -> dict:
+    """Process a message under the family lock. All family.md reads/writes are serialized."""
 
     # 2. Log inbound message
     log_message(from_phone, "INBOUND", body, family_id)
