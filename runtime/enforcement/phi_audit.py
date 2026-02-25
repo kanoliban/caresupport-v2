@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 PHI Audit Logger — Mechanical enforcement of HIPAA access logging.
 

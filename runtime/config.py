@@ -56,6 +56,20 @@ class Paths:
     def processed_sids(self) -> Path:
         return SCRIPTS_DIR / ".processed_sids.json"
 
+    # ─── Learning paths ──────────────────────────────────────────────────
+
+    @property
+    def _learning_dir(self) -> Path:
+        return RUNTIME_DIR / "learning"
+
+    @property
+    def lessons(self) -> Path:
+        return self._learning_dir / "lessons.md"
+
+    @property
+    def capabilities(self) -> Path:
+        return self._learning_dir / "capabilities.md"
+
 
 paths = Paths(ROOT)
 

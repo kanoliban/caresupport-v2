@@ -73,7 +73,7 @@ status: active
 <!-- Updates. Updated when new data arrives. Use for longitudinal trending.   -->
 
 ## Recent Updates
-- 2026-02-25: Family created. Cold start — Claw will learn everything through conversation.
+- 2026-02-25: Family created. Cold start — CareSupport will learn everything through conversation.
 
 ---
 
@@ -139,4 +139,4 @@ status: active
 4. If on blood thinners: tell 911 dispatcher which anticoagulant and dose.
 
 ## Decision History
-- 2026-02-25: Family file created. Cold start protocol — all data to be learned through conversation.
+- 2026-02-25: Family file created. Cold start protocol — all data to be learned through conversation via CareSupport.

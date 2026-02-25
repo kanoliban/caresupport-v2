@@ -169,14 +169,14 @@ async def poll_and_process():
 
 async def poll_loop(interval: int = 30):
     """Continuous polling loop."""
-    print(f"[Claw] Polling every {interval}s. Ctrl+C to stop.")
+    print(f"[CareSupport] Polling every {interval}s. Ctrl+C to stop.")
     while True:
         try:
             await poll_and_process()
         except KeyboardInterrupt:
             raise
         except Exception as e:
-            print(f"[Claw] Error in poll cycle: {e}")
+            print(f"[CareSupport] Error in poll cycle: {e}")
         await asyncio.sleep(interval)
 
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Approval Pipeline — Mechanical enforcement of coordinator confirmation.
 
