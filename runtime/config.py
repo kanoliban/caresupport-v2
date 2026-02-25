@@ -82,6 +82,57 @@ class TwilioConfig:
 twilio = TwilioConfig()
 
 
+# ─── Linq config (iMessage-first, primary transport) ─────────────────────
+
+_linq_config_path = SCRIPTS_DIR / "linq_config.json"
+
+if _linq_config_path.exists():
+    with open(_linq_config_path) as f:
+        _linq = json.load(f)
+else:
+    _linq = {}
+
+
+class LinqConfig:
+    """Linq Partner API V3 configuration (iMessage-first messaging)."""
+    api_token: str = _linq.get("linq_api_token", os.environ.get("LINQ_API_TOKEN", ""))
+    phone_number: str = _linq.get("linq_phone", os.environ.get("LINQ_PHONE", ""))
+    base_url: str = _linq.get("base_url", "https://api.linqapp.com/api/partner/v3")
+    webhook_signing_secret: str = _linq.get("webhook_signing_secret", os.environ.get("LINQ_WEBHOOK_SECRET", ""))
+
+
+linq = LinqConfig()
+
+
+# ─── Extended paths for Linq/iMessage pipeline ──────────────────────────
+
+class _ExtendedPaths:
+    """Additional paths for chat-based (Linq) conversations and webhooks."""
+
+    @staticmethod
+    def chat_conversation_log(chat_id: str, year_month: str) -> Path:
+        """Conversation log keyed by Linq chat_id (preferred over phone)."""
+        return paths.conversations / "chats" / chat_id / f"{year_month}.log"
+
+    @staticmethod
+    def webhook_log(date_str: str) -> Path:
+        """Daily webhook event log."""
+        return paths.logs / "webhooks" / f"{date_str}.jsonl"
+
+    @staticmethod
+    def reaction_log(date_str: str) -> Path:
+        """Daily reaction event log."""
+        return paths.logs / "reactions" / f"{date_str}.jsonl"
+
+    @staticmethod
+    def processed_event_ids() -> Path:
+        """Deduplication tracking for webhook events."""
+        return SCRIPTS_DIR / ".processed_event_ids.json"
+
+
+linq_paths = _ExtendedPaths()
+
+
 # ─── SDK path injection ─────────────────────────────────────────────────
 
 def ensure_sdk_path():

@@ -55,12 +55,13 @@ from enforcement.approval_pipeline import (
     format_confirmation_sms,
     expire_stale,
 )
+from enforcement.message_lock import family_lock
 
 # Initialize audit logger with config path
 _audit = PHIAuditLogger(log_dir=paths.logs)
 
 
-# ─── Phone → Family Resolution ───────────────────────────────────────────
+# ─── Phone/Chat → Family Resolution ──────────────────────────────────────
 
 def resolve_phone(phone: str) -> dict | None:
     """Look up phone number in all family routing tables."""
@@ -82,6 +83,44 @@ def resolve_phone(phone: str) -> dict | None:
                         "family_dir": str(family_dir),
                         **member
                     }
+    return None
+
+
+def resolve_chat_id(chat_id: str) -> dict | None:
+    """Look up a Linq chat_id in all family routing tables.
+
+    Preferred for Linq/iMessage: chat_ids are persistent per conversation
+    and more reliable than phone number matching.
+    """
+    families_dir = paths.families
+    if not families_dir.exists():
+        return None
+    for family_dir in families_dir.iterdir():
+        if not family_dir.is_dir():
+            continue
+        routing_file = family_dir / "phone_routing.json"
+        if routing_file.exists():
+            with open(routing_file) as f:
+                routing = json.load(f)
+            for member in routing.get("members", []):
+                if member.get("chat_id") == chat_id:
+                    return {
+                        "family_id": routing["family_id"],
+                        "family_name": routing["family_name"],
+                        "family_dir": str(family_dir),
+                        **member
+                    }
+    return None
+
+
+def resolve_member(chat_id: str = "", phone: str = "") -> dict | None:
+    """Resolve a member by chat_id (preferred) or phone (fallback)."""
+    if chat_id:
+        member = resolve_chat_id(chat_id)
+        if member:
+            return member
+    if phone:
+        return resolve_phone(phone)
     return None
 
 
@@ -153,7 +192,35 @@ def log_message(phone: str, direction: str, body: str, family_id: str = ""):
 
 # ─── System Prompt ────────────────────────────────────────────────────────
 
-def build_system_context(member: dict, family_context: str, conversation_history: str) -> str:
+def _channel_guidance(service: str) -> str:
+    """Return channel-specific guidance for the system prompt.
+
+    The agent adapts its tone and mechanics to the channel: iMessage supports
+    tapbacks and read receipts; SMS does not.
+    """
+    if service == "iMessage":
+        return """
+── CHANNEL: iMessage (blue bubble) ──
+The recipient can see when you're typing and when you've read their message.
+They can react with tapbacks (👍, ❤️, ❓, etc.) instead of typing a reply.
+For confirmations, you can say "React with 👍 to confirm" instead of "Reply YES."
+Keep messages warm and concise — this feels like texting a friend, not a system.
+"""
+    elif service == "RCS":
+        return """
+── CHANNEL: RCS ──
+The recipient has read receipts and delivery confirmation. Keep messages concise.
+"""
+    else:
+        return """
+── CHANNEL: SMS ──
+No read receipts or typing indicators. Keep messages under 320 characters
+(2 SMS segments) when possible. Use "Reply YES to confirm" for confirmations.
+"""
+
+
+def build_system_context(member: dict, family_context: str,
+                         conversation_history: str, service: str = "SMS") -> str:
     """Build the context for the AI agent.
 
     NOTE: family_context should already be filtered by role_filter before
@@ -161,9 +228,10 @@ def build_system_context(member: dict, family_context: str, conversation_history
     """
 
     now = datetime.now(timezone.utc)
+    channel = _channel_guidance(service)
 
     return f"""You are CareSupport, a care coordination assistant for the {member['family_name']} family.
-You communicate via SMS. Keep responses concise and warm — these are real people
+You communicate via text message. Keep responses concise and warm — these are real people
 coordinating care for their family member.
 
 CURRENT DATE/TIME: {now.strftime("%A, %B %d, %Y at %I:%M %p")} CT
@@ -172,6 +240,7 @@ YOU ARE TEXTING WITH: {member['name']} ({member['role']})
 Their phone: {member['phone']}
 Their access level: {member['access_level']}
 Their relationship to care recipient: {member['relationship']}
+{channel}
 
 ── FAMILY FILE (scoped to {member['name']}'s access level) ──
 {family_context}
@@ -431,6 +500,17 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False) -> dict:
     family_id = member["family_id"]
     family_dir = Path(member.get("family_dir", ""))
     access_level = member.get("access_level", "schedule")
+
+    # SERIALIZATION: Acquire per-family lock before touching family.md
+    # Prevents race conditions when two messages arrive for the same family
+    with family_lock(family_id, phone=from_phone):
+        return await _process_message(member, family_id, family_dir, access_level, from_phone, body, dry_run)
+
+
+async def _process_message(member: dict, family_id: str, family_dir: Path,
+                           access_level: str, from_phone: str, body: str,
+                           dry_run: bool) -> dict:
+    """Process a message under the family lock. All family.md reads/writes are serialized."""
 
     # 2. Log inbound message
     log_message(from_phone, "INBOUND", body, family_id)

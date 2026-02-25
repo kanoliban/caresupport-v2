@@ -1,0 +1,11 @@
+{
+  "linq_api_token": "YOUR_LINQ_API_TOKEN",
+  "linq_phone": "+1XXXXXXXXXX",
+  "base_url": "https://api.linqapp.com/api/partner/v3",
+  "webhook_signing_secret": "YOUR_WEBHOOK_SIGNING_SECRET",
+  "_notes": {
+    "linq_api_token": "Get from Linq dashboard (code icon in left toolbar)",
+    "linq_phone": "Your Linq Blue line number in E.164 format",
+    "webhook_signing_secret": "Generated when you create a webhook subscription"
+  }
+}

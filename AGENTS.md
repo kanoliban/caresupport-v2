@@ -26,11 +26,14 @@ docs/
   RELIABILITY.md          ← What's tested vs. what isn't
 agent/                    ← System prompt template
 examples/                 ← rob-family.md — reference populated family
-runtime/                  ← SMS pipeline (README.md has data flow diagram)
+runtime/                  ← Messaging pipeline (README.md has data flow diagram)
   config.py               ← All paths and settings. Import this, not hardcode.
   enforcement/            ← Mechanical safety layer (role_filter, phi_audit, family_editor, approval_pipeline)
-  scripts/                ← sms_handler, poll_inbound, twilio_proxy, heartbeat, maintenance
-  tests/                  ← 466 tests across 8 suites (run all: see Build & Run)
+  scripts/                ← sms_handler, poll_inbound, linq_gateway, webhook_receiver, heartbeat, maintenance
+  scripts/linq_gateway.py ← Linq Partner API V3 client (iMessage/RCS/SMS)
+  scripts/webhook_receiver.py ← Real-time webhook handler (routes to sms_handler)
+  scripts/reaction_handler.py ← Tapback → approval pipeline integration
+  tests/                  ← tests across 12 suites (run: PYTHONPATH=. python -m pytest tests/ -v)
 fork/                     ← CareSupport adaptation of Viktor's architecture
   system-prompt.md        ← Production system prompt (forked from Viktor)
   PRODUCTION-PLAN.md      ← Phase 0-4 rollout plan
@@ -47,6 +50,8 @@ clone/                    ← Viktor factory default (reference snapshot)
 **Understand the architecture →** `ARCHITECTURE.md` then `docs/design-docs/core-beliefs.md`
 
 **Work on the SMS pipeline →** `runtime/README.md` then `runtime/config.py`
+
+**Understand iMessage/Linq integration →** `docs/references/linq-setup.md` then `runtime/scripts/linq_gateway.py`
 
 **Understand the enforcement layer →** `runtime/enforcement/` — four modules that mechanically gate all SMS interactions:
   - `role_filter.py` — pre-filters context by access level, post-checks for leakage
