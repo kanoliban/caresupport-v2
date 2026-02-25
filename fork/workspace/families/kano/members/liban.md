@@ -18,7 +18,7 @@
 <!-- What Liban handles day-to-day — learned through conversation -->
 
 ## Personal Context
-<!-- Context that helps Claw be human, not clinical -->
+<!-- Context that helps CareSupport be human, not clinical -->
 <!-- Example: "Works long hours, messages often come late evening" -->
 <!-- Example: "Worries about getting medical details exactly right" -->
 

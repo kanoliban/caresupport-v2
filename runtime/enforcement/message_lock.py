@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Per-Family Message Lock — File-Based Serialization
 ====================================================

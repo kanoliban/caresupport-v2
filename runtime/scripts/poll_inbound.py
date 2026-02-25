@@ -26,11 +26,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Use shared config — no hardcoded paths
+# Load .env before config so CARESUPPORT_ROOT is available
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
-from config import paths, linq, ensure_sdk_path
-ensure_sdk_path()
+from config import paths, linq
 
 PROCESSED_FILE = paths.processed_sids()
 
@@ -53,7 +55,7 @@ def save_processed_ids(ids: set):
 
 async def poll_and_process():
     """Main polling loop: check for new messages, process them, respond."""
-    from linq_gateway import list_chats, get_chat_messages, send_message, start_typing, mark_as_read
+    from linq_gateway import list_chats, get_messages, send_message, start_typing, mark_as_read, create_chat
     from sms_handler import handle_sms
 
     now = datetime.now(timezone.utc)
@@ -75,7 +77,7 @@ async def poll_and_process():
         chat_id = chat.get("id", "")
         service = chat.get("service", "SMS")
 
-        messages_result = await get_chat_messages(chat_id, limit=20)
+        messages_result = await get_messages(chat_id, limit=20)
         messages = messages_result.get("messages", [])
 
         # Filter to inbound, unprocessed messages
@@ -127,15 +129,18 @@ async def poll_and_process():
                         for outreach in result["needs_outreach"]:
                             phone = outreach.get("phone", "")
                             outreach_msg = outreach.get("message", "")
+                            name = outreach.get("name", phone)
                             if phone and outreach_msg:
-                                print(f"{log_prefix}     Outreach to {outreach.get('name', phone)}: '{outreach_msg[:60]}...'")
-                                # NOTE: Outreach to other members requires finding/creating
-                                # their chat_id. For now, log the intent.
-                                # TODO: Implement outreach via create_chat() for new members
+                                print(f"{log_prefix}     Outreach to {name}: '{outreach_msg[:60]}...'")
+                                outreach_result = await create_chat(phone, outreach_msg)
+                                if outreach_result.get("success"):
+                                    print(f"{log_prefix}     ✅ Outreach sent to {name}")
+                                else:
+                                    print(f"{log_prefix}     ⚠️ Outreach failed for {name}: {json.dumps(outreach_result, default=str)[:200]}")
 
                     # Log family file updates
                     if result.get("family_file_updates"):
-                        print(f"{log_prefix}     📝 File update: {result['family_file_updates'][:80]}...")
+                        print(f"{log_prefix}     📝 File update: {json.dumps(result['family_file_updates'], default=str)[:120]}...")
 
                 elif not result["success"]:
                     if result.get("response"):
@@ -145,6 +150,10 @@ async def poll_and_process():
                 # Mark as processed
                 processed_ids.add(msg_id)
                 total_new += 1
+
+                # Rate limit buffer between messages
+                if len(new_messages) > 1:
+                    await asyncio.sleep(2)
 
             except Exception as e:
                 print(f"{log_prefix}     ❌ Error processing message: {e}")
@@ -158,5 +167,27 @@ async def poll_and_process():
         print(f"{log_prefix} No new messages across {len(chats)} chat(s).")
 
 
+async def poll_loop(interval: int = 30):
+    """Continuous polling loop."""
+    print(f"[CareSupport] Polling every {interval}s. Ctrl+C to stop.")
+    while True:
+        try:
+            await poll_and_process()
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            print(f"[CareSupport] Error in poll cycle: {e}")
+        await asyncio.sleep(interval)
+
+
 if __name__ == "__main__":
-    asyncio.run(poll_and_process())
+    import argparse
+    parser = argparse.ArgumentParser(description="CareSupport Inbound Poller")
+    parser.add_argument("--once", action="store_true", help="Run once and exit")
+    parser.add_argument("--interval", type=int, default=15, help="Seconds between polls (default: 15)")
+    args = parser.parse_args()
+
+    if args.once:
+        asyncio.run(poll_and_process())
+    else:
+        asyncio.run(poll_loop(args.interval))

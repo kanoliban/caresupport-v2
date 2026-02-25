@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 CareSupport Maintenance Cron — Garbage Collection & Validation
 ================================================================

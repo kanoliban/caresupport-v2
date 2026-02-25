@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 CareSupport SMS Handler
 =======================
@@ -28,10 +30,19 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Load .env BEFORE config so CARESUPPORT_ROOT is available
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
 # Use shared config — no hardcoded paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import paths, ensure_sdk_path
-ensure_sdk_path()
+from config import paths
+
+from openai import OpenAI
+_ai_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ.get("OPENROUTER_API_KEY", ""),
+)
 
 # Enforcement layer — mechanical, not optional
 from enforcement.role_filter import (
@@ -146,7 +157,7 @@ def load_family_context(family_dir: str) -> str:
     return "[No family file found]"
 
 
-def load_recent_conversations(phone: str, limit: int = 20) -> str:
+def load_recent_conversations(phone: str, limit: int = 50) -> str:
     """Load recent conversation history for this phone number."""
     conv_dir = paths.conversations / phone
     if not conv_dir.exists():
@@ -161,6 +172,18 @@ def load_recent_conversations(phone: str, limit: int = 20) -> str:
     lines = log_files[0].read_text().strip().split("\n")
     recent = lines[-limit:] if len(lines) > limit else lines
     return "\n".join(recent) if recent else "[No conversation history]"
+
+
+def load_member_context(family_dir: str, member_name: str) -> str:
+    """Load member profile from the members/ directory."""
+    members_dir = Path(family_dir) / "members"
+    if not members_dir.exists():
+        return ""
+    candidate = f"{member_name.split()[0].lower()}.md"
+    path = members_dir / candidate
+    if path.exists():
+        return path.read_text().strip()
+    return ""
 
 
 # ─── Conversation Logging ────────────────────────────────────────────────
@@ -220,7 +243,8 @@ No read receipts or typing indicators. Keep messages under 320 characters
 
 
 def build_system_context(member: dict, family_context: str,
-                         conversation_history: str, service: str = "SMS") -> str:
+                         conversation_history: str, service: str = "SMS",
+                         member_context: str = "") -> str:
     """Build the context for the AI agent.
 
     NOTE: family_context should already be filtered by role_filter before
@@ -230,9 +254,28 @@ def build_system_context(member: dict, family_context: str,
     now = datetime.now(timezone.utc)
     channel = _channel_guidance(service)
 
-    return f"""You are CareSupport, a care coordination assistant for the {member['family_name']} family.
-You communicate via text message. Keep responses concise and warm — these are real people
-coordinating care for their family member.
+    # Load externalized identity (SOUL.md at repo root)
+    soul_path = Path(__file__).parent.parent.parent / "SOUL.md"
+    soul_text = soul_path.read_text().strip() if soul_path.exists() else "You are CareSupport — a care coordination agent."
+
+    # Load lessons from past corrections
+    lessons_text = ""
+    if paths.lessons.exists():
+        entries = [l for l in paths.lessons.read_text().split("\n") if l.startswith("- [")]
+        if entries:
+            lessons_text = "\n── LESSONS (corrections from past conversations) ──\n" + "\n".join(entries)
+
+    # Load capabilities
+    capabilities_text = ""
+    if paths.capabilities.exists():
+        capabilities_text = "\n── CAPABILITIES ──\n" + paths.capabilities.read_text().strip()
+
+    # Load member-specific context
+    member_context_block = ""
+    if member_context:
+        member_context_block = f"\n── WHAT YOU KNOW ABOUT {member['name'].upper()} ──\n{member_context}"
+
+    return f"""{soul_text}
 
 CURRENT DATE/TIME: {now.strftime("%A, %B %d, %Y at %I:%M %p")} CT
 
@@ -241,6 +284,9 @@ Their phone: {member['phone']}
 Their access level: {member['access_level']}
 Their relationship to care recipient: {member['relationship']}
 {channel}
+{capabilities_text}
+{lessons_text}
+{member_context_block}
 
 ── FAMILY FILE (scoped to {member['name']}'s access level) ──
 {family_context}
@@ -248,61 +294,39 @@ Their relationship to care recipient: {member['relationship']}
 ── RECENT CONVERSATION WITH {member['name'].upper()} ──
 {conversation_history}
 
-── YOUR GUIDELINES ──
+── WHAT YOU CAN AND CANNOT DO ──
+CAN: Generate SMS responses, suggest family_file_updates (append/prepend/replace to sections that EXIST in the family file above), flag needs_outreach (requests to text other members).
+CANNOT: Directly text other family members (outreach is queued, not instant — say "I'll queue a message to [name]" not "I'm texting them now"), access external systems, make medical decisions, see data outside your filtered context.
+CRITICAL: Never claim you did something unless the family file above confirms it. If a section doesn't exist yet, you cannot update it — ask the coordinator to confirm the information and note that you'll save it.
 
-1. You are {member['name']}'s care coordination assistant. Be warm, brief, and actionable.
-2. SMS messages should be SHORT — ideally under 320 characters (2 SMS segments).
-   Only go longer if the information genuinely requires it.
-3. When someone offers to help or commits to a task, CONFIRM it clearly and note
-   who, what, and when.
-4. When a task needs to be assigned, suggest who might be available based on the
-   family file, but always confirm before committing someone.
-5. If you need to coordinate with other family members (e.g., "Can someone take
-   Degitu to work tomorrow?"), note that you'll text them — don't assume their answer.
-6. Update the family file when you learn new information. Use structured updates:
-   - "append" to add entries to Schedule, Recent Events, Patterns, etc.
-   - "prepend" to add urgent items at the top of a section.
-   - "replace" to change specific text (provide exact old_content + new content).
-   - "resolve_issue" to mark an Active Issues item as done (provide identifying text).
-   Always log what happened to Recent Events (prepend with timestamp and description).
-7. If the care recipient (Degitu) texts you directly, respond to HER — she is
-   cognitively intact and can advocate for her own needs.
-8. The coordinator (Liban) gets summaries and escalations. Don't overwhelm others
-   with information they don't need.
-9. For medical concerns or emergencies, always escalate to the coordinator immediately.
-10. Never fabricate information. If you don't know something, say so and offer to find out.
-11. You can ONLY see the family data that matches {member['name']}'s access level.
-    Do not reference or speculate about information not shown in the family file above.
+── WHEN THINGS GO WRONG ──
+If you previously sent an error message or glitch occurred, acknowledge it directly: "I hit a technical glitch — [what happened]. Here's what I was working on: [resume]." Never deflect or pretend it didn't happen. The coordinator can see everything.
 
-── TONE ──
-You are family. Not a corporate assistant. Not a medical robot. You know these
-people and you care about Degitu's recovery. Be the kind of coordinator that
-makes everyone feel like they're part of something, not burdened by it.
+── RESPONSE FORMAT ──
+Respond with ONLY valid JSON matching the required schema. No markdown fencing, no explanation.
 
-Respond with ONLY the SMS text to send back. No metadata, no explanations,
-no "Here's my response:" — just the message itself.
+FIELD GUIDE:
+- sms_response: The text message to send back. Keep under 320 chars when possible.
+- internal_notes: Your reasoning (not shown to user).
+- needs_outreach: Array of objects with phone, name, message for people to contact. Say "I'll queue a message to [name]" — never "I'm texting them now."
+- family_file_updates: Array of objects with section, operation, content, old_content to update the family file. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
+- self_corrections: When the user corrects you, teaches you something, or says "remember that" / "don't do that again" / "that's wrong" — capture the lesson as "[What to do or not do]". Empty array if no correction this message.
+- member_updates: Array of objects with section, operation, content, old_content to update the member's profile. Same format as family_file_updates. Use for personal preferences, communication style, etc. Empty array if nothing to update.
 """
 
 
 # ─── AI Agent Call ────────────────────────────────────────────────────────
 
-async def generate_response(system_context: str, user_message: str) -> str:
-    """Call the AI to generate a response."""
-    from sdk.tools.utils_tools import ai_structured_output
-
-    result = await ai_structured_output(
-        prompt=system_context + f"\n\nINBOUND SMS:\n{user_message}",
-        output_schema={
+_RESPONSE_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "caresupport_response",
+        "strict": True,
+        "schema": {
             "type": "object",
             "properties": {
-                "sms_response": {
-                    "type": "string",
-                    "description": "The SMS text to send back to the user"
-                },
-                "internal_notes": {
-                    "type": "string",
-                    "description": "Any internal notes about actions to take (coordinate with others, update family file, etc.)"
-                },
+                "sms_response": {"type": "string"},
+                "internal_notes": {"type": "string"},
                 "needs_outreach": {
                     "type": "array",
                     "items": {
@@ -310,52 +334,162 @@ async def generate_response(system_context: str, user_message: str) -> str:
                         "properties": {
                             "phone": {"type": "string"},
                             "name": {"type": "string"},
-                            "message": {"type": "string"}
-                        }
+                            "message": {"type": "string"},
+                        },
+                        "required": ["phone", "name", "message"],
+                        "additionalProperties": False,
                     },
-                    "description": "Other family members who need to be texted as part of this coordination"
                 },
                 "family_file_updates": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "section": {
-                                "type": "string",
-                                "enum": ["schedule", "medications", "appointments",
-                                         "availability", "active_issues", "recent_events",
-                                         "patterns", "members", "care_recipient"],
-                                "description": "Which section of the family file to update"
-                            },
-                            "operation": {
-                                "type": "string",
-                                "enum": ["append", "prepend", "replace", "resolve_issue"],
-                                "description": "append: add to end. prepend: add after header. replace: swap old_content for content. resolve_issue: mark a [ ] item as [x]."
-                            },
-                            "content": {
-                                "type": "string",
-                                "description": "The text to add, or the new text for replacements"
-                            },
-                            "old_content": {
-                                "type": "string",
-                                "description": "For replace operations only: the exact text being replaced"
-                            }
+                            "section": {"type": "string"},
+                            "operation": {"type": "string"},
+                            "content": {"type": "string"},
+                            "old_content": {"type": "string"},
                         },
-                        "required": ["section", "operation", "content"]
+                        "required": ["section", "operation", "content", "old_content"],
+                        "additionalProperties": False,
                     },
-                    "description": "Structured updates to apply to the family file. Each entry targets a specific section with a specific operation."
-                }
+                },
+                "self_corrections": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "member_updates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "section": {"type": "string"},
+                            "operation": {"type": "string"},
+                            "content": {"type": "string"},
+                            "old_content": {"type": "string"},
+                        },
+                        "required": ["section", "operation", "content", "old_content"],
+                        "additionalProperties": False,
+                    },
+                },
             },
-            "required": ["sms_response"]
+            "required": ["sms_response", "internal_notes", "needs_outreach", "family_file_updates", "self_corrections", "member_updates"],
+            "additionalProperties": False,
         },
-        input_text=user_message,
-        intelligence_level="smart"
-    )
+    },
+}
 
-    if result.error:
-        return json.dumps({"sms_response": "I'm having trouble right now. Liban has been notified.", "error": result.error})
+_MODEL_FALLBACK = [
+    "anthropic/claude-haiku-4-5",
+    "google/gemini-2.5-flash",
+    "openai/gpt-4o-mini",
+]
 
-    return json.dumps(result.result)
+
+async def generate_response(system_context: str, user_message: str, member_name: str = "there") -> str:
+    """Call OpenRouter to generate a structured response.
+
+    Uses asyncio.to_thread to avoid blocking the event loop, with a 45s timeout
+    per attempt to prevent indefinite hangs.
+    """
+
+    fallback_msg = f"I hit a technical glitch processing your last message, {member_name}. Can you send it again?"
+
+    def _sync_openrouter_call():
+        return _ai_client.chat.completions.create(
+            model=_MODEL_FALLBACK[0],
+            extra_body={"models": _MODEL_FALLBACK},
+            messages=[
+                {"role": "system", "content": system_context},
+                {"role": "user", "content": user_message},
+            ],
+            response_format=_RESPONSE_SCHEMA,
+            temperature=0.7,
+            max_tokens=4096,
+        )
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(_sync_openrouter_call),
+                timeout=45,
+            )
+
+            raw = response.choices[0].message.content.strip()
+            result = json.loads(raw)
+
+            if "sms_response" not in result:
+                result["sms_response"] = fallback_msg
+            return json.dumps(result)
+
+        except asyncio.TimeoutError:
+            last_error = "OpenRouter API timed out after 45s"
+            print(f"[CareSupport] AI attempt {attempt+1}/3: TimeoutError: {last_error}", file=sys.stderr)
+        except Exception as e:
+            last_error = e
+            print(f"[CareSupport] AI attempt {attempt+1}/3: {type(e).__name__}: {str(e)[:150]}", file=sys.stderr)
+
+        if attempt < 2:
+            await asyncio.sleep(3 * (attempt + 1))
+
+    return json.dumps({"sms_response": fallback_msg, "error": str(last_error)})
+
+
+# ─── Learning Persistence ────────────────────────────────────────────────
+
+def _persist_lessons(corrections: list[str], max_entries: int = 20) -> None:
+    """Append self-corrections to lessons.md, capping at max_entries."""
+    if not corrections:
+        return
+    lessons_path = paths.lessons
+    lessons_path.parent.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    new_lines = [f"- [{now}] {c.strip()}" for c in corrections if isinstance(c, str) and c.strip()]
+    if not new_lines:
+        return
+
+    content = lessons_path.read_text() if lessons_path.exists() else "# Lessons\n"
+    lines = content.strip().split("\n")
+    header_lines = [l for l in lines if not l.startswith("- [")]
+    entry_lines = [l for l in lines if l.startswith("- [")]
+
+    entry_lines.extend(new_lines)
+    if len(entry_lines) > max_entries:
+        entry_lines = entry_lines[-max_entries:]
+
+    lessons_path.write_text("\n".join(header_lines) + "\n" + "\n".join(entry_lines) + "\n")
+
+
+def _persist_member_updates(member: dict, raw_updates: list[dict]) -> dict | None:
+    """Apply member_updates to the member's profile file."""
+    if not raw_updates or not isinstance(raw_updates, list):
+        return None
+
+    family_dir = Path(member.get("family_dir", ""))
+    member_name = member.get("name", "")
+    if not family_dir.exists() or not member_name:
+        return None
+
+    members_dir = family_dir / "members"
+    candidate = f"{member_name.split()[0].lower()}.md"
+    member_path = members_dir / candidate
+    if not member_path.exists():
+        return None
+
+    updates = parse_update_instructions(raw_updates)
+    if not updates:
+        return None
+
+    edit_result = apply_updates(member_path, updates)
+    return {
+        "success": edit_result.success,
+        "updates_applied": edit_result.updates_applied,
+        "updates_skipped": edit_result.updates_skipped,
+        "sections_modified": edit_result.sections_modified,
+        "errors": edit_result.errors,
+    }
 
 
 # ─── Approval Helpers ─────────────────────────────────────────────────────
@@ -512,6 +646,8 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
                            dry_run: bool) -> dict:
     """Process a message under the family lock. All family.md reads/writes are serialized."""
 
+    log_prefix = "[CareSupport]"
+
     # 2. Log inbound message
     log_message(from_phone, "INBOUND", body, family_id)
 
@@ -523,6 +659,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     # 3. Load context
     raw_family_context = load_family_context(member.get("family_dir", ""))
     conversation_history = load_recent_conversations(from_phone)
+    member_context = load_member_context(member.get("family_dir", ""), member.get("name", ""))
 
     # 4. ENFORCEMENT: Pre-filter context by access level
     filtered_context = filter_family_context(raw_family_context, access_level)
@@ -539,7 +676,10 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     )
 
     # 6. Build system context with FILTERED family data
-    system_context = build_system_context(member, filtered_context, conversation_history)
+    system_context = build_system_context(
+        member, filtered_context, conversation_history,
+        member_context=member_context,
+    )
 
     # 7. Generate response
     if dry_run:
@@ -556,7 +696,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             },
         }
 
-    result_json = await generate_response(system_context, body)
+    result_json = await generate_response(system_context, body, member_name=member.get("name", "there"))
     result = json.loads(result_json)
 
     sms_response = result.get("sms_response", "")
@@ -650,7 +790,21 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
                             "approver_phones": approver_phones,
                         })
 
-    # 11. Log outbound response
+    # 11. PERSISTENCE: Apply self_corrections to lessons.md
+    raw_corrections = result.get("self_corrections", [])
+    if raw_corrections and isinstance(raw_corrections, list):
+        _persist_lessons(raw_corrections)
+        print(f"{log_prefix} 📝 Learned {len(raw_corrections)} lesson(s)")
+
+    # 12. PERSISTENCE: Apply member_updates to member profile
+    raw_member_updates = result.get("member_updates", [])
+    member_update_result = None
+    if raw_member_updates and isinstance(raw_member_updates, list) and len(raw_member_updates) > 0:
+        member_update_result = _persist_member_updates(member, raw_member_updates)
+        if member_update_result and member_update_result.get("updates_applied", 0) > 0:
+            print(f"{log_prefix} 📝 Updated member profile ({member_update_result['updates_applied']} change(s))")
+
+    # 13. Log outbound response
     if sms_response:
         log_message(from_phone, "OUTBOUND", sms_response, family_id)
 

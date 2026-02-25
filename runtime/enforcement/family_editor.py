@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Family File Editor — Mechanical enforcement of edit-not-write semantics.
 
@@ -303,10 +305,18 @@ def parse_update_instructions(raw_updates: list[dict]) -> list[FileUpdate]:
     for entry in raw_updates:
         if not isinstance(entry, dict):
             continue
-        section = entry.get("section", "").strip().lower()
-        operation = entry.get("operation", "").strip().lower()
-        content = entry.get("content", "").strip()
-        old_content = entry.get("old_content", "").strip()
+        section = entry.get("section", "")
+        operation = entry.get("operation", "")
+        content = entry.get("content", "")
+        old_content = entry.get("old_content", "")
+        if not isinstance(section, str) or not isinstance(operation, str) or not isinstance(content, str):
+            continue
+        if not isinstance(old_content, str):
+            old_content = ""
+        section = section.strip().lower()
+        operation = operation.strip().lower()
+        content = content.strip()
+        old_content = old_content.strip()
 
         if not section or not operation or not content:
             continue
