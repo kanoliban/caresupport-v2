@@ -137,6 +137,20 @@ so Opus can surface whatever it notices.
   - `list` — show all three piles at a glance
   - `restore` — revert to baseline without clearing reviews (use `reset` instead unless you have a reason)
 
+  **Resist the shiny object.** During testing you WILL notice gaps — missing
+  member lifecycle states, flows with no protocol, features that seem obvious
+  to build right now. DO NOT stop testing to build them. Save the observation
+  to `saved/` and keep going. The reasons:
+  1. You're in a test cycle. Momentum matters more than plumbing.
+  2. You don't have enough signal yet. Real interactions reveal what the
+     abstraction actually needs to be. Building from one data point = guessing.
+  3. The observation is more valuable than the implementation right now.
+     When it's time to build, it'll be informed by real data, not speculation.
+
+  Observations go to `saved/` with `"type": "process_observation"`. They
+  graduate to Linear when there's enough signal to spec them properly — not
+  before.
+
 ### Care Protocols
 Domain knowledge the agent uses for coordination.
 - `fork/workspace/protocols/` — 16 PROTOCOL.md files (medications, scheduling, handoffs, etc.)

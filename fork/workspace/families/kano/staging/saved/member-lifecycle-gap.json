@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-02-26T07:45:00Z",
+  "family_id": "kano",
+  "type": "process_observation",
+  "title": "No member lifecycle state — can't tell who's active, onboarded, pending",
+  "context": "Roman was added and received an intro message. She responded. But her profile has no status field. There's no way to know — programmatically or at a glance — whether a member has been contacted, has responded, or is stale. This surfaced during the first multi-member test.",
+  "observed_states": [
+    "pending — coordinator said 'add them' but intro not sent yet",
+    "onboarded — intro sent, awaiting first response",
+    "active — has exchanged messages with the agent",
+    "inactive — was active, no interaction in N days"
+  ],
+  "recommendation": "Don't build yet. Test more members first. Let real interactions reveal what the statuses actually need to be. The wrong abstraction now is worse than no abstraction.",
+  "blocked_by": "Need more member interactions to understand what lifecycle transitions actually look like in practice."
+}
