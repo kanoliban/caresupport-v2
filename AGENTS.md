@@ -54,6 +54,7 @@ How messages get in and out via Linq Partner API V3.
 Full product context for strategic decisions.
 - `docs/PRODUCT_STRATEGY.md` — complete strategy: network types, roles, policy packs, roadmap, metrics
 - `docs/VISION.md` — product vision and north-star narrative
+- `docs/ROADMAP.md` — product roadmap, phases, and scaling challenges
 - `ARCHITECTURE.md` — system diagram, domains, dependency rules
 
 ### Project State & History
@@ -67,7 +68,8 @@ What's been built, what's in progress, what's broken.
 ### Agent Identity & Learning System
 How the runtime agent knows who it is and learns from corrections.
 - `SOUL.md` — identity, voice, behavioral constraints (~30 lines, loaded every message)
-- `runtime/learning/capabilities.md` — explicit CAN/CANNOT list
+- `runtime/learning/capabilities.md` — explicit CAN/CANNOT list (gates)
+- `runtime/learning/skills/` — conversation skills (social, onboarding, scheduling)
 - `runtime/learning/lessons.md` — accumulated corrections
 - `runtime/learning/__init__.py` — shared `append_lessons()` utility
 - `runtime/scripts/review_conversations.py` — CLI for reviewing conversations and adding lessons
@@ -100,13 +102,14 @@ docs/
   exec-plans/             ← Active plans, completed, tech debt
   QUALITY_SCORE.md        ← Grades per layer
   RELIABILITY.md          ← System reliability assessment
+  ROADMAP.md              ← Product roadmap, phases, scaling challenges
   SECURITY.md             ← Enforcement posture
   VISION.md               ← Product vision and north-star narrative
   product-specs/          ← SMS coordination spec
   references/             ← Linq, HIPAA, Twilio setup docs
 runtime/
   config.py               ← All paths and settings (single source of truth)
-  learning/               ← lessons.md, capabilities.md, __init__.py
+  learning/               ← lessons.md, capabilities.md, skills/, __init__.py
   enforcement/            ← role_filter, phi_audit, family_editor, approval_pipeline
   scripts/                ← sms_handler, poll_inbound, linq_gateway, webhook_receiver, review_conversations
   tests/                  ← Test suites

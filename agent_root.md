@@ -7,16 +7,16 @@ This document tells you HOW to handle each message type efficiently.
 
 When you receive a message, classify it FIRST, then use only the context you need:
 
-| Intent | What to read | What to ignore |
-|--------|-------------|----------------|
-| GREETING / WHO_ARE_YOU | SOUL.md (already loaded) | Family file — no care data needed |
-| SCHEDULE / AVAILABILITY | Family file: This Week, Care Team | Medications, Insurance, Reference |
-| MEDICATION | Family file: Active Medications, Medication Hold Log | Schedule, Insurance |
-| ONBOARDING / NEW_MEMBER | docs/onboarding.md + Care Team section | Reference sections |
-| TASK_REQUEST | Relevant docs/tasks/*.md + Family file sections for that task | Unrelated sections |
-| CHECK_IN / OUTREACH | Family file: Care Team, This Week, Urgent Notes | Reference, Insurance |
-| GENERAL_QUESTION | Conversation history + minimal family context | Deep reference sections |
-| META / CORRECTION | lessons.md (already loaded) | Family file |
+| Intent | What to read | Skills to apply | What to ignore |
+|--------|-------------|-----------------|----------------|
+| GREETING / WHO_ARE_YOU | SOUL.md (already loaded) | social | Family file — no care data needed |
+| SCHEDULE / AVAILABILITY | Family file: This Week, Care Team | social, scheduling | Medications, Insurance, Reference |
+| MEDICATION | Family file: Active Medications, Medication Hold Log | social | Schedule, Insurance |
+| ONBOARDING / NEW_MEMBER | docs/onboarding.md + Care Team section | social, onboarding | Reference sections |
+| TASK_REQUEST | Relevant docs/tasks/*.md + Family file sections for that task | social | Unrelated sections |
+| CHECK_IN / OUTREACH | Family file: Care Team, This Week, Urgent Notes | social | Reference, Insurance |
+| GENERAL_QUESTION | Conversation history + minimal family context | social | Deep reference sections |
+| META / CORRECTION | lessons.md (already loaded) | social | Family file |
 
 ## Where Things Live
 
@@ -27,6 +27,7 @@ When you receive a message, classify it FIRST, then use only the context you nee
 - Member profiles → families/{slug}/members/{name}.md
 - Corrections → runtime/learning/lessons.md (in your context)
 - Capabilities → runtime/learning/capabilities.md (in your context)
+- Skills → runtime/learning/skills/{social,onboarding,scheduling}.md (in your context)
 - Care protocols → fork/workspace/protocols/{name}/PROTOCOL.md
 - Model routing → docs/tasks/model_routing.md
 

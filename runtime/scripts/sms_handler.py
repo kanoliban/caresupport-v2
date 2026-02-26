@@ -284,12 +284,22 @@ def build_system_context(member: dict, family_context: str,
         print(f"[CareSupport] WARNING: SOUL.md not found at {soul_path}. Agent running without identity constraints.", file=sys.stderr)
         soul_text = "You are CareSupport — a care coordination agent."
 
-    # Load lessons from past corrections
+    # Load per-family lessons (local corrections — takes precedence)
+    family_lessons_text = ""
+    family_dir = member.get("family_dir", "")
+    if family_dir:
+        family_lessons_path = Path(family_dir) / "lessons.md"
+        if family_lessons_path.exists():
+            entries = [l for l in family_lessons_path.read_text().split("\n") if l.startswith("- [")]
+            if entries:
+                family_lessons_text = "\n── FAMILY LESSONS (this family's corrections) ──\n" + "\n".join(entries)
+
+    # Load global lessons (universal corrections)
     lessons_text = ""
     if paths.lessons.exists():
         entries = [l for l in paths.lessons.read_text().split("\n") if l.startswith("- [")]
         if entries:
-            lessons_text = "\n── LESSONS (corrections from past conversations) ──\n" + "\n".join(entries)
+            lessons_text = "\n── GLOBAL LESSONS (corrections from all conversations) ──\n" + "\n".join(entries)
 
     # Load agent routing doc
     agent_root_text = ""
@@ -300,6 +310,15 @@ def build_system_context(member: dict, family_context: str,
     capabilities_text = ""
     if paths.capabilities.exists():
         capabilities_text = "\n── CAPABILITIES ──\n" + paths.capabilities.read_text().strip()
+
+    # Load skills from runtime/learning/skills/
+    skills_text = ""
+    if paths.skills_dir.exists():
+        skill_parts = []
+        for skill_file in sorted(paths.skills_dir.glob("*.md")):
+            skill_parts.append(skill_file.read_text().strip())
+        if skill_parts:
+            skills_text = "\n── SKILLS ──\n" + "\n\n".join(skill_parts)
 
     # Load member-specific context
     member_context_block = ""
@@ -317,6 +336,8 @@ Their access level: {member['access_level']}
 Their relationship to care recipient: {member.get('relationship', member.get('role', 'unknown'))}
 {channel}
 {capabilities_text}
+{skills_text}
+{family_lessons_text}
 {lessons_text}
 {member_context_block}
 
@@ -487,12 +508,22 @@ async def generate_response(system_context: str, user_message: str, member_name:
 
 # ─── Learning Persistence ────────────────────────────────────────────────
 
-def _persist_lessons(corrections: list[str]) -> None:
-    """Append self-corrections to lessons.md via shared learning module."""
+MAX_FAMILY_LESSONS = 10
+
+
+def _persist_lessons(corrections: list[str], family_dir: str = "") -> None:
+    """Append self-corrections to the family's lessons.md (local).
+
+    Falls back to global lessons.md if no family_dir provided.
+    """
     if not corrections:
         return
     from learning import append_lessons
-    append_lessons(paths.lessons, corrections)
+    if family_dir:
+        family_lessons_path = Path(family_dir) / "lessons.md"
+        append_lessons(family_lessons_path, corrections, max_entries=MAX_FAMILY_LESSONS)
+    else:
+        append_lessons(paths.lessons, corrections)
 
 
 def _persist_member_updates(member: dict, raw_updates: list[dict]) -> dict | None:
@@ -920,11 +951,11 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
                             "approver_phones": approver_phones,
                         })
 
-    # 11. PERSISTENCE: Apply self_corrections to lessons.md
+    # 11. PERSISTENCE: Apply self_corrections to family lessons.md (local)
     raw_corrections = result.get("self_corrections", [])
     if raw_corrections and isinstance(raw_corrections, list):
-        _persist_lessons(raw_corrections)
-        print(f"{log_prefix} 📝 Learned {len(raw_corrections)} lesson(s)")
+        _persist_lessons(raw_corrections, family_dir=member.get("family_dir", ""))
+        print(f"{log_prefix} 📝 Learned {len(raw_corrections)} lesson(s) (family)")
 
     # 12. PERSISTENCE: Apply member_updates to member profile
     raw_member_updates = result.get("member_updates", [])

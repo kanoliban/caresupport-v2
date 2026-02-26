@@ -71,6 +71,10 @@ class Paths:
         return self._learning_dir / "capabilities.md"
 
     @property
+    def skills_dir(self) -> Path:
+        return self._learning_dir / "skills"
+
+    @property
     def agent_root(self) -> Path:
         return RUNTIME_DIR.parent / "agent_root.md"
 

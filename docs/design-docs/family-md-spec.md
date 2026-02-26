@@ -209,6 +209,61 @@ Agent-observed regularities. Not written by family members — the agent notices
 - Marta steps in quickly when notified of gaps; prefers text over calls
 ```
 
+## Field Priority Tiers
+
+Every field has a collection priority. The agent uses these to decide what to ask for and when.
+
+| Tier | Rule | Agent behavior |
+|------|------|----------------|
+| **P0 — Mandatory** | Cannot function without it | Block until provided |
+| **P1 — Operational** | Needed for coordination | Ask once if missing after first session. Accept defaults. |
+| **P2 — Enrichment** | Useful when relevant | Only collect when conversation naturally involves that topic. Never ask unprompted. |
+| **P3 — Ambient** | Nice to have | Record if volunteered. Never ask. |
+
+### family.md Fields
+
+| Section | Field | Tier | Default if missing |
+|---------|-------|------|--------------------|
+| Care Recipient | Name | P0 | — |
+| Care Recipient | Age | P1 | blank |
+| Care Recipient | Primary conditions | P1 | blank |
+| Care Recipient | Mobility | P1 | blank |
+| Care Recipient | Cognitive status | P2 | — |
+| Care Recipient | Allergies | P2 | — |
+| Care Recipient | Blood type | P2 | — |
+| Care Recipient | Language | P2 | — |
+| Care Recipient | Emergency contact | P1 | blank |
+| Care Team | Name | P0 | — |
+| Care Team | Phone | P0 | — |
+| Care Team | Role | P1 | family_caregiver |
+| Care Team | Access Level | P1 | schedule+meds |
+| This Week | Schedule entries | P1 | blank |
+| Active Medications | All fields | P2 | — |
+| Appointments | All fields | P2 | — |
+| Availability | Per-member rules | P1 | blank |
+| Insurance & Coverage | All fields | P3 | — |
+| Care Preferences | All fields | P3 | — |
+| Caregiver Health Notes | All fields | P3 | — |
+
+### member.md Fields
+
+| Section | Field | Tier | Default if missing |
+|---------|-------|------|--------------------|
+| Identity | Name | P0 | — |
+| Identity | Phone | P0 | — |
+| Identity | Role | P1 | family_caregiver |
+| Identity | Relationship to care recipient | P3 | blank (store if volunteered) |
+| Identity | Access level | P1 | schedule+meds |
+| Communication Preferences | All fields | P3 | — |
+| Care Responsibilities | All fields | P2 | — |
+| Personal Context | All fields | P3 | — |
+
+### Relationship storage
+
+Relationships are stored as a single field per member: `Relationship to care recipient`. When a user provides member-to-member context ("my brother"), store it as a parenthetical: `nephew (Liban's brother)`. This captures both directions without adding a new data model.
+
+Don't force relationship collection. If the user provides it, store it. If not, leave blank — it's P3.
+
 ## How It Grows
 
 ### Bootstrap
