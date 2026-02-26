@@ -1,77 +1,36 @@
-# CLAUDE.md — CareSupport Family
+# CLAUDE.md — CareSupport
 
-> **For agents:** Read `AGENTS.md` — it's the navigational entry point for this repo.
-> This file explains the core concepts for human readers.
+> **Agents:** Read `AGENTS.md` first — it routes you to the right files based on your task.
 
 ## What This Is
 
-CareSupport is a care coordination agent that texts with family members 1-to-1. It uses two types of persistent files:
+CareSupport is a care coordination agent that texts with family members 1-to-1 via iMessage/SMS. Files are the database: `family.md` holds operational state, `SOUL.md` defines agent identity, member profiles track individual context.
 
-- **PROTOCOL.md** files — agent knowledge: how to coordinate care, how to handle medications, how to communicate over SMS. Relatively static. Adopted wholesale from Viktor/OpenClaw's production-tested pattern.
-- **family.md** — operational state for one care network: members, schedule, medications, active issues, recent events. Changes every interaction. Our new concept — Viktor doesn't have this because it doesn't maintain ongoing care relationships.
-
-These are different things. Don't conflate them.
+For full product strategy and domain model → `docs/PRODUCT_STRATEGY.md`
 
 ## How It Works
 
 ```
-SMS arrives ("Marta: Can't make Tuesday 2pm")
-  → Message router identifies family by phone number
-  → Fresh query() session (never resumed — the file IS the memory)
-      System prompt: care coordinator role
-      User prompt: SMS content + sender identity
-      Tools: Read, Edit (restricted to this family's family.md)
-  → Agent reads family.md → processes → updates family.md → responds
-  → Response sent via SMS
-  → Session ends
+SMS/iMessage arrives
+  → poll_inbound.py picks up via Linq API
+  → routing.json maps phone → family → member
+  → sms_handler.py builds system prompt (SOUL.md + capabilities + lessons + family + member context)
+  → AI responds via OpenRouter (claude-haiku primary)
+  → Response sent back via Linq
 ```
 
-Every interaction follows this loop. No session persistence, no database, no state outside the file.
+## Build/Lint/Test Commands
 
-## Architecture
+- **Build:** `npm run build` (tsc -b && vite build)
+- **Dev:** `npm run dev` (vite)
+- **Lint:** `npm run lint` (eslint .)
+- **Test:** `cd runtime && PYTHONPATH=. python -m pytest tests/ -v`
+- **Dry run SMS:** `python runtime/scripts/sms_handler.py --from "+1..." --body "test" --dry-run`
+- **Start poller:** `tmux new-session -d -s caresupport "python3 runtime/scripts/poll_inbound.py --interval 15"`
 
-See `ARCHITECTURE.md` for the full system diagram and domain map.
+## Key Rules
 
-See `AGENTS.md` for the repository navigation map.
-
-## Key Locations
-
-| What | Where |
-|------|-------|
-| System diagram | `ARCHITECTURE.md` |
-| Agent navigation map | `AGENTS.md` |
-| Design documents | `docs/design-docs/` (see `index.md`) |
-| Active work | `docs/exec-plans/active/` |
-| Known gaps | `docs/exec-plans/tech-debt-tracker.md` |
-| Quality grades | `docs/QUALITY_SCORE.md` |
-| Security posture | `docs/SECURITY.md` |
-| family.md spec | `docs/design-docs/family-md-spec.md` |
-| Reference family | `examples/rob-family.md` |
-| SMS runtime | `runtime/` (see `README.md`) |
-| Runtime config | `runtime/config.py` |
-| Care protocols | `fork/workspace/protocols/` |
-| System prompt | `fork/system-prompt.md` |
-| Simulation results | `fork/simulation/results/SYNTHESIS.md` |
-
-## Build & Run
-
-```bash
-npm install
-npx tsc --noEmit     # Type check (TS prototype)
-cd runtime/scripts && python sms_handler.py --from "+1..." --body "test" --dry-run
-```
-
-## Design Decisions
-
-| Decision | Choice | Why |
-|----------|--------|-----|
-| Session model | Fresh per SMS | File is memory; session resume leaks context across users, costs grow linearly |
-| Knowledge persistence | PROTOCOL.md files (Viktor's pattern wholesale) | Agent knowledge, capabilities, protocols — read on demand |
-| State persistence | family.md (one file per network) | Operational state — agent reads at start, updates at end |
-| Structured data | YAML blocks inside markdown | Readable, parseable, less corruption-prone than raw JSON in markdown |
-| Concurrency | Queue per family | Serialize within a family; parallel across families |
-| Tools | Read + Edit (built-in) | Simpler than Memory Tool; direct control; Edit does surgical replacement |
-| Proactive | Heartbeat cron | Periodic scan, not long-running process |
-| Interface | SMS (1-to-1) | Each family member texts independently |
-| Enforcement | Mechanical (code), not just prompt | Harness engineering: invariants enforced by linters/checks, not instructions |
-| Repository structure | Harness pattern | AGENTS.md → docs/ → exec-plans/. Progressive disclosure. Agent-legible. |
+1. Import from `runtime/config.py` — never hardcode paths
+2. Safety enforcement is mechanical (code), not just prompt-level
+3. family.md changes use Edit (surgical replacement), not Write (overwrite)
+4. Check `docs/exec-plans/active/` before starting new work

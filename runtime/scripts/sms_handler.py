@@ -74,6 +74,40 @@ _audit = PHIAuditLogger(log_dir=paths.logs)
 
 # ─── Phone/Chat → Family Resolution ──────────────────────────────────────
 
+def _load_routing(family_dir: Path) -> dict | None:
+    """Load routing file from a family directory. Supports both formats."""
+    for name in ("routing.json", "phone_routing.json"):
+        routing_file = family_dir / name
+        if routing_file.exists():
+            with open(routing_file) as f:
+                return json.load(f)
+    return None
+
+
+def _iter_members(routing: dict):
+    """Yield (phone, member_dict) from routing, handling both formats.
+
+    Dict format:  {"members": {"+1...": {"name": "Liban", ...}}}
+    Array format:  {"members": [{"phone": "+1...", "name": "Liban", ...}]}
+    """
+    members = routing.get("members", {})
+    if isinstance(members, dict):
+        for phone, member in members.items():
+            yield phone, {**member, "phone": phone}
+    elif isinstance(members, list):
+        for member in members:
+            yield member.get("phone", ""), member
+
+
+def _routing_meta(routing: dict, family_dir: Path) -> dict:
+    """Extract family-level metadata from routing."""
+    return {
+        "family_id": routing.get("family_id", family_dir.name),
+        "family_name": routing.get("family_name", routing.get("care_recipient", family_dir.name)),
+        "family_dir": str(family_dir),
+    }
+
+
 def resolve_phone(phone: str) -> dict | None:
     """Look up phone number in all family routing tables."""
     families_dir = paths.families
@@ -82,18 +116,12 @@ def resolve_phone(phone: str) -> dict | None:
     for family_dir in families_dir.iterdir():
         if not family_dir.is_dir():
             continue
-        routing_file = family_dir / "phone_routing.json"
-        if routing_file.exists():
-            with open(routing_file) as f:
-                routing = json.load(f)
-            for member in routing["members"]:
-                if member["phone"] == phone:
-                    return {
-                        "family_id": routing["family_id"],
-                        "family_name": routing["family_name"],
-                        "family_dir": str(family_dir),
-                        **member
-                    }
+        routing = _load_routing(family_dir)
+        if not routing:
+            continue
+        for member_phone, member in _iter_members(routing):
+            if member_phone == phone:
+                return {**_routing_meta(routing, family_dir), **member}
     return None
 
 
@@ -109,18 +137,12 @@ def resolve_chat_id(chat_id: str) -> dict | None:
     for family_dir in families_dir.iterdir():
         if not family_dir.is_dir():
             continue
-        routing_file = family_dir / "phone_routing.json"
-        if routing_file.exists():
-            with open(routing_file) as f:
-                routing = json.load(f)
-            for member in routing.get("members", []):
-                if member.get("chat_id") == chat_id:
-                    return {
-                        "family_id": routing["family_id"],
-                        "family_name": routing["family_name"],
-                        "family_dir": str(family_dir),
-                        **member
-                    }
+        routing = _load_routing(family_dir)
+        if not routing:
+            continue
+        for _, member in _iter_members(routing):
+            if member.get("chat_id") == chat_id:
+                return {**_routing_meta(routing, family_dir), **member}
     return None
 
 
@@ -137,11 +159,11 @@ def resolve_member(chat_id: str = "", phone: str = "") -> dict | None:
 
 def resolve_phone_from_routing(phone: str, routing: dict) -> dict | None:
     """Look up phone number in a specific routing table."""
-    for member in routing["members"]:
-        if member["phone"] == phone:
+    for member_phone, member in _iter_members(routing):
+        if member_phone == phone:
             return {
-                "family_id": routing["family_id"],
-                "family_name": routing["family_name"],
+                "family_id": routing.get("family_id", ""),
+                "family_name": routing.get("family_name", routing.get("care_recipient", "")),
                 **member
             }
     return None
@@ -269,6 +291,11 @@ def build_system_context(member: dict, family_context: str,
         if entries:
             lessons_text = "\n── LESSONS (corrections from past conversations) ──\n" + "\n".join(entries)
 
+    # Load agent routing doc
+    agent_root_text = ""
+    if paths.agent_root.exists():
+        agent_root_text = "\n── ROUTING ──\n" + paths.agent_root.read_text().strip()
+
     # Load capabilities
     capabilities_text = ""
     if paths.capabilities.exists():
@@ -280,13 +307,14 @@ def build_system_context(member: dict, family_context: str,
         member_context_block = f"\n── WHAT YOU KNOW ABOUT {member['name'].upper()} ──\n{member_context}"
 
     return f"""{soul_text}
+{agent_root_text}
 
 CURRENT DATE/TIME: {now.strftime("%A, %B %d, %Y at %I:%M %p")} CT
 
 YOU ARE TEXTING WITH: {member['name']} ({member['role']})
 Their phone: {member['phone']}
 Their access level: {member['access_level']}
-Their relationship to care recipient: {member['relationship']}
+Their relationship to care recipient: {member.get('relationship', member.get('role', 'unknown'))}
 {channel}
 {capabilities_text}
 {lessons_text}
@@ -484,13 +512,11 @@ def _persist_member_updates(member: dict, raw_updates: list[dict]) -> dict | Non
 
 def _get_approver_phones(family_dir: Path) -> list[str]:
     """Get phone numbers of members who can approve changes (full access)."""
-    routing_file = family_dir / "phone_routing.json"
-    if not routing_file.exists():
+    routing = _load_routing(family_dir)
+    if not routing:
         return []
-    with open(routing_file) as f:
-        routing = json.load(f)
     return [
-        m["phone"] for m in routing.get("members", [])
+        phone for phone, m in _iter_members(routing)
         if can_approve(m.get("access_level", ""))
     ]
 
