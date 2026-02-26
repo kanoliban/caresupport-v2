@@ -12,14 +12,13 @@ via the existing append_lessons() mechanism.
 Usage:
     python review_loop.py --since 2h                     # last 2 hours
     python review_loop.py --since 24h --family kano      # specific family
-    python review_loop.py --since 2h --ai                # with AI evaluation
+    python review_loop.py --since 2h --full              # include full transcript
     python review_loop.py --since 2h --dry-run           # preview only
-    python review_loop.py --since 2h --json              # machine-readable
+    python review_loop.py --since 2h --json --full       # JSON with exchanges array
 """
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -451,164 +450,34 @@ def run_rule_checks(exchanges: list[Signal], all_signals: list[Signal]) -> list[
     return findings
 
 
-# ─── AI Evaluation (optional) ──────────────────────────────────────────
+# ─── Output ─────────────────────────────────────────────────────────────
 
-_REVIEW_SCHEMA = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "review_result",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "properties": {
-                "exchange_ratings": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "exchange_index": {"type": "integer"},
-                            "quality_score": {"type": "integer"},
-                            "issues": {"type": "array", "items": {"type": "string"}},
-                            "feedback_type": {"type": "string"},
-                            "lesson": {"type": "string"},
-                        },
-                        "required": ["exchange_index", "quality_score", "issues", "feedback_type", "lesson"],
-                        "additionalProperties": False,
-                    },
-                },
-                "skill_improvements": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "skill_file": {"type": "string"},
-                            "suggestion": {"type": "string"},
-                        },
-                        "required": ["skill_file", "suggestion"],
-                        "additionalProperties": False,
-                    },
-                },
-                "overall_summary": {"type": "string"},
-            },
-            "required": ["exchange_ratings", "skill_improvements", "overall_summary"],
-            "additionalProperties": False,
-        },
-    },
-}
-
-
-def _load_skills_text() -> str:
-    parts = []
-    if paths.skills_dir.exists():
-        for f in sorted(paths.skills_dir.glob("*.md")):
-            parts.append(f"── {f.stem.upper()} ──\n{f.read_text().strip()}")
-    return "\n\n".join(parts)
-
-
-def _format_exchanges_for_ai(exchanges: list[Signal]) -> str:
-    lines = []
-    for i, ex in enumerate(exchanges):
-        lines.append(f"Exchange {i}:")
-        lines.append(f"  USER: {ex.data.get('inbound', '')}")
-        lines.append(f"  AGENT: {ex.data.get('outbound', '')}")
+def _format_transcript(exchanges: list[Signal]) -> str:
+    """Format exchanges as a readable transcript block."""
+    lines = [
+        f"  📜 TRANSCRIPT ({len(exchanges)} exchanges)",
+        "  " + "─" * 40,
+    ]
+    for ex in exchanges:
+        ts = ex.timestamp.strftime("%H:%M:%S")
+        inbound = ex.data.get("inbound", "")
+        outbound = ex.data.get("outbound", "")
+        out_ts_str = ex.data.get("outbound_ts", "")
+        out_ts = ""
+        if out_ts_str:
+            try:
+                out_ts = datetime.fromisoformat(out_ts_str).strftime("%H:%M:%S")
+            except ValueError:
+                out_ts = ts
+        lines.append(f"  [{ts}] USER: {inbound}")
+        lines.append(f"  [{out_ts or ts}] AGENT: {outbound}")
         lines.append("")
     return "\n".join(lines)
 
 
-def run_ai_evaluation(exchanges: list[Signal], rule_findings: list[Finding]) -> list[Finding]:
-    """AI-powered evaluation using OpenRouter (same setup as sms_handler)."""
-    from openai import OpenAI
-
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ.get("OPENROUTER_API_KEY", ""),
-    )
-
-    skills_text = _load_skills_text()
-    exchanges_text = _format_exchanges_for_ai(exchanges[:20])  # cap at 20
-
-    rule_summary = "\n".join(
-        f"- [{f.severity}] {f.title}" for f in rule_findings
-    ) or "No rule-based issues found."
-
-    system_prompt = f"""You are a care coordination quality reviewer. Evaluate these SMS exchanges
-between a care coordination agent and family members.
-
-SKILL GUIDANCE (what the agent SHOULD follow):
-{skills_text}
-
-RULE-BASED FINDINGS (already detected, don't duplicate):
-{rule_summary}
-
-INSTRUCTIONS:
-1. Rate each exchange 1-5 (5=perfect adherence to skills)
-2. Identify issues the rule checks missed (tone, context awareness, empathy)
-3. Classify user feedback: none | critical | constructive | positive | correction
-4. Write specific lesson text for any issues (lessons are stored and loaded into future prompts)
-5. Suggest skill.md improvements if you see systemic patterns
-6. Do NOT reproduce phone numbers or medical details in your analysis"""
-
-    try:
-        response = client.chat.completions.create(
-            model="anthropic/claude-haiku-4-5",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": exchanges_text},
-            ],
-            response_format=_REVIEW_SCHEMA,
-            temperature=0.3,
-            max_tokens=4096,
-        )
-        raw = response.choices[0].message.content.strip()
-        result = json.loads(raw)
-    except Exception as e:
-        print(f"[review_loop] AI evaluation failed: {e}", file=sys.stderr)
-        return []
-
-    findings = []
-
-    for rating in result.get("exchange_ratings", []):
-        score = rating.get("quality_score", 5)
-        issues = rating.get("issues", [])
-        lesson = rating.get("lesson", "").strip()
-        feedback = rating.get("feedback_type", "none")
-
-        if score <= 3 and issues:
-            findings.append(Finding(
-                severity="warning" if score >= 2 else "critical",
-                category="skill_violation" if feedback == "none" else "feedback",
-                title=f"AI: quality {score}/5 — {issues[0][:80]}",
-                evidence=f"Exchange {rating.get('exchange_index', '?')}",
-                recommendation="; ".join(issues)[:200],
-                lesson=lesson if lesson else None,
-            ))
-        elif lesson and feedback in ("correction", "critical"):
-            findings.append(Finding(
-                severity="info",
-                category="feedback",
-                title=f"AI: user {feedback} detected",
-                evidence=f"Exchange {rating.get('exchange_index', '?')}",
-                recommendation=lesson[:200],
-                lesson=lesson,
-            ))
-
-    for suggestion in result.get("skill_improvements", []):
-        findings.append(Finding(
-            severity="info",
-            category="pattern",
-            title=f"Skill improvement: {suggestion.get('skill_file', '?')}",
-            evidence="",
-            recommendation=suggestion.get("suggestion", ""),
-            lesson=None,
-        ))
-
-    return findings
-
-
-# ─── Output ─────────────────────────────────────────────────────────────
-
 def format_digest(findings: list[Finding], exchange_count: int,
-                  family_id: str, since_label: str) -> str:
+                  family_id: str, since_label: str,
+                  exchanges: list[Signal] | None = None) -> str:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     scope = family_id if family_id else "all families"
 
@@ -656,6 +525,9 @@ def format_digest(findings: list[Finding], exchange_count: int,
             lines.append(f"  → {lesson}")
         lines.append("")
 
+    if exchanges:
+        lines.append(_format_transcript(exchanges))
+
     return "\n".join(lines)
 
 
@@ -681,15 +553,26 @@ def write_lessons(findings: list[Finding], family_id: str, dry_run: bool) -> int
     return written
 
 
-def format_json_output(findings: list[Finding], exchange_count: int) -> str:
+def format_json_output(findings: list[Finding], exchange_count: int,
+                       exchanges: list[Signal] | None = None) -> str:
     unique_lessons = list(dict.fromkeys(f.lesson for f in findings if f.lesson))
-    return json.dumps({
+    output: dict = {
         "exchange_count": exchange_count,
         "findings": [asdict(f) for f in findings],
         "unique_lessons": unique_lessons,
         "lesson_count": len(unique_lessons),
         "phi_present": True,
-    }, indent=2)
+    }
+    if exchanges is not None:
+        output["exchanges"] = [
+            {
+                "timestamp": ex.timestamp.isoformat(),
+                "user": ex.data.get("inbound", ""),
+                "agent": ex.data.get("outbound", ""),
+            }
+            for ex in exchanges
+        ]
+    return json.dumps(output, indent=2)
 
 
 # ─── Main ───────────────────────────────────────────────────────────────
@@ -700,7 +583,7 @@ def main():
     )
     parser.add_argument("--since", default="24h", help="Time window: 30m, 2h, 7d (default: 24h)")
     parser.add_argument("--family", default="", help="Review specific family (e.g., kano)")
-    parser.add_argument("--ai", action="store_true", help="Enable AI evaluation (~$0.002/10 exchanges)")
+    parser.add_argument("--full", action="store_true", help="Include full transcript for deep analysis")
     parser.add_argument("--dry-run", action="store_true", help="Show findings without writing lessons")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
@@ -721,13 +604,8 @@ def main():
 
     all_signals = phi_signals + approval_signals + poller_signals
 
-    # Rule-based analysis (always)
+    # Rule-based analysis
     findings = run_rule_checks(exchanges, all_signals)
-
-    # AI evaluation (optional)
-    if args.ai and exchanges:
-        ai_findings = run_ai_evaluation(exchanges, findings)
-        findings.extend(ai_findings)
 
     # Operational alerts to stderr
     for f in findings:
@@ -735,10 +613,12 @@ def main():
             print(f"[ALERT] {f.title}: {f.evidence}", file=sys.stderr)
 
     # Output
+    full_exchanges = exchanges if args.full else None
     if args.json:
-        print(format_json_output(findings, len(exchanges)))
+        print(format_json_output(findings, len(exchanges), exchanges=full_exchanges))
     else:
-        print(format_digest(findings, len(exchanges), args.family, args.since))
+        print(format_digest(findings, len(exchanges), args.family, args.since,
+                            exchanges=full_exchanges))
 
     # Write lessons
     lesson_count = write_lessons(findings, args.family, dry_run=args.dry_run)

@@ -59,6 +59,69 @@ One entry per person in the network. Role and capabilities matter for assignment
 - Notes: {free text — preferences, constraints, relevant context}
 ```
 
+### Family Tree
+
+YAML block mapping member-to-member relationships. The agent populates this during onboarding and references it for every interaction. No inference required — the tree is ground truth.
+
+````markdown
+## Family Tree
+
+```yaml
+family_tree:
+  degitu:
+    relationships:
+      - roman: sister
+    notes: "care recipient"
+
+  roman:
+    relationships:
+      - degitu: sister
+      - kano_banjaw: spouse
+      - liban: son
+      - solan: son
+      - yada: son
+
+  liban:
+    relationships:
+      - roman: mother
+      - kano_banjaw: father
+      - degitu: aunt
+      - solan: brother
+      - yada: brother
+      - haley: partner
+
+  solan:
+    relationships:
+      - roman: mother
+      - liban: brother
+      - yada: brother
+
+  yada:
+    relationships:
+      - roman: mother
+      - liban: brother
+      - solan: brother
+
+  kano_banjaw:
+    relationships:
+      - roman: spouse
+      - liban: son
+      - solan: son
+      - yada: son
+
+  haley:
+    relationships:
+      - liban: partner
+```
+````
+
+**Rules:**
+- Keys are lowercase first names (matching member profile filenames)
+- Each member lists their direct relationships using the OTHER person's perspective label (roman lists `liban: son` because Liban is her son)
+- The agent builds the tree incrementally — start with what's volunteered, fill gaps when context arrives
+- When a user says "she's my aunt", the agent writes both directions: `liban → degitu: aunt` AND `degitu → liban: nephew`
+- The tree replaces the flat `Relationship to care recipient` field as the source of truth for relationships
+
 ### Care Recipient
 
 Profile of the person receiving care. Conditions, preferences, routines.
@@ -242,6 +305,7 @@ Every field has a collection priority. The agent uses these to decide what to as
 | Appointments | All fields | P2 | — |
 | Availability | Per-member rules | P1 | blank |
 | Insurance & Coverage | All fields | P3 | — |
+| Family Tree | All relationships | P1 | blank (build incrementally) |
 | Care Preferences | All fields | P3 | — |
 | Caregiver Health Notes | All fields | P3 | — |
 
@@ -260,9 +324,11 @@ Every field has a collection priority. The agent uses these to decide what to as
 
 ### Relationship storage
 
-Relationships are stored as a single field per member: `Relationship to care recipient`. When a user provides member-to-member context ("my brother"), store it as a parenthetical: `nephew (Liban's brother)`. This captures both directions without adding a new data model.
+Relationships are stored in the **Family Tree** YAML block (see section above). The tree captures bidirectional relationships between ALL members, not just to the care recipient.
 
-Don't force relationship collection. If the user provides it, store it. If not, leave blank — it's P3.
+When a user volunteers a relationship ("she's my aunt"), the agent writes both directions immediately. The `Relationship to care recipient` field on individual member entries is kept for backward compatibility but the Family Tree is the source of truth.
+
+Don't force relationship collection. If the user provides it, store it. If not, leave blank — it's P1 for the tree structure (ask once if missing after first session) but P3 for individual relationship details.
 
 ## How It Grows
 

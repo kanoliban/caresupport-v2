@@ -74,6 +74,14 @@ How the runtime agent knows who it is and learns from corrections.
 - `runtime/learning/__init__.py` — shared `append_lessons()` utility
 - `runtime/scripts/review_conversations.py` — CLI for reviewing conversations and adding lessons
 
+### Review & Learning
+How to evaluate agent behavior and improve the system.
+- `runtime/scripts/review_loop.py` — rule-based conversation analysis (run with `--full` for transcript)
+- `runtime/learning/skills/` — skill files the agent should follow
+- `runtime/learning/lessons.md` — global corrections
+- `fork/workspace/families/{id}/lessons.md` — per-family corrections
+- Workflow: run `review_loop --full` → read transcript + findings → suggest lessons, skill edits, spec changes
+
 ### Care Protocols
 Domain knowledge the agent uses for coordination.
 - `fork/workspace/protocols/` — 16 PROTOCOL.md files (medications, scheduling, handoffs, etc.)
@@ -111,7 +119,7 @@ runtime/
   config.py               ← All paths and settings (single source of truth)
   learning/               ← lessons.md, capabilities.md, skills/, __init__.py
   enforcement/            ← role_filter, phi_audit, family_editor, approval_pipeline
-  scripts/                ← sms_handler, poll_inbound, linq_gateway, webhook_receiver, review_conversations
+  scripts/                ← sms_handler, poll_inbound, linq_gateway, webhook_receiver, review_loop
   tests/                  ← Test suites
 fork/
   workspace/
@@ -147,6 +155,6 @@ tmux new-session -d -s caresupport "python3 runtime/scripts/poll_inbound.py --in
 # Send a message via Linq CLI
 python runtime/scripts/linq_gateway.py create --to "+16517037981" --body "Hello" --service iMessage
 
-# Review recent conversations
-python runtime/scripts/review_conversations.py --hours 24
+# Review agent behavior (rule-based + transcript for Opus analysis)
+python runtime/scripts/review_loop.py --since 24h --family kano --full
 ```
