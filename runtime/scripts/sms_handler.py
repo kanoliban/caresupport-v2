@@ -344,6 +344,7 @@ FIELD GUIDE:
 - family_file_updates: Array of objects with section, operation, content, old_content to update the family file. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
 - self_corrections: When the user corrects you, teaches you something, or says "remember that" / "don't do that again" / "that's wrong" — capture the lesson as "[What to do or not do]". Empty array if no correction this message.
 - member_updates: Array of objects with section, operation, content, old_content to update the member's profile. Same format as family_file_updates. Use for personal preferences, communication style, etc. Empty array if nothing to update.
+- routing_updates: Array of objects to register new family members. Only use when the COORDINATOR explicitly asks to add someone AND provides name + phone. Each object: action ("add"), phone (E.164), name, role (family_caregiver/professional_caregiver/community_supporter), relationship (to care recipient), access_level (full/limited). Empty array unless adding a member. REQUIRES coordinator confirmation before you populate this.
 """
 
 
@@ -404,8 +405,24 @@ _RESPONSE_SCHEMA = {
                         "additionalProperties": False,
                     },
                 },
+                "routing_updates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string"},
+                            "phone": {"type": "string"},
+                            "name": {"type": "string"},
+                            "role": {"type": "string"},
+                            "relationship": {"type": "string"},
+                            "access_level": {"type": "string"},
+                        },
+                        "required": ["action", "phone", "name", "role", "relationship", "access_level"],
+                        "additionalProperties": False,
+                    },
+                },
             },
-            "required": ["sms_response", "internal_notes", "needs_outreach", "family_file_updates", "self_corrections", "member_updates"],
+            "required": ["sms_response", "internal_notes", "needs_outreach", "family_file_updates", "self_corrections", "member_updates", "routing_updates"],
             "additionalProperties": False,
         },
     },
@@ -506,6 +523,105 @@ def _persist_member_updates(member: dict, raw_updates: list[dict]) -> dict | Non
         "sections_modified": edit_result.sections_modified,
         "errors": edit_result.errors,
     }
+
+
+def _persist_routing_updates(member: dict, raw_updates: list[dict]) -> list[dict]:
+    """Add new members to routing.json and create their profile files.
+
+    Only processes "add" actions. Only coordinators (full access) can trigger this.
+    Returns a list of result dicts, one per update attempted.
+    """
+    if not raw_updates or not isinstance(raw_updates, list):
+        return []
+
+    if member.get("access_level") != "full":
+        return [{"success": False, "error": "Only full-access members can add new members"}]
+
+    family_dir = Path(member.get("family_dir", ""))
+    if not family_dir.exists():
+        return [{"success": False, "error": "Family directory not found"}]
+
+    routing = _load_routing(family_dir)
+    if not routing:
+        return [{"success": False, "error": "No routing file found"}]
+
+    routing_path = family_dir / "routing.json"
+    if not routing_path.exists():
+        routing_path = family_dir / "phone_routing.json"
+
+    results = []
+    modified = False
+
+    for update in raw_updates:
+        if not isinstance(update, dict):
+            continue
+        action = update.get("action", "")
+        phone = update.get("phone", "").strip()
+        name = update.get("name", "").strip()
+
+        if action != "add" or not phone or not name:
+            results.append({"success": False, "phone": phone, "error": "Invalid action or missing phone/name"})
+            continue
+
+        # Check for duplicate phone
+        existing = [p for p, _ in _iter_members(routing)]
+        if phone in existing:
+            results.append({"success": False, "phone": phone, "error": f"Phone {phone} already registered"})
+            continue
+
+        new_entry = {
+            "name": name,
+            "role": update.get("role", "family_caregiver"),
+            "access_level": update.get("access_level", "limited"),
+            "active": True,
+        }
+        relationship = update.get("relationship", "")
+        if relationship:
+            new_entry["relationship"] = relationship
+
+        # Add to routing dict
+        members = routing.get("members", {})
+        if isinstance(members, dict):
+            members[phone] = new_entry
+        elif isinstance(members, list):
+            members.append({"phone": phone, **new_entry})
+        routing["members"] = members
+        modified = True
+
+        # Create member profile
+        members_dir = family_dir / "members"
+        members_dir.mkdir(exist_ok=True)
+        profile_name = name.split()[0].lower()
+        profile_path = members_dir / f"{profile_name}.md"
+        care_recipient = routing.get("care_recipient", "the care recipient")
+
+        if not profile_path.exists():
+            from datetime import date
+            profile_path.write_text(
+                f"# {name} — Member Profile\n\n"
+                f"## Identity\n"
+                f"- Name: {name}\n"
+                f"- Phone: {phone}\n"
+                f"- Role: {new_entry['role']}\n"
+                f"- Relationship to care recipient: {relationship or 'unknown'}\n"
+                f"- Access level: {new_entry['access_level']}\n\n"
+                f"## Communication Preferences\n"
+                f"- Preferred channel:\n"
+                f"- Language:\n\n"
+                f"## Care Responsibilities\n\n"
+                f"## Personal Context\n\n"
+                f"## Interaction History\n"
+                f"- {date.today().isoformat()}: Added to {care_recipient}'s care team by {member.get('name', 'coordinator')}.\n"
+            )
+
+        results.append({"success": True, "phone": phone, "name": name, "profile": str(profile_path)})
+
+    if modified:
+        with open(routing_path, "w") as f:
+            json.dump(routing, f, indent=2)
+            f.write("\n")
+
+    return results
 
 
 # ─── Approval Helpers ─────────────────────────────────────────────────────
@@ -818,7 +934,16 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
         if member_update_result and member_update_result.get("updates_applied", 0) > 0:
             print(f"{log_prefix} 📝 Updated member profile ({member_update_result['updates_applied']} change(s))")
 
-    # 13. Log outbound response
+    # 13. PERSISTENCE: Apply routing_updates (add new family members)
+    raw_routing_updates = result.get("routing_updates", [])
+    routing_update_results = []
+    if raw_routing_updates and isinstance(raw_routing_updates, list):
+        routing_update_results = _persist_routing_updates(member, raw_routing_updates)
+        added = [r for r in routing_update_results if r.get("success")]
+        if added:
+            print(f"{log_prefix} 👤 Registered {len(added)} new member(s): {', '.join(r['name'] for r in added)}")
+
+    # 14. Log outbound response
     if sms_response:
         log_message(from_phone, "OUTBOUND", sms_response, family_id)
 
@@ -827,6 +952,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
         "response": sms_response,
         "needs_outreach": result.get("needs_outreach", []),
         "family_file_updates": file_update_result,
+        "routing_updates": routing_update_results,
         "pending_confirmations": pending_confirmations,
         "internal_notes": result.get("internal_notes", ""),
         "member": member,
