@@ -6,7 +6,7 @@
 >
 > **Rule:** Updated with every significant commit — during, not after.
 >
-> **Last updated:** 2026-02-25 evening (Self-aware agent refactor: identity externalized, learning system, memory improvement)
+> **Last updated:** 2026-02-26 early morning (First multi-member exchange, review staging system, Roman onboarded)
 
 ---
 
@@ -309,3 +309,42 @@ caresupport-original/
 └── families/              ← Family data (one directory per family)
     └── {id}/members/*.md  ← Per-member profiles (loaded into prompt, updated by agent)
 ```
+
+---
+
+## 2026-02-26 — First Multi-Member Exchange (Milestone)
+
+**What happened.** Liban texted the agent: "Introduce yourself to her. Be nice
+that's my mom." The agent composed an intro, routed it to Roman's phone number
+via Linq, and Roman received the iMessage and responded through it. Two family
+members, one shared agent, no manual handoff.
+
+This is the first time CareSupport carried a message between two members of
+the same care network. The coordinator asked the agent to reach out, and it
+did — to a real person, on a real phone, who responded back through the system.
+
+**What worked.**
+- Phone routing: agent resolved Roman's number from the care team
+- Member creation: agent auto-created `members/roman.md` with correct role and access
+- Message delivery: Roman received the intro via iMessage, responded naturally
+- Context switching: agent recognized Roman's voice ("Tell Liban to bring the spinach")
+
+**What needs work.**
+- Agent still guesses at family relationships instead of recording what it's told
+- "Add my mom" triggered adding Roman + asking about Solan and Yada (scope creep)
+- Showed the intro draft inline instead of asking "want to draft it or should I?"
+- SMS responses too verbose for ongoing conversation (first intro can be longer)
+
+**Lessons promoted to `families/kano/lessons.md`:**
+- Do exactly what was asked, nothing more
+- Don't show drafts unless asked — offer the choice
+- Keep SMS short. First message longer (intro), everything after: tight.
+
+**Review staging system shipped.** `snapshot → test → save → reset → promote` cycle.
+Three piles: `reviews/` (disposable), `saved/` (curated for Opus), `proposals/` (future).
+Nothing touches production until explicitly promoted.
+
+**Significance.** This is the network coming alive. Not a feature demo — a real
+coordinator asked a real agent to reach a real family member, and it worked. The
+infrastructure (routing, member profiles, shared context) carried its first real
+multi-member interaction. Everything from here builds on this moment.
