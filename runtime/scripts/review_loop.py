@@ -17,9 +17,13 @@ Usage:
     python review_loop.py --since 2h --json --full       # JSON with exchanges array
     python review_loop.py --since 3h --family kano --full --stage   # findings → staging/reviews/ (no mutation)
 
-Staging is a thinking space, not just a quality gate. Opus reads the transcript
-and may surface lessons, member fixes, new protocols, or process gaps we didn't
-know existed. promote is the human filter.
+Without --stage, every run mutates real files. --stage writes to a scratch
+pad instead. Nothing touches production until explicitly promoted.
+
+review_loop catches the mechanical stuff — multi-question, forbidden phrases.
+The contextual stuff (agent contradicting itself about family relationships,
+missing member context that caused confusion, flows with no protocol) needs
+Opus reading the transcript. --stage + --full gives Opus the raw material.
 """
 
 import argparse

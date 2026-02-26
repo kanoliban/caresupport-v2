@@ -76,25 +76,37 @@ How the runtime agent knows who it is and learns from corrections.
 
 ### Review & Learning
 How to evaluate agent behavior and improve the system.
-- `runtime/scripts/review_loop.py` — rule-based conversation analysis (run with `--full` for transcript)
-- `runtime/scripts/review_staging.py` — thinking space: snapshot, restore, diff, promote, list
+
+**Two tiers of review.** The easy tier is mechanical: `review_loop.py` catches
+rule violations (multi-question, forbidden phrases) automatically. The hard tier
+is contextual: the agent calling Degitu both "grandmother" and "aunt" in one
+response, or missing member context that caused the confusion in the first place.
+That needs Opus reading the full transcript.
+
+**Why staging exists.** Without it, every `review_loop` run writes lessons to
+real files. Testing = mutating production data. Staging is a scratch pad —
+nothing touches production until you explicitly promote it. Only things that
+survive scrutiny become permanent.
+
+**The most valuable findings aren't rule violations.** They're things we didn't
+know we needed: a member profile missing the family tree, a flow with no
+protocol, a process gap nobody thought to codify. If we constrain what "good
+output" looks like, we lose these. `proposals/` stays markdown (not schema)
+so Opus can surface whatever it notices.
+
+- `runtime/scripts/review_loop.py` — rule-based analysis (mechanical tier)
+- `runtime/scripts/review_staging.py` — staging: snapshot, restore, diff, promote, list
 - `runtime/learning/skills/` — skill files the agent should follow
 - `runtime/learning/lessons.md` — global corrections
 - `fork/workspace/families/{id}/lessons.md` — per-family corrections
 - `fork/workspace/families/{id}/staging/` — staging directory (baseline, reviews, proposals)
-- **Direct workflow:** run `review_loop --full` → read transcript + findings → suggest lessons, skill edits, spec changes
-- **Staged workflow (safe iteration):**
-  1. `review_staging.py snapshot --family kano` — save baseline before testing
-  2. `review_loop.py --since 3h --family kano --full --stage` — findings → staging/reviews/ (no mutation)
-  3. `review_staging.py diff --family kano` — confirm no live files changed
-  4. `review_staging.py promote --family kano --review {ts} [--items 0,1]` — promote good lessons
-  5. `review_staging.py restore --family kano` — revert to baseline if needed
-- **What Opus can surface from a staged review** (not just lessons):
-  - Lesson — agent behavior fix
-  - Member profile update — missing or wrong context (e.g. family relationships)
-  - New skill or protocol — patterns that need codifying
-  - Process observation — "we don't have a rule for this yet" / "this flow is wrong"
-  - `proposals/` stays markdown (not structured schema) so nothing is excluded
+- **Direct workflow:** `review_loop --full` → findings + transcript → suggest lessons, skill edits, spec changes
+- **Staged workflow:**
+  1. `review_staging.py snapshot --family kano` — save baseline (safety net)
+  2. `review_loop.py --since 3h --family kano --full --stage` — findings → staging/ (no mutation)
+  3. `review_staging.py diff --family kano` — confirm nothing changed
+  4. `review_staging.py promote --family kano --review {ts} [--items 0,1]` — promote what's worth keeping
+  5. `review_staging.py restore --family kano` — revert if needed
 
 ### Care Protocols
 Domain knowledge the agent uses for coordination.

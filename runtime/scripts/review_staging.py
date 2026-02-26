@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 """
-CareSupport Review Staging — Thinking Space for Review
-=======================================================
-Staging buffer for the review loop. Not just a quality gate — a thinking
-space. Opus reads transcripts and may surface lessons, member profile fixes,
-new skills/protocols, or process observations we didn't know we needed.
+CareSupport Review Staging
+===========================
+The problem: every review_loop run writes lessons directly to real files.
+Testing = mutating production data. Resetting means deleting real corrections.
 
-proposals/ stays loose (markdown, not schema) so Opus can surface anything.
-Promote is the human filter — you decide what's worth keeping.
+The fix: a scratch pad. Nothing touches production until you explicitly
+say "promote this." Only things that survive scrutiny become permanent.
+
+There are two tiers of findings. The easy ones are mechanical — rule-based
+checks catch "asked 2 questions" or "used forbidden phrase." The hard ones
+are contextual — the agent calling Degitu both "grandmother" and "aunt" in
+the same response. That needs Opus reading the full transcript, noticing
+the contradiction, and writing a lesson with real clarity.
+
+But the most valuable category isn't rule violations at all. It's things
+we didn't know we needed: a missing member profile field that caused the
+confusion, a flow that has no protocol, a process gap nobody thought to
+codify. If we hardcode what "good output" looks like, we lose these.
+
+proposals/ stays markdown (not structured schema) so Opus can surface
+whatever it notices. The whole point is to not constrain what gets found.
 
 Usage:
     python review_staging.py snapshot --family kano
