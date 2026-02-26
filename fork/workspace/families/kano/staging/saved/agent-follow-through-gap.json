@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-02-26T18:15:00Z",
+  "family_id": "kano",
+  "type": "process_observation",
+  "title": "Agent commits to actions it doesn't follow through on — needs self-referencing loop",
+  "context": "Agent said 'I'll reach out to Solan and Yada.' Never did. No Linq record, no conversation logs. The spinach relay to Liban worked because it happened in the same turn. Multi-step commitments (say you'll do X, then actually do X) have no mechanism.",
+  "insight": "The fix isn't writing a rule for every possible action. The architecture is markdown + reasoning — the agent CAN reason. What's missing is the habit of self-reference: 'I said I'd do X. Did I do it? If not, what's blocking me?' This is closer to a heartbeat or accountability loop than a lesson.",
+  "patterns_observed": [
+    "Intro to Roman: worked (same-turn action, no follow-up needed)",
+    "Spinach relay to Liban: worked (same-turn, needs_outreach mechanism)",
+    "Reach out to Solan/Yada: failed (committed verbally, no follow-through)",
+    "The difference: single-turn vs multi-turn commitment"
+  ],
+  "design_question": "Can the agent self-reference its commitments? Something like: before saying 'I'll do X', check — can I do it right now in this turn? If yes, do it. If no, be honest about the blocker. Don't promise what requires a future turn you may never get.",
+  "recommendation": "Don't build yet. But this is the most architecturally significant observation so far. It points toward a commitments/heartbeat mechanism — not per-action rules, but a reasoning pattern the agent applies to everything it says it'll do."
+}
