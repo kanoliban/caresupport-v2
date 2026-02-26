@@ -14,6 +14,13 @@
       "access_level": "schedule+meds",
       "active": true,
       "relationship": "sister of care recipient"
+    },
+    "+16514109390": {
+      "name": "Solan Kano",
+      "role": "family_caregiver",
+      "access_level": "limited",
+      "active": true,
+      "relationship": "contacted via outreach"
     }
   },
   "care_recipient": "Degitu",

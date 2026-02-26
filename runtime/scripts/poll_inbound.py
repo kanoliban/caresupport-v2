@@ -54,6 +54,46 @@ def save_processed_ids(ids: set):
         json.dump({"sids": id_list, "updated": datetime.now(timezone.utc).isoformat()}, f)
 
 
+def _auto_register_outreach_recipient(family_dir: Path, phone: str, name: str,
+                                       chat_id: str, service: str) -> None:
+    """Register an outreach recipient in routing.json so their replies route back."""
+    routing_path = family_dir / "routing.json"
+    if not routing_path.exists():
+        routing_path = family_dir / "phone_routing.json"
+    if not routing_path.exists():
+        return
+
+    routing = json.loads(routing_path.read_text())
+    members = routing.get("members", {})
+
+    if isinstance(members, dict) and phone in members:
+        if chat_id and not members[phone].get("chat_id"):
+            members[phone]["chat_id"] = chat_id
+            routing_path.write_text(json.dumps(routing, indent=2) + "\n")
+        return
+
+    new_entry = {
+        "name": name,
+        "role": "family_caregiver",
+        "access_level": "limited",
+        "active": True,
+        "relationship": "contacted via outreach",
+    }
+    if chat_id:
+        new_entry["chat_id"] = chat_id
+    if service:
+        new_entry["service"] = service
+
+    if isinstance(members, dict):
+        members[phone] = new_entry
+    elif isinstance(members, list):
+        members.append({"phone": phone, **new_entry})
+    routing["members"] = members
+
+    routing_path.write_text(json.dumps(routing, indent=2) + "\n")
+    print(f"[CareSupport]     📋 Auto-registered {name} ({phone}) for reply routing")
+
+
 async def poll_and_process():
     """Main polling loop: check for new messages, process them, respond."""
     from linq_gateway import list_chats, get_messages, send_message, start_typing, mark_as_read, create_chat
@@ -155,6 +195,13 @@ async def poll_and_process():
                                 if outreach_result.get("success"):
                                     print(f"{log_prefix}     ✅ Outreach sent to {name}")
                                     sent_names.append(name)
+                                    _auto_register_outreach_recipient(
+                                        family_dir=Path(result["member"]["family_dir"]),
+                                        phone=phone,
+                                        name=name,
+                                        chat_id=outreach_result.get("chat_id", ""),
+                                        service=outreach_result.get("service", "unknown"),
+                                    )
                                 else:
                                     print(f"{log_prefix}     ⚠️ Outreach failed for {name}: {json.dumps(outreach_result, default=str)[:200]}")
 
