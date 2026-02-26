@@ -95,18 +95,22 @@ output" looks like, we lose these. `proposals/` stays markdown (not schema)
 so Opus can surface whatever it notices.
 
 - `runtime/scripts/review_loop.py` — rule-based analysis (mechanical tier)
-- `runtime/scripts/review_staging.py` — staging: snapshot, restore, diff, promote, list
+- `runtime/scripts/review_staging.py` — staging: snapshot, restore, reset, save, diff, promote, list
 - `runtime/learning/skills/` — skill files the agent should follow
 - `runtime/learning/lessons.md` — global corrections
 - `fork/workspace/families/{id}/lessons.md` — per-family corrections
-- `fork/workspace/families/{id}/staging/` — staging directory (baseline, reviews, proposals)
+- `fork/workspace/families/{id}/staging/` — three piles with different lifecycles:
+  - `reviews/` — disposable test output. Accumulates with each --stage run. Cleared on reset.
+  - `saved/` — curated material. Reviews flagged as worth revisiting. Survives resets. Opus's reading pile.
+  - `proposals/` — where Opus writes back. (Future use.)
 - **Direct workflow:** `review_loop --full` → findings + transcript → suggest lessons, skill edits, spec changes
 - **Staged workflow:**
-  1. `review_staging.py snapshot --family kano` — save baseline (safety net)
-  2. `review_loop.py --since 3h --family kano --full --stage` — findings → staging/ (no mutation)
-  3. `review_staging.py diff --family kano` — confirm nothing changed
-  4. `review_staging.py promote --family kano --review {ts} [--items 0,1]` — promote what's worth keeping
-  5. `review_staging.py restore --family kano` — revert if needed
+  1. `review_staging.py snapshot --family kano` — lock baseline
+  2. `review_loop.py --since 3h --family kano --full --stage` — test runs accumulate in reviews/
+  3. `review_staging.py save --family kano --review {ts} --name family-tree-confusion` — flag the interesting ones
+  4. `review_staging.py reset --family kano` — restore baseline + clear reviews/ (saved/ untouched)
+  5. `review_staging.py promote --family kano --review {ts} [--items 0,1]` — push approved lessons to production
+  6. Other commands: `diff` (baseline vs live), `list` (all piles), `restore` (baseline only, no clear)
 
 ### Care Protocols
 Domain knowledge the agent uses for coordination.
@@ -184,9 +188,10 @@ python runtime/scripts/linq_gateway.py create --to "+16517037981" --body "Hello"
 # Review agent behavior (rule-based + transcript for Opus analysis)
 python runtime/scripts/review_loop.py --since 24h --family kano --full
 
-# Staged review (findings to scratch space, nothing touches live files)
-python runtime/scripts/review_staging.py snapshot --family kano
-python runtime/scripts/review_loop.py --since 3h --family kano --full --stage
-python runtime/scripts/review_staging.py promote --family kano --review 2026-02-26_061700
-python runtime/scripts/review_staging.py restore --family kano
+# Staged review cycle
+python runtime/scripts/review_staging.py snapshot --family kano          # lock baseline
+python runtime/scripts/review_loop.py --since 3h --family kano --full --stage  # test → reviews/
+python runtime/scripts/review_staging.py save --family kano --review {ts} --name family-tree-confusion  # keep interesting ones
+python runtime/scripts/review_staging.py reset --family kano             # restore + clear reviews/ (saved/ untouched)
+python runtime/scripts/review_staging.py promote --family kano --review {ts} --items 0,1  # push to production
 ```

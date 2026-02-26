@@ -23,11 +23,30 @@ codify. If we hardcode what "good output" looks like, we lose these.
 proposals/ stays markdown (not structured schema) so Opus can surface
 whatever it notices. The whole point is to not constrain what gets found.
 
+Three piles with different lifecycles:
+
+  reviews/   — disposable test output. Accumulates with each --stage run.
+               Cleared on reset. You don't care about most of these.
+  saved/     — curated material. Reviews you flagged as worth revisiting.
+               Survives resets. This is Opus's reading pile when it writes
+               proposals — the transcripts and findings worth deep analysis.
+  proposals/ — where Opus writes back. (Future use.)
+
+The cycle between tests:
+
+  snapshot  →  lock baseline
+  --stage   →  test runs accumulate in reviews/
+  save      →  flag the interesting ones before they get cleared
+  reset     →  restore baseline + clear reviews/ (saved/ untouched)
+  promote   →  push approved lessons to production
+
 Usage:
     python review_staging.py snapshot --family kano
     python review_staging.py restore  --family kano
+    python review_staging.py reset    --family kano
     python review_staging.py diff     --family kano
     python review_staging.py list     --family kano
+    python review_staging.py save     --family kano --review 2026-02-26_063623 --name family-tree-confusion
     python review_staging.py promote  --family kano --review 2026-02-26_061700 [--items 0,1]
 """
 
@@ -64,6 +83,10 @@ def _baseline_dir(family_id: str) -> Path:
 
 def _reviews_dir(family_id: str) -> Path:
     return _staging_dir(family_id) / "reviews"
+
+
+def _saved_dir(family_id: str) -> Path:
+    return _staging_dir(family_id) / "saved"
 
 
 # ─── Commands ────────────────────────────────────────────────────────────
@@ -127,6 +150,66 @@ def cmd_restore(family_id: str) -> None:
         print(f"  {item}")
 
 
+def cmd_reset(family_id: str) -> None:
+    """Restore baseline + clear reviews/. saved/ is untouched.
+
+    Use between test cycles so old test output doesn't mix with new.
+    If a review has findings worth keeping, save it first.
+    """
+    baseline = _baseline_dir(family_id)
+    if not baseline.exists():
+        print("No baseline found. Run 'snapshot' first.", file=sys.stderr)
+        sys.exit(1)
+
+    # Restore live files
+    cmd_restore(family_id)
+
+    # Clear disposable test output
+    reviews = _reviews_dir(family_id)
+    cleared = 0
+    if reviews.exists():
+        review_files = list(reviews.glob("*.json"))
+        cleared = len(review_files)
+        shutil.rmtree(reviews)
+    reviews.mkdir(parents=True, exist_ok=True)
+
+    saved = _saved_dir(family_id)
+    saved_count = len(list(saved.glob("*.json"))) if saved.exists() else 0
+
+    print(f"Reset complete. {cleared} review(s) cleared. {saved_count} saved review(s) untouched.")
+
+
+def cmd_save(family_id: str, review_name: str, save_name: str) -> None:
+    """Move a review from reviews/ to saved/ with a human-readable name.
+
+    saved/ is the curated pile — reviews you flagged as worth revisiting.
+    It survives resets. When Opus sits down to write proposals, this is
+    the material worth deep analysis: not the raw dump of every test run,
+    but the transcripts where something interesting happened.
+    """
+    reviews = _reviews_dir(family_id)
+
+    candidates = sorted(reviews.glob(f"{review_name}*.json"))
+    if not candidates:
+        print(f"No review matching '{review_name}' in {reviews}", file=sys.stderr)
+        sys.exit(1)
+    if len(candidates) > 1:
+        print(f"Ambiguous: {[c.stem for c in candidates]}", file=sys.stderr)
+        sys.exit(1)
+
+    saved = _saved_dir(family_id)
+    saved.mkdir(parents=True, exist_ok=True)
+
+    src = candidates[0]
+    dest = saved / f"{save_name}.json"
+    if dest.exists():
+        print(f"Already exists: {dest}", file=sys.stderr)
+        sys.exit(1)
+
+    shutil.move(str(src), str(dest))
+    print(f"Saved: {src.name} → saved/{save_name}.json")
+
+
 def cmd_diff(family_id: str) -> None:
     """Show unified diff between baseline and current live files."""
     baseline = _baseline_dir(family_id)
@@ -171,10 +254,32 @@ def cmd_diff(family_id: str) -> None:
         print("No differences between baseline and live files.")
 
 
+def _list_json_dir(label: str, dir_path: Path) -> None:
+    """Print summary of JSON files in a staging subdirectory."""
+    if not dir_path.exists():
+        print(f"{label}: (none)")
+        return
+    files = sorted(dir_path.glob("*.json"))
+    if not files:
+        print(f"{label}: (none)")
+        return
+    print(f"{label} ({len(files)}):")
+    for rf in files:
+        try:
+            data = json.loads(rf.read_text())
+        except (json.JSONDecodeError, OSError):
+            print(f"  {rf.stem}  (unreadable)")
+            continue
+        n_findings = len(data.get("findings", []))
+        n_lessons = len(data.get("lessons", []))
+        n_exchanges = data.get("exchange_count", 0)
+        since = data.get("since", "?")
+        print(f"  {rf.stem}  since={since}  exchanges={n_exchanges}  findings={n_findings}  lessons={n_lessons}")
+
+
 def cmd_list(family_id: str) -> None:
-    """List baseline status and pending review files."""
+    """List baseline, pending reviews, and saved reviews."""
     baseline = _baseline_dir(family_id)
-    reviews = _reviews_dir(family_id)
 
     print(f"Family: {family_id}")
     print()
@@ -192,26 +297,9 @@ def cmd_list(family_id: str) -> None:
         print("Baseline: (none)")
 
     print()
-
-    if reviews.exists():
-        review_files = sorted(reviews.glob("*.json"))
-        if review_files:
-            print(f"Reviews ({len(review_files)}):")
-            for rf in review_files:
-                try:
-                    data = json.loads(rf.read_text())
-                except (json.JSONDecodeError, OSError):
-                    print(f"  {rf.stem}  (unreadable)")
-                    continue
-                n_findings = len(data.get("findings", []))
-                n_lessons = len(data.get("lessons", []))
-                n_exchanges = data.get("exchange_count", 0)
-                since = data.get("since", "?")
-                print(f"  {rf.stem}  since={since}  exchanges={n_exchanges}  findings={n_findings}  lessons={n_lessons}")
-        else:
-            print("Reviews: (none)")
-    else:
-        print("Reviews: (none)")
+    _list_json_dir("Reviews (disposable test output)", _reviews_dir(family_id))
+    print()
+    _list_json_dir("Saved (curated for Opus)", _saved_dir(family_id))
 
 
 def cmd_promote(family_id: str, review_name: str, items: list[int] | None) -> None:
@@ -261,9 +349,14 @@ def main():
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("snapshot", "restore", "diff", "list"):
+    for name in ("snapshot", "restore", "reset", "diff", "list"):
         p = sub.add_parser(name)
         p.add_argument("--family", required=True, help="Family ID (e.g., kano)")
+
+    save_p = sub.add_parser("save")
+    save_p.add_argument("--family", required=True, help="Family ID")
+    save_p.add_argument("--review", required=True, help="Review timestamp (e.g., 2026-02-26_063623)")
+    save_p.add_argument("--name", required=True, help="Human-readable name (e.g., family-tree-confusion)")
 
     promote_p = sub.add_parser("promote")
     promote_p.add_argument("--family", required=True, help="Family ID")
@@ -276,10 +369,14 @@ def main():
         cmd_snapshot(args.family)
     elif args.command == "restore":
         cmd_restore(args.family)
+    elif args.command == "reset":
+        cmd_reset(args.family)
     elif args.command == "diff":
         cmd_diff(args.family)
     elif args.command == "list":
         cmd_list(args.family)
+    elif args.command == "save":
+        cmd_save(args.family, args.review, args.name)
     elif args.command == "promote":
         item_list = None
         if args.items is not None:
