@@ -15,11 +15,13 @@ Usage:
     python review_loop.py --since 2h --full              # include full transcript
     python review_loop.py --since 2h --dry-run           # preview only
     python review_loop.py --since 2h --json --full       # JSON with exchanges array
+    python review_loop.py --since 3h --family kano --full --stage   # findings → staging/reviews/ (no mutation)
 """
 
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, asdict
@@ -575,6 +577,65 @@ def format_json_output(findings: list[Finding], exchange_count: int,
     return json.dumps(output, indent=2)
 
 
+# ─── Staging ─────────────────────────────────────────────────────────────
+
+SNAPSHOT_FILES = ["family.md", "lessons.md"]
+SNAPSHOT_DIRS = ["members"]
+
+
+def _staging_dir(family_id: str) -> Path:
+    return paths.families / family_id / "staging"
+
+
+def _ensure_baseline(family_id: str) -> None:
+    """Create baseline snapshot if it doesn't exist yet (first-run safety net)."""
+    baseline = _staging_dir(family_id) / "baseline"
+    if baseline.exists():
+        return
+    family_dir = paths.families / family_id
+    baseline.mkdir(parents=True, exist_ok=True)
+    for name in SNAPSHOT_FILES:
+        src = family_dir / name
+        if src.exists():
+            shutil.copy2(src, baseline / name)
+    for name in SNAPSHOT_DIRS:
+        src = family_dir / name
+        if src.is_dir():
+            shutil.copytree(src, baseline / name, dirs_exist_ok=True)
+
+
+def _write_staging_review(family_id: str, findings: list[Finding],
+                          exchanges: list[Signal], since_label: str) -> Path:
+    """Write findings + lessons + exchanges to staging/reviews/{ts}.json."""
+    reviews_dir = _staging_dir(family_id) / "reviews"
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now(timezone.utc)
+    filename = ts.strftime("%Y-%m-%d_%H%M%S") + ".json"
+
+    unique_lessons = list(dict.fromkeys(f.lesson for f in findings if f.lesson))
+    payload = {
+        "timestamp": ts.isoformat(),
+        "family_id": family_id,
+        "since": since_label,
+        "exchange_count": len(exchanges),
+        "findings": [asdict(f) for f in findings],
+        "lessons": unique_lessons,
+        "exchanges": [
+            {
+                "timestamp": ex.timestamp.isoformat(),
+                "user": ex.data.get("inbound", ""),
+                "agent": ex.data.get("outbound", ""),
+            }
+            for ex in exchanges
+        ],
+    }
+
+    out_path = reviews_dir / filename
+    out_path.write_text(json.dumps(payload, indent=2))
+    return out_path
+
+
 # ─── Main ───────────────────────────────────────────────────────────────
 
 def main():
@@ -586,7 +647,12 @@ def main():
     parser.add_argument("--full", action="store_true", help="Include full transcript for deep analysis")
     parser.add_argument("--dry-run", action="store_true", help="Show findings without writing lessons")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--stage", action="store_true", help="Write findings to staging/ instead of real files")
     args = parser.parse_args()
+
+    if args.stage and not args.family:
+        print("--stage requires --family", file=sys.stderr)
+        sys.exit(1)
 
     try:
         delta = parse_since(args.since)
@@ -612,7 +678,7 @@ def main():
         if f.category == "operational":
             print(f"[ALERT] {f.title}: {f.evidence}", file=sys.stderr)
 
-    # Output
+    # Output to stdout (unchanged regardless of --stage)
     full_exchanges = exchanges if args.full else None
     if args.json:
         print(format_json_output(findings, len(exchanges), exchanges=full_exchanges))
@@ -620,7 +686,16 @@ def main():
         print(format_digest(findings, len(exchanges), args.family, args.since,
                             exchanges=full_exchanges))
 
-    # Write lessons
+    # Staging mode: write to staging dir, skip lesson mutation
+    if args.stage:
+        _ensure_baseline(args.family)
+        review_path = _write_staging_review(
+            args.family, findings, exchanges, args.since,
+        )
+        print(f"  📂 Staged to {review_path}", file=sys.stderr)
+        return
+
+    # Write lessons (only when NOT staging)
     lesson_count = write_lessons(findings, args.family, dry_run=args.dry_run)
     if lesson_count and not args.json:
         suffix = " (dry-run, not written)" if args.dry_run else ""

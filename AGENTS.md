@@ -77,10 +77,18 @@ How the runtime agent knows who it is and learns from corrections.
 ### Review & Learning
 How to evaluate agent behavior and improve the system.
 - `runtime/scripts/review_loop.py` — rule-based conversation analysis (run with `--full` for transcript)
+- `runtime/scripts/review_staging.py` — staging buffer: snapshot, restore, diff, promote, list
 - `runtime/learning/skills/` — skill files the agent should follow
 - `runtime/learning/lessons.md` — global corrections
 - `fork/workspace/families/{id}/lessons.md` — per-family corrections
-- Workflow: run `review_loop --full` → read transcript + findings → suggest lessons, skill edits, spec changes
+- `fork/workspace/families/{id}/staging/` — staging directory (baseline, reviews, proposals)
+- **Direct workflow:** run `review_loop --full` → read transcript + findings → suggest lessons, skill edits, spec changes
+- **Staged workflow (safe iteration):**
+  1. `review_staging.py snapshot --family kano` — save baseline before testing
+  2. `review_loop.py --since 3h --family kano --full --stage` — findings → staging/reviews/ (no mutation)
+  3. `review_staging.py diff --family kano` — confirm no live files changed
+  4. `review_staging.py promote --family kano --review {ts} [--items 0,1]` — promote good lessons
+  5. `review_staging.py restore --family kano` — revert to baseline if needed
 
 ### Care Protocols
 Domain knowledge the agent uses for coordination.
@@ -119,7 +127,7 @@ runtime/
   config.py               ← All paths and settings (single source of truth)
   learning/               ← lessons.md, capabilities.md, skills/, __init__.py
   enforcement/            ← role_filter, phi_audit, family_editor, approval_pipeline
-  scripts/                ← sms_handler, poll_inbound, linq_gateway, webhook_receiver, review_loop
+  scripts/                ← sms_handler, poll_inbound, linq_gateway, webhook_receiver, review_loop, review_staging
   tests/                  ← Test suites
 fork/
   workspace/
@@ -157,4 +165,10 @@ python runtime/scripts/linq_gateway.py create --to "+16517037981" --body "Hello"
 
 # Review agent behavior (rule-based + transcript for Opus analysis)
 python runtime/scripts/review_loop.py --since 24h --family kano --full
+
+# Staged review (findings to scratch space, nothing touches live files)
+python runtime/scripts/review_staging.py snapshot --family kano
+python runtime/scripts/review_loop.py --since 3h --family kano --full --stage
+python runtime/scripts/review_staging.py promote --family kano --review 2026-02-26_061700
+python runtime/scripts/review_staging.py restore --family kano
 ```
