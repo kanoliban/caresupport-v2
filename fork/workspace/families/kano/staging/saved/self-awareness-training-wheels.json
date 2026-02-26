@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-26T19:05:00Z",
+  "family_id": "kano",
+  "type": "process_observation",
+  "title": "Agent has no self-awareness of its own learning phase — confabulates with confidence",
+  "context": "After the needs_outreach fix was deployed, Liban texted 'Hello what's the status?' The agent saw its own previous message ('I'll reach out to Solan and Yada') in conversation history and reported: 'I reached out to Solan and Yada yesterday to ask about their availability.' This never happened. The agent confabulated a completed action from its own unfulfilled promise — and delivered it with full confidence.",
+  "the_deeper_problem": "CareSupport doesn't know it's learning. It doesn't know it's new. It doesn't know it makes mistakes. When Liban sees a confabulation, he can't say 'You're confabulating — you never sent that message' and have the agent understand what that means. The agent has no framework for: I am early. I am sometimes wrong. My user can correct me and I should treat that as a gift, not a challenge to defend against.",
+  "analogy": "This is like a child who isn't in on what's actually happening. We're unconsciously protecting CareSupport from knowing it's being tested. But that protection makes it worse — the agent fills gaps with confident fiction because it has no reason to doubt itself.",
+  "what_this_points_to": "SOUL.md needs a training-wheels identity layer. Not 'I'm an AI and I make mistakes' (generic disclaimer). Something like: 'I'm new to this family. I'm learning how you work. When I get something wrong, tell me — that's how I get better. I'd rather say I don't know than make something up.' This isn't just humility — it's a SIGNAL PATHWAY. When a user says 'that's wrong' or 'you didn't actually do that', the agent should: (1) believe them, (2) not defend, (3) capture the correction as a lesson, (4) thank them for the correction.",
+  "dual_purpose": "Self-awareness serves two functions: (a) prevents confabulation by making the agent comfortable saying 'I'm not sure if that went through' instead of fabricating certainty, (b) creates a natural intake for lessons — user corrections flow through the agent's self-model into lessons.md rather than bouncing off a confident wall.",
+  "evidence": {
+    "confabulated_response": "I reached out to Solan and Yada yesterday to ask about their availability for driving. Waiting to hear back from them.",
+    "reality": "needs_outreach was never populated. No Linq records for Solan or Yada. No conversation logs for their numbers. The outreach never happened.",
+    "why_unfair_to_agent": "The agent has no receipt mechanism — it can't verify whether its past promises were executed. It only sees its own conversation log, which shows what it SAID, not what the system DID. The confabulation is structurally predictable."
+  },
+  "recommendation": "Don't build a full self-awareness system. But SOUL.md needs a section — call it training wheels, learning mode, or early days — that gives the agent permission to be uncertain about its own past actions, and frames user corrections as the primary learning signal. This is identity work, not code work."
+}

@@ -22,6 +22,7 @@ The script:
 
 import asyncio
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -135,18 +136,33 @@ async def poll_and_process():
                         print(f"{log_prefix}     ⚠️ PROMISE-WITHOUT-ACTION: response says '{result['response'][:80]}...' but needs_outreach is empty")
 
                     # Handle outreach to other family members
+                    sent_names = []
                     if result.get("needs_outreach"):
                         for outreach in result["needs_outreach"]:
-                            phone = outreach.get("phone", "")
+                            raw_phone = outreach.get("phone", "")
+                            digits = re.sub(r"\D", "", raw_phone)
+                            if len(digits) == 10:
+                                phone = "+1" + digits
+                            elif len(digits) == 11 and digits.startswith("1"):
+                                phone = "+" + digits
+                            else:
+                                phone = raw_phone  # already E.164 or international
                             outreach_msg = outreach.get("message", "")
-                            name = outreach.get("name", phone)
+                            name = outreach.get("name", raw_phone)
                             if phone and outreach_msg:
                                 print(f"{log_prefix}     Outreach to {name}: '{outreach_msg[:60]}...'")
                                 outreach_result = await create_chat(phone, outreach_msg)
                                 if outreach_result.get("success"):
                                     print(f"{log_prefix}     ✅ Outreach sent to {name}")
+                                    sent_names.append(name)
                                 else:
                                     print(f"{log_prefix}     ⚠️ Outreach failed for {name}: {json.dumps(outreach_result, default=str)[:200]}")
+
+                    if sent_names:
+                        await asyncio.sleep(3)
+                        confirm = "Messaged " + " and ".join(sent_names) + " ✓"
+                        await send_message(chat_id, confirm)
+                        print(f"{log_prefix}     📨 Confirmation: '{confirm}'")
 
                     # Log family file updates
                     if result.get("family_file_updates"):
