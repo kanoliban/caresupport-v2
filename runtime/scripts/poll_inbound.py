@@ -124,6 +124,16 @@ async def poll_and_process():
                     else:
                         print(f"{log_prefix}     ⚠️ Send failed: {json.dumps(send_result, default=str)[:200]}")
 
+                    # Detect promise-without-action: agent said "I'll reach out" but needs_outreach is empty
+                    _OUTREACH_PHRASES = [
+                        "i'll reach out", "i'll queue", "i'll contact", "i'll text",
+                        "i'll message", "i'll send", "i'll let them know",
+                        "i'll let her know", "i'll let him know",
+                    ]
+                    sms_lower = result["response"].lower()
+                    if any(p in sms_lower for p in _OUTREACH_PHRASES) and not result.get("needs_outreach"):
+                        print(f"{log_prefix}     ⚠️ PROMISE-WITHOUT-ACTION: response says '{result['response'][:80]}...' but needs_outreach is empty")
+
                     # Handle outreach to other family members
                     if result.get("needs_outreach"):
                         for outreach in result["needs_outreach"]:
