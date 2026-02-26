@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-02-26T08:10:00Z",
+  "family_id": "kano",
+  "type": "process_observation",
+  "title": "Agent should capture tasks from conversation — tasks.md per family",
+  "context": "Roman said 'Tell Liban to bring the spinach from Target.' The agent relayed it, but there's no persistent record. If Liban hadn't seen the message immediately, the task is lost. Similarly, when users say 'remember to pick up meds tomorrow' or 'don't forget the appointment Thursday' — those are tasks the agent hears but has nowhere to write them down.",
+  "idea": "A tasks.md per family (or per member) where the agent writes down things it's told to remember or relay. Not a full task engine — just a place for 'spinach from Target' and 'pick up meds tomorrow' to live until they're done.",
+  "recommendation": "Don't build yet. Watch for more examples during testing. How often do users give the agent things to remember? What's the shape — errands, reminders, care tasks, relay messages? Let the pattern emerge."
+}

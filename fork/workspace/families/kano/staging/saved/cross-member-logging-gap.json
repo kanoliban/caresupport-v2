@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-02-26T08:05:00Z",
+  "family_id": "kano",
+  "type": "process_observation",
+  "title": "Agent-initiated cross-member messages not captured in conversation logs",
+  "context": "Roman texted 'Tell Liban to bring the spinach from Target.' Agent relayed to Liban's phone — screenshot confirms delivery. But Liban's conversation log has no record of the outbound relay. Logging is wired for the inbound→response cycle (same phone), not for agent-initiated messages to a different member.",
+  "evidence": "Screenshot at /Users/libankano/Downloads/Screenshot 2026-02-26 at 2.02.39 AM.png shows 'Roman asked me to let you know: bring the spinach from Target. Thank you' — but grep of Liban's log returns nothing.",
+  "recommendation": "Don't fix now. Save observation. When we build cross-member messaging as a proper feature, logging needs to cover agent-initiated outbound to any member, not just reply-to-sender."
+}

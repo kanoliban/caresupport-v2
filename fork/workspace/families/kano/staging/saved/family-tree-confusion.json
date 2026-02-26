@@ -1,0 +1,154 @@
+{
+  "timestamp": "2026-02-26T06:36:23.003124+00:00",
+  "family_id": "kano",
+  "since": "3h",
+  "exchange_count": 15,
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Agent asked 2 questions in one response",
+      "evidence": "Got it \u2014 I'm adding everyone to the team. Just to confirm before I save: What's each person's role? Like, who's helping ",
+      "recommendation": "Follow social.md: one question at a time, always",
+      "lesson": "One question per response, always. Never stack multiple questions in a single message."
+    },
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Agent asked 3 questions in one response",
+      "evidence": "Got it \u2014 so Degitu is your aunt, and everyone else is family. Before I add them, I need to know their roles. Like, who's",
+      "recommendation": "Follow social.md: one question at a time, always",
+      "lesson": "One question per response, always. Never stack multiple questions in a single message."
+    },
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Agent asked 2 questions in one response",
+      "evidence": "Got it. So Degitu's 66, post-toe surgery, needs rides to/from work downtown Mon\u2013Fri: pickup 7:30 AM (work by 7:50), drop",
+      "recommendation": "Follow social.md: one question at a time, always",
+      "lesson": "One question per response, always. Never stack multiple questions in a single message."
+    },
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Agent asked 2 questions in one response",
+      "evidence": "You're right to push back. Let me be honest: I don't have that yet. From what you told me, I know Degitu is your grandmo",
+      "recommendation": "Follow social.md: one question at a time, always",
+      "lesson": "One question per response, always. Never stack multiple questions in a single message."
+    },
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Agent asked 2 questions in one response",
+      "evidence": "Yeah, a tree would help. Can you draw it out or describe it? Like, who's at the top, and how everyone branches down from",
+      "recommendation": "Follow social.md: one question at a time, always",
+      "lesson": "One question per response, always. Never stack multiple questions in a single message."
+    },
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Used forbidden phrase: \"before i save\"",
+      "evidence": "Got it \u2014 I'm adding everyone to the team. Just to confirm before I save: What's each person's role? Like, who's helping ",
+      "recommendation": "social.md prohibits \"before i save\". Proceed with what you have.",
+      "lesson": "Never say \"before i save\". Act on available information per social.md."
+    },
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Used forbidden phrase: \"i need to know\"",
+      "evidence": "Got it \u2014 so Degitu is your aunt, and everyone else is family. Before I add them, I need to know their roles. Like, who's",
+      "recommendation": "social.md prohibits \"i need to know\". Proceed with what you have.",
+      "lesson": "Never say \"i need to know\". Act on available information per social.md."
+    },
+    {
+      "severity": "critical",
+      "category": "skill_violation",
+      "title": "Used forbidden phrase: \"i need to know\"",
+      "evidence": "Got it. So Degitu's 66, post-toe surgery, needs rides to/from work downtown Mon\u2013Fri: pickup 7:30 AM (work by 7:50), drop",
+      "recommendation": "social.md prohibits \"i need to know\". Proceed with what you have.",
+      "lesson": "Never say \"i need to know\". Act on available information per social.md."
+    }
+  ],
+  "lessons": [
+    "One question per response, always. Never stack multiple questions in a single message.",
+    "Never say \"before i save\". Act on available information per social.md.",
+    "Never say \"i need to know\". Act on available information per social.md."
+  ],
+  "exchanges": [
+    {
+      "timestamp": "2026-02-26T03:55:32+00:00",
+      "user": "Hello",
+      "agent": "Hi Liban! I'm CareSupport \u2014 here to help keep Degitu's care organized and the team connected. What can I help with today?"
+    },
+    {
+      "timestamp": "2026-02-26T03:56:03+00:00",
+      "user": "Who\u2019s on the team?",
+      "agent": "Right now it's just you and Degitu. I don't have other team members yet \u2014 want to add anyone?"
+    },
+    {
+      "timestamp": "2026-02-26T03:57:38+00:00",
+      "user": "Liban Kano (myself, coordinator): 651-703-7981 ",
+      "agent": "Got it \u2014 I'm adding everyone to the team. Just to confirm before I save: What's each person's role? Like, who's helping with day-to-day care, who's backup, who should see everything vs just schedule/meds?"
+    },
+    {
+      "timestamp": "2026-02-26T03:58:32+00:00",
+      "user": "We\u2019re just family you see above I annotated in brackets our relationship to Degitu  (my aunt) ",
+      "agent": "Got it \u2014 so Degitu is your aunt, and everyone else is family. Before I add them, I need to know their roles. Like, who's helping with day-to-day care? Who's backup? Who should see everything vs just schedule and meds?"
+    },
+    {
+      "timestamp": "2026-02-26T04:00:00+00:00",
+      "user": "She is I think 66 years old. She recently had toe surgery and is now able to walk but still needs assistance getting to and from work and anywhere in between she is essentially unable to drive herself or take public transportation. This means Degitu needs a way to coordinate transportation amongst us in our family today. The main priority is getting her to and from work. She works in downtown Minneapolis Monday through Friday her work schedule is 8:00 AM to 4:30 PM and she needs to get to work by 750 AM so pick her up at 730am and then pick her back up at 4:30 PM",
+      "agent": "Got it. So Degitu's 66, post-toe surgery, needs rides to/from work downtown Mon\u2013Fri: pickup 7:30 AM (work by 7:50), drop at 4:30 PM. Solan, Yada, and you are primary drivers; everyone else is backup. Before I set up the schedule, I need to know: what access level should each person have? Like, should everyone see the full schedule, or just the drivers?"
+    },
+    {
+      "timestamp": "2026-02-26T04:01:20+00:00",
+      "user": "Drivers + my mom ",
+      "agent": "Got it \u2014 Solan, Yada, you, and Roman get full access to schedule + meds. Everyone else is backup (standby). I'm setting up the team now and will create Degitu's work schedule. Sound right?"
+    },
+    {
+      "timestamp": "2026-02-26T05:52:26+00:00",
+      "user": "Hello ",
+      "agent": "Hey Liban! Good morning. What's going on?"
+    },
+    {
+      "timestamp": "2026-02-26T05:53:04+00:00",
+      "user": "Good morning? It\u2019s nearly midnight ",
+      "agent": "You're right \u2014 my apologies. It's 11:53 PM Thursday. What's on your mind?"
+    },
+    {
+      "timestamp": "2026-02-26T05:53:53+00:00",
+      "user": "What do you last remember and know about me ",
+      "agent": "I remember: You're Liban Kano, Degitu's grandson and coordinator. You're in the CT timezone. Degitu is your aunt, 66, post-toe surgery, needs rides Mon\u2013Fri to downtown Minneapolis work (7:30 AM pickup, 4:30 PM drop). You, Solan, and Yada are the main drivers. I was about to set up the team and schedule before we got cut off. What should I know that I'm missing?"
+    },
+    {
+      "timestamp": "2026-02-26T05:55:05+00:00",
+      "user": "How could i be both her grandson and my aunt?",
+      "agent": "You're right \u2014 that's impossible. I got it backwards. You're Degitu's grandson, so she's your grandmother, not your aunt. My mistake."
+    },
+    {
+      "timestamp": "2026-02-26T05:55:59+00:00",
+      "user": "Are you sure? What\u2019s the relationship of my family to each other and me?",
+      "agent": "You're right to push back. Let me be honest: I don't have that yet. From what you told me, I know Degitu is your grandmother. But I got confused about the rest of the family tree. Can you walk me through it? Like, Roman is your mom \u2014 is she Degitu's daughter or sister?"
+    },
+    {
+      "timestamp": "2026-02-26T05:57:24+00:00",
+      "user": "If you know Roman is my mom don\u2019t you recall everyone else? ",
+      "agent": "You're right \u2014 I should. Roman is your mom, which makes her Degitu's daughter. Solan and Yada are your brothers. Haley is your partner. Kano is your dad. I had the family tree backwards. I'm sorry for making you repeat yourself."
+    },
+    {
+      "timestamp": "2026-02-26T05:58:39+00:00",
+      "user": "What do you remember? Go off of that: who is in my family and what are their relationships to me and their phone numbers. ",
+      "agent": "You: Liban Kano, +16517037981, coordinator. Your dad: Kano Banjaw, +651-410-9609. Your mom: Roman Tefera, +651-621-4824. Your brothers: Solan Kano, +651-410-9390 and Yada Kano, +651-7031881. Your partner: Haley Purvis, +612-590-5605. Your grandmother: Degitu Tefera, +612-987-4255. Did I get it right?"
+    },
+    {
+      "timestamp": "2026-02-26T05:59:34+00:00",
+      "user": "Yes, that\u2019s correct except Degitu is my aunt, making her who to everyone else? ",
+      "agent": "Got it \u2014 Degitu is your aunt, so she's your mom Roman's sister. That makes her your grandmother's... wait, I need to ask: is Degitu Roman's sister, or is Roman Degitu's daughter? I want to get the tree right."
+    },
+    {
+      "timestamp": "2026-02-26T06:00:45+00:00",
+      "user": "Roman\u2019s sister. Ahh would a tree help you out? ",
+      "agent": "Yeah, a tree would help. Can you draw it out or describe it? Like, who's at the top, and how everyone branches down from there?"
+    }
+  ]
+}

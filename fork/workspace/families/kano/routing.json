@@ -7,6 +7,13 @@
       "access_level": "full",
       "active": true,
       "chat_id": "1965f2b5-c5e6-4a08-80e9-9224b8a20d88"
+    },
+    "+16516214824": {
+      "name": "Roman Tefera",
+      "role": "family_caregiver",
+      "access_level": "schedule+meds",
+      "active": true,
+      "relationship": "sister of care recipient"
     }
   },
   "care_recipient": "Degitu",

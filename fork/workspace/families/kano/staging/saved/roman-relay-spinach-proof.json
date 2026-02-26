@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-02-26T07:59:09.573243+00:00",
+  "family_id": "kano",
+  "since": "1h",
+  "exchange_count": 7,
+  "findings": [],
+  "lessons": [],
+  "exchanges": [
+    {
+      "timestamp": "2026-02-26T07:01:21+00:00",
+      "user": "Hello ?",
+      "agent": "Hey Liban! Still here. You were about to send me a family tree. Did you want to draw that out, or should I just confirm the structure I have: Degitu is your aunt (Roman's sister), making her your grandmother's sister?"
+    },
+    {
+      "timestamp": "2026-02-26T07:02:27+00:00",
+      "user": "No - she is my aunt. Let\u2019s move on. What next? ",
+      "agent": "Got it \u2014 Degitu's your aunt. Let's set up the team and schedule. I have everyone's contact info. Should I go ahead and add Solan, Yada, Roman, and Haley to the care team with their roles (drivers + backup), or do you want to adjust anything first?"
+    },
+    {
+      "timestamp": "2026-02-26T07:03:04+00:00",
+      "user": "Yes add my mom ",
+      "agent": "Adding your mom Roman to the team with full access to schedule + meds. Solan and Yada coming next \u2014 want me to add them too, or just Roman for now?"
+    },
+    {
+      "timestamp": "2026-02-26T07:03:54+00:00",
+      "user": "Add Roman only ",
+      "agent": "Got it \u2014 adding Roman to the team now with full access to schedule + meds. Anything else you need set up before we lock in Degitu's work schedule?"
+    },
+    {
+      "timestamp": "2026-02-26T07:04:34+00:00",
+      "user": "Introduce yourself to her. Be nice that\u2019s my mom. ",
+      "agent": "Hi Roman! I'm CareSupport \u2014 I help keep Degitu's care organized and the team connected. Liban set me up to manage her schedule, medications, and keep everyone in the loop. Looking forward to working with you."
+    },
+    {
+      "timestamp": "2026-02-26T07:06:20+00:00",
+      "user": "The sound is okay ",
+      "agent": "Got it \u2014 sound is good. Anything else you need right now?"
+    },
+    {
+      "timestamp": "2026-02-26T07:07:47+00:00",
+      "user": "Tell Liban to bring the spinach from target thank you",
+      "agent": "I'll queue a message to Liban about the spinach from Target."
+    }
+  ]
+}
