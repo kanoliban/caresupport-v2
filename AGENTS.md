@@ -77,7 +77,7 @@ How the runtime agent knows who it is and learns from corrections.
 ### Review & Learning
 How to evaluate agent behavior and improve the system.
 - `runtime/scripts/review_loop.py` — rule-based conversation analysis (run with `--full` for transcript)
-- `runtime/scripts/review_staging.py` — staging buffer: snapshot, restore, diff, promote, list
+- `runtime/scripts/review_staging.py` — thinking space: snapshot, restore, diff, promote, list
 - `runtime/learning/skills/` — skill files the agent should follow
 - `runtime/learning/lessons.md` — global corrections
 - `fork/workspace/families/{id}/lessons.md` — per-family corrections
@@ -89,6 +89,12 @@ How to evaluate agent behavior and improve the system.
   3. `review_staging.py diff --family kano` — confirm no live files changed
   4. `review_staging.py promote --family kano --review {ts} [--items 0,1]` — promote good lessons
   5. `review_staging.py restore --family kano` — revert to baseline if needed
+- **What Opus can surface from a staged review** (not just lessons):
+  - Lesson — agent behavior fix
+  - Member profile update — missing or wrong context (e.g. family relationships)
+  - New skill or protocol — patterns that need codifying
+  - Process observation — "we don't have a rule for this yet" / "this flow is wrong"
+  - `proposals/` stays markdown (not structured schema) so nothing is excluded
 
 ### Care Protocols
 Domain knowledge the agent uses for coordination.

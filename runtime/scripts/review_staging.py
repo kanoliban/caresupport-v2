@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 """
-CareSupport Review Staging — Snapshot, Promote & Restore
-=========================================================
-Manages the staging buffer for the review loop. Test runs produce findings
-in scratch space; good findings get promoted to real files; bad ones get
-discarded.
+CareSupport Review Staging — Thinking Space for Review
+=======================================================
+Staging buffer for the review loop. Not just a quality gate — a thinking
+space. Opus reads transcripts and may surface lessons, member profile fixes,
+new skills/protocols, or process observations we didn't know we needed.
+
+proposals/ stays loose (markdown, not schema) so Opus can surface anything.
+Promote is the human filter — you decide what's worth keeping.
 
 Usage:
     python review_staging.py snapshot --family kano

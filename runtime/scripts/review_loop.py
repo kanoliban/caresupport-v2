@@ -16,6 +16,10 @@ Usage:
     python review_loop.py --since 2h --dry-run           # preview only
     python review_loop.py --since 2h --json --full       # JSON with exchanges array
     python review_loop.py --since 3h --family kano --full --stage   # findings → staging/reviews/ (no mutation)
+
+Staging is a thinking space, not just a quality gate. Opus reads the transcript
+and may surface lessons, member fixes, new protocols, or process gaps we didn't
+know existed. promote is the human filter.
 """
 
 import argparse
