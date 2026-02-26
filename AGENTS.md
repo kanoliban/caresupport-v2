@@ -104,13 +104,38 @@ so Opus can surface whatever it notices.
   - `saved/` — curated material. Reviews flagged as worth revisiting. Survives resets. Opus's reading pile.
   - `proposals/` — where Opus writes back. (Future use.)
 - **Direct workflow:** `review_loop --full` → findings + transcript → suggest lessons, skill edits, spec changes
-- **Staged workflow:**
-  1. `review_staging.py snapshot --family kano` — lock baseline
-  2. `review_loop.py --since 3h --family kano --full --stage` — test runs accumulate in reviews/
-  3. `review_staging.py save --family kano --review {ts} --name family-tree-confusion` — flag the interesting ones
-  4. `review_staging.py reset --family kano` — restore baseline + clear reviews/ (saved/ untouched)
-  5. `review_staging.py promote --family kano --review {ts} [--items 0,1]` — push approved lessons to production
-  6. Other commands: `diff` (baseline vs live), `list` (all piles), `restore` (baseline only, no clear)
+
+- **Staged testing protocol (follow this exactly):**
+
+  **Setup (once per testing session):**
+  ```
+  review_staging.py snapshot --family kano       # lock baseline — this is your safety net
+  ```
+
+  **Test loop (repeat as many times as needed — nothing permanent happens here):**
+  ```
+  review_loop.py --since 3h --family kano --full --stage   # run 1 → reviews/
+  review_loop.py --since 3h --family kano --full --stage   # run 2 → reviews/
+  review_loop.py --since 3h --family kano --full --stage   # run N → reviews/
+
+  review_staging.py list --family kano                      # see what you got
+  review_staging.py diff --family kano                      # confirm live files untouched
+
+  review_staging.py save --family kano --review {ts} --name family-tree-confusion   # flag interesting ones
+  review_staging.py reset --family kano                     # restore baseline + clear reviews/ (saved/ untouched)
+  ```
+  Then iterate. Change the agent, run more tests, save what's interesting, reset, repeat.
+  `saved/` accumulates across cycles. `reviews/` gets cleared each time.
+
+  **When ready (this is the one-way door — the only moment real files change):**
+  ```
+  review_staging.py promote --family kano --review {ts} [--items 0,1]   # push approved lessons to production
+  ```
+
+  **Other commands:**
+  - `diff` — baseline vs live (verify nothing leaked)
+  - `list` — show all three piles at a glance
+  - `restore` — revert to baseline without clearing reviews (use `reset` instead unless you have a reason)
 
 ### Care Protocols
 Domain knowledge the agent uses for coordination.
