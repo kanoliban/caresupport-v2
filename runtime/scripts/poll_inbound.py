@@ -94,6 +94,46 @@ def _auto_register_outreach_recipient(family_dir: Path, phone: str, name: str,
     print(f"[CareSupport]     📋 Auto-registered {name} ({phone}) for reply routing")
 
 
+def _resolve_outreach_phone(family_dir: Path, name: str, ai_phone: str) -> str | None:
+    """Resolve an outreach recipient's phone from routing.json by name.
+
+    Returns the verified phone if the name matches a known member,
+    the AI-provided phone if it's already in routing.json,
+    or None if unresolvable.
+    """
+    routing_path = family_dir / "routing.json"
+    if not routing_path.exists():
+        routing_path = family_dir / "phone_routing.json"
+    if not routing_path.exists():
+        return ai_phone
+
+    routing = json.loads(routing_path.read_text())
+    members = routing.get("members", {})
+    name_lower = name.lower().strip()
+
+    if isinstance(members, dict):
+        # Verify AI phone matches the claimed name (prevent misdirected outreach)
+        if ai_phone in members:
+            existing = members[ai_phone].get("name", "").lower().strip()
+            existing_first = existing.split()[0] if existing else ""
+            if name_lower == existing or name_lower == existing_first:
+                return ai_phone
+
+        for phone, member in members.items():
+            member_name = member.get("name", "").lower().strip()
+            member_first = member_name.split()[0] if member_name else ""
+            if name_lower == member_name or name_lower == member_first:
+                return phone
+    elif isinstance(members, list):
+        for member in members:
+            member_name = member.get("name", "").lower().strip()
+            member_first = member_name.split()[0] if member_name else ""
+            if name_lower == member_name or name_lower == member_first:
+                return member.get("phone")
+
+    return None
+
+
 async def poll_and_process():
     """Main polling loop: check for new messages, process them, respond."""
     from linq_gateway import list_chats, get_messages, send_message, start_typing, mark_as_read, create_chat
@@ -189,8 +229,18 @@ async def poll_and_process():
                                 phone = raw_phone  # already E.164 or international
                             outreach_msg = outreach.get("message", "")
                             name = outreach.get("name", raw_phone)
+
+                            # Resolve phone against routing.json (don't trust AI blindly)
+                            verified_phone = _resolve_outreach_phone(
+                                Path(result["member"]["family_dir"]), name, phone
+                            )
+                            if not verified_phone:
+                                print(f"{log_prefix}     ⚠️ Cannot resolve {name} to a phone number — skipping outreach")
+                                continue
+                            phone = verified_phone
+
                             if phone and outreach_msg:
-                                print(f"{log_prefix}     Outreach to {name}: '{outreach_msg[:60]}...'")
+                                print(f"{log_prefix}     Outreach to {name} ({phone}): '{outreach_msg[:60]}...'")
                                 outreach_result = await create_chat(phone, outreach_msg)
                                 if outreach_result.get("success"):
                                     print(f"{log_prefix}     ✅ Outreach sent to {name}")

@@ -21,6 +21,14 @@
       "access_level": "limited",
       "active": true,
       "relationship": "contacted via outreach"
+    },
+    "+19522157878": {
+      "name": "Amanti Melkamu",
+      "role": "community_supporter",
+      "access_level": "schedule",
+      "active": true,
+      "relationship": "community_helper",
+      "chat_id": "753c8dcf-b13e-4727-b85a-a4f253db0eca"
     }
   },
   "care_recipient": "Degitu",

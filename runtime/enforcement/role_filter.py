@@ -44,6 +44,10 @@ ACCESS_MATRIX = {
         ],
         "can_approve_changes": False,
     },
+    "limited": {
+        "sections": ["members", "care_recipient"],
+        "can_approve_changes": False,
+    },
 }
 
 # Map markdown ## headers to access matrix keys
