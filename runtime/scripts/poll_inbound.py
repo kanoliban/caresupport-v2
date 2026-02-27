@@ -20,6 +20,8 @@ The script:
 5. Logs everything
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import re
