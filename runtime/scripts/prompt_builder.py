@@ -124,6 +124,7 @@ def build_system_blocks(
     service: str = "SMS",
     member_context: str = "",
     intent: str = "",
+    tools_active: bool = False,
 ) -> list[dict]:
     """Build system prompt as ordered content blocks for cache-aware API calls.
 
@@ -160,6 +161,14 @@ def build_system_blocks(
     # Block 3: Response format + channel guidance (NEVER changes)
     channel = _channel_guidance(service)
     block3_text = channel + "\n\n" + _RESPONSE_FORMAT if channel else _RESPONSE_FORMAT
+    if tools_active:
+        block3_text += (
+            "\n\n── TOOLS ──\n"
+            "You have tools to look up family information on demand. "
+            "For greetings and simple conversation, respond directly without tools. "
+            "For questions about schedule, medications, care team, or family notes, "
+            "call the relevant tool first, then use the returned data in your response."
+        )
     blocks.append({"type": "text", "text": block3_text, "cache_breakpoint": False})
 
     # Block 4: Lessons — global + family (changes weekly)

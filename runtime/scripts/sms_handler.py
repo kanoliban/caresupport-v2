@@ -541,11 +541,14 @@ async def _generate_response_anthropic(
     member_name: str = "there",
     model: str = "claude-haiku-4-5-20251001",
     family_id: str = "",
+    tools: list[dict] | None = None,
+    family_context: str = "",
 ) -> str:
     """Call Anthropic API directly with cache-aware system blocks.
 
     Uses CareRouter model selection with upward fallback on 429/529/timeout.
     Extended thinking enabled for improved reasoning quality.
+    Supports tool use for on-demand family context retrieval.
     """
     from prompt_builder import system_blocks_to_string
 
@@ -565,69 +568,100 @@ async def _generate_response_anthropic(
     for current_model in models_to_try:
         for attempt in range(2):
             try:
-                def _sync_anthropic_call(_m=current_model):
-                    return _anthropic_client.messages.create(
-                        model=_m,
-                        max_tokens=16000,
-                        system=system_content,
-                        messages=messages,
-                        thinking={
-                            "type": "enabled",
-                            "budget_tokens": 10000,
-                        },
-                    )
+                loop_messages = list(messages)
 
-                response = await asyncio.wait_for(
-                    asyncio.to_thread(_sync_anthropic_call),
-                    timeout=60,
-                )
-
-                # Extended thinking returns multiple content blocks:
-                # [ThinkingBlock, TextBlock]. Extract the text block for JSON.
                 raw = None
                 thinking_text = None
-                for block in response.content:
-                    if block.type == "thinking":
-                        thinking_text = block.thinking
-                    elif block.type == "text":
-                        raw = block.text.strip()
-                if raw is None:
-                    raw = response.content[-1].text.strip()
+
+                for tool_round in range(4):
+                    def _sync_call(_m=current_model, _msgs=loop_messages):
+                        kwargs = {
+                            "model": _m,
+                            "max_tokens": 16000,
+                            "system": system_content,
+                            "messages": _msgs,
+                            "thinking": {
+                                "type": "enabled",
+                                "budget_tokens": 10000,
+                            },
+                        }
+                        if tools:
+                            kwargs["tools"] = tools
+                        return _anthropic_client.messages.create(**kwargs)
+
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(_sync_call),
+                        timeout=60,
+                    )
+
+                    # Log cache/usage for every call (including tool rounds)
+                    usage = response.usage
+                    cache_write = getattr(usage, "cache_creation_input_tokens", 0)
+                    cache_read = getattr(usage, "cache_read_input_tokens", 0)
+                    if cache_write or cache_read:
+                        print(
+                            f"[CareSupport] Cache: write={cache_write} read={cache_read} "
+                            f"input={usage.input_tokens} model={current_model}",
+                            file=sys.stderr,
+                        )
+
+                    try:
+                        ledger_dir = Path(__file__).parent.parent.parent / "fork" / "workspace" / "logs"
+                        ledger_dir.mkdir(parents=True, exist_ok=True)
+                        ledger_entry = {
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                            "family": family_id or "unknown",
+                            "member": member_name,
+                            "model": current_model,
+                            "input": usage.input_tokens,
+                            "output": usage.output_tokens,
+                            "cache_read": cache_read,
+                            "cache_write": cache_write,
+                            "tool_round": tool_round if tools else None,
+                        }
+                        with open(ledger_dir / "token_ledger.jsonl", "a") as lf:
+                            lf.write(json.dumps(ledger_entry) + "\n")
+                    except Exception:
+                        pass
+
+                    # Handle tool use: execute tools and continue loop
+                    if response.stop_reason == "tool_use" and tools and tool_round < 3:
+                        from care_tools import handle_tool_call, TOOL_NAMES
+                        tool_results = []
+                        for block in response.content:
+                            if block.type == "tool_use":
+                                if block.name in TOOL_NAMES:
+                                    result_text = handle_tool_call(block.name, family_context)
+                                else:
+                                    result_text = f"Unknown tool: {block.name}"
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": result_text,
+                                })
+                                print(
+                                    f"[CareSupport] Tool: {block.name} → {len(result_text)} chars",
+                                    file=sys.stderr,
+                                )
+                        loop_messages.append({"role": "assistant", "content": response.content})
+                        loop_messages.append({"role": "user", "content": tool_results})
+                        continue
+
+                    # Final response: extract thinking + text
+                    for block in response.content:
+                        if block.type == "thinking":
+                            thinking_text = block.thinking
+                        elif block.type == "text":
+                            raw = block.text.strip()
+                    if raw is None:
+                        raw = response.content[-1].text.strip()
+                    break
 
                 if thinking_text:
                     print(
                         f"[CareSupport] Thinking ({current_model}): {thinking_text[:200]}...",
                         file=sys.stderr,
                     )
-
-                usage = response.usage
-                cache_write = getattr(usage, "cache_creation_input_tokens", 0)
-                cache_read = getattr(usage, "cache_read_input_tokens", 0)
-                if cache_write or cache_read:
-                    print(
-                        f"[CareSupport] Cache: write={cache_write} read={cache_read} "
-                        f"input={usage.input_tokens} model={current_model}",
-                        file=sys.stderr,
-                    )
-
-                # Token usage ledger — append per-call cost data
-                try:
-                    ledger_dir = Path(__file__).parent.parent.parent / "fork" / "workspace" / "logs"
-                    ledger_dir.mkdir(parents=True, exist_ok=True)
-                    ledger_entry = {
-                        "ts": datetime.now(timezone.utc).isoformat(),
-                        "family": family_id or "unknown",
-                        "member": member_name,
-                        "model": current_model,
-                        "input": usage.input_tokens,
-                        "output": usage.output_tokens,
-                        "cache_read": cache_read,
-                        "cache_write": cache_write,
-                    }
-                    with open(ledger_dir / "token_ledger.jsonl", "a") as lf:
-                        lf.write(json.dumps(ledger_entry) + "\n")
-                except Exception:
-                    pass  # never let ledger logging break the response path
 
                 cleaned = raw
                 if cleaned.startswith("```"):
@@ -1039,9 +1073,11 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     # 7. Build system context with FILTERED family data (intent-driven)
     if _AI_BACKEND == "anthropic":
         from prompt_builder import build_system_blocks, build_messages, system_blocks_to_string
+        _use_tools = route_result and route_result.intent == "GENERAL"
         system_blocks = build_system_blocks(
             member, filtered_context, service=service, member_context=member_context,
             intent=route_result.intent if route_result else "",
+            tools_active=bool(_use_tools),
         )
         messages = build_messages(body, conversation_history)
     else:
@@ -1084,11 +1120,21 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             file=sys.stderr,
         )
 
+        # Offer tools for GENERAL intent (agent retrieves family data on demand)
+        api_tools = None
+        tool_context = ""
+        if route_result.intent == "GENERAL":
+            from care_tools import CARE_TOOLS
+            api_tools = CARE_TOOLS
+            tool_context = filtered_context
+
         result_json = await _generate_response_anthropic(
             system_blocks, messages,
             member_name=member.get("name", "there"),
             model=route_result.model,
             family_id=Path(member.get("family_dir", "")).name,
+            tools=api_tools,
+            family_context=tool_context,
         )
         # If Anthropic failed entirely, fall back to OpenRouter (cross-provider resilience)
         result_check = json.loads(result_json)
