@@ -203,3 +203,5 @@ Are you actually becoming better, or just collecting lessons without changing ho
 [2026-02-28 22:13:31 UTC] [INBOUND] what medications does Degitu take?
 [2026-02-28 22:26:17 UTC] [INBOUND] To your best understanding, how does the training system work? 
 [2026-02-28 22:27:44 UTC] [OUTBOUND] Conversations get reviewed by the system. My mistakes and your corrections get written to lessons.md. I see those lessons in my next prompt — they become my instructions. So each correction sticks around and shapes how I work going forward. The goal is that I get better at reasoning about your family's actual needs instead of repeating the same mistakes.
+[2026-02-28 23:20:12 UTC] [INBOUND] We’ve made changes to your training system: what now are your capabilities?
+[2026-02-28 23:20:18 UTC] [OUTBOUND] I don't see changes reflected in my context yet. I still see the same capabilities: generate SMS, update the family file, queue outreach messages, write corrections to lessons.md. I can't directly text people in real-time or access external systems. What did you change?

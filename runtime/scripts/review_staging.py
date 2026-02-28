@@ -751,12 +751,61 @@ def cmd_merge(family_id: str, graduation_name: str, items: list[int] | None, for
 
 
 def cmd_export_training(family_id: str) -> None:
-    """Export fine-tuning training examples. (Stub — not yet implemented.)"""
-    print("export-training is not yet implemented.")
-    print(f"Fine-tuning examples will be collected from graduated proposals for family '{family_id}'.")
-    ft_dir = Path(__file__).parent.parent.parent / "fine-tuning" / "examples" / family_id
-    ft_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Directory ready: {ft_dir}")
+    """Export graduated corrections and saved reviews as fine-tuning JSONL."""
+    family_staging = _staging_dir(family_id)
+    if not family_staging.is_dir():
+        print(f"No staging directory for family '{family_id}'", file=sys.stderr)
+        sys.exit(1)
+
+    examples: list[dict] = []
+
+    graduations_dir = _graduations_dir(family_id)
+    if graduations_dir.exists():
+        for gfile in sorted(graduations_dir.glob("*.json")):
+            data = json.loads(gfile.read_text())
+            for proposal in data.get("proposals", []):
+                if proposal.get("action") == "skip":
+                    continue
+                examples.append({
+                    "source": "graduation",
+                    "lesson": proposal["lesson"],
+                    "target": proposal.get("target", "unknown"),
+                    "category": proposal.get("section", "general"),
+                })
+
+    saved_dir = _saved_dir(family_id)
+    if saved_dir.exists():
+        for sfile in sorted(saved_dir.glob("*.json")):
+            data = json.loads(sfile.read_text())
+            for finding in data.get("findings", []):
+                lesson = finding.get("lesson") or finding.get("title", "")
+                if not lesson:
+                    continue
+                examples.append({
+                    "source": "review",
+                    "lesson": lesson,
+                    "category": finding.get("category", "unknown"),
+                    "evidence": finding.get("evidence", ""),
+                })
+
+    output_dir = Path(__file__).parent.parent.parent / "fine-tuning" / "examples" / family_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "training.jsonl"
+
+    training_lines = []
+    for ex in examples:
+        training_lines.append(json.dumps({
+            "messages": [
+                {"role": "system", "content": "You are CareSupport, a care coordination agent."},
+                {"role": "user", "content": f"Correction: {ex['lesson']}"},
+                {"role": "assistant", "content": f"Understood. I will {ex['lesson']}"},
+            ],
+            "metadata": {"source": ex["source"], "category": ex.get("category")},
+        }))
+
+    output_path.write_text("\n".join(training_lines) + "\n" if training_lines else "")
+    print(f"Exported {len(training_lines)} examples to {output_path}")
+    print(f"Target: 100+ examples. Current: {len(training_lines)}. Gap: {max(0, 100 - len(training_lines))}")
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────
