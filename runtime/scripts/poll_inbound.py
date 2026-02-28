@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -204,9 +205,17 @@ async def poll_and_process():
                 result = await handle_sms(from_phone, body, service=service)
 
                 if result["success"] and result.get("response"):
+                    response_text = result["response"]
+
+                    # Debug receipt: append model tier to message
+                    _TIER_RECEIPTS = {"fast": "H-4.5", "reason": "S-4.6", "critical": "O-4.6"}
+                    tier = result.get("_routed_tier")
+                    if tier and os.environ.get("CARESUPPORT_DEBUG_RECEIPTS"):
+                        response_text = f"{response_text}\n· {_TIER_RECEIPTS.get(tier, tier)}"
+
                     # Send response via Linq
-                    print(f"{log_prefix}     Responding: '{result['response'][:60]}...'")
-                    send_result = await send_message(chat_id, result["response"])
+                    print(f"{log_prefix}     Responding: '{response_text[:60]}...'")
+                    send_result = await send_message(chat_id, response_text)
 
                     if send_result.get("success"):
                         print(f"{log_prefix}     ✅ Sent (ID: {send_result.get('message_id', '?')[:8]}...)")

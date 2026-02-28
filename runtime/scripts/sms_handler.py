@@ -52,10 +52,7 @@ _anthropic_client = anthropic.Anthropic(
 
 _AI_BACKEND = os.environ.get("CARESUPPORT_AI_BACKEND", "openrouter")
 
-_ANTHROPIC_MODEL_CHAIN = [
-    "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5-20250929",
-]
+from care_router import route as care_route, fallback_chain as _fallback_chain, MODELS as _CARE_MODELS
 
 # Enforcement layer — mechanical, not optional
 from enforcement.role_filter import (
@@ -539,11 +536,14 @@ async def generate_response(system_context: str, user_message: str, member_name:
 
 
 async def _generate_response_anthropic(
-    system_blocks: list[dict], messages: list[dict], member_name: str = "there"
+    system_blocks: list[dict],
+    messages: list[dict],
+    member_name: str = "there",
+    model: str = "claude-haiku-4-5-20251001",
 ) -> str:
     """Call Anthropic API directly with cache-aware system blocks.
 
-    Uses manual model fallback (429/529/timeout → next model in chain).
+    Uses CareRouter model selection with upward fallback on 429/529/timeout.
     """
     from prompt_builder import system_blocks_to_string
 
@@ -559,12 +559,13 @@ async def _generate_response_anthropic(
     ]
 
     last_error = None
-    for model in _ANTHROPIC_MODEL_CHAIN:
+    models_to_try = _fallback_chain(model)
+    for current_model in models_to_try:
         for attempt in range(2):
             try:
-                def _sync_anthropic_call():
+                def _sync_anthropic_call(_m=current_model):
                     return _anthropic_client.messages.create(
-                        model=model,
+                        model=_m,
                         max_tokens=4096,
                         system=system_content,
                         messages=messages,
@@ -578,18 +579,16 @@ async def _generate_response_anthropic(
 
                 raw = response.content[0].text.strip()
 
-                # Log cache metrics
                 usage = response.usage
                 cache_write = getattr(usage, "cache_creation_input_tokens", 0)
                 cache_read = getattr(usage, "cache_read_input_tokens", 0)
                 if cache_write or cache_read:
                     print(
                         f"[CareSupport] Cache: write={cache_write} read={cache_read} "
-                        f"input={usage.input_tokens} model={model}",
+                        f"input={usage.input_tokens} model={current_model}",
                         file=sys.stderr,
                     )
 
-                # Strip markdown fences if model wrapped JSON in ```json ... ```
                 cleaned = raw
                 if cleaned.startswith("```"):
                     cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
@@ -603,22 +602,22 @@ async def _generate_response_anthropic(
                 return json.dumps(result)
 
             except asyncio.TimeoutError:
-                last_error = f"{model} timed out after 45s"
-                print(f"[CareSupport] Anthropic {model} attempt {attempt+1}/2: TimeoutError", file=sys.stderr)
+                last_error = f"{current_model} timed out after 45s"
+                print(f"[CareSupport] Anthropic {current_model} attempt {attempt+1}/2: TimeoutError", file=sys.stderr)
             except anthropic.RateLimitError as e:
                 last_error = e
-                print(f"[CareSupport] Anthropic {model}: rate limited, trying next model", file=sys.stderr)
-                break  # skip to next model
+                print(f"[CareSupport] Anthropic {current_model}: rate limited, trying next model", file=sys.stderr)
+                break
             except anthropic.InternalServerError as e:
                 last_error = e
-                print(f"[CareSupport] Anthropic {model}: 5xx, trying next model", file=sys.stderr)
-                break  # skip to next model
+                print(f"[CareSupport] Anthropic {current_model}: 5xx, trying next model", file=sys.stderr)
+                break
             except json.JSONDecodeError as e:
                 last_error = e
-                print(f"[CareSupport] Anthropic {model}: invalid JSON response, retrying", file=sys.stderr)
+                print(f"[CareSupport] Anthropic {current_model}: invalid JSON response, retrying", file=sys.stderr)
             except Exception as e:
                 last_error = e
-                print(f"[CareSupport] Anthropic {model} attempt {attempt+1}/2: {type(e).__name__}: {str(e)[:150]}", file=sys.stderr)
+                print(f"[CareSupport] Anthropic {current_model} attempt {attempt+1}/2: {type(e).__name__}: {str(e)[:150]}", file=sys.stderr)
 
             if attempt < 1:
                 await asyncio.sleep(3)
@@ -631,8 +630,45 @@ async def _generate_response_anthropic(
 MAX_FAMILY_LESSONS = 30
 
 
-def _persist_lessons(corrections: list[str], family_dir: str = "") -> None:
-    """Append self-corrections to the family's lessons.md (local).
+def _stage_corrections(
+    corrections: list[str],
+    family_dir: str,
+    member: dict | None = None,
+    trigger_msg: str = "",
+    agent_response: str = "",
+) -> None:
+    """Write corrections to staging/reviews/ for audit and potential retraction."""
+    staging_dir = Path(family_dir) / "staging" / "reviews"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.now(timezone.utc)
+    ts = now.strftime("%Y%m%d_%H%M%S")
+    family_id = Path(family_dir).name
+
+    record = {
+        "timestamp": now.isoformat(),
+        "family_id": family_id,
+        "source": "live",
+        "member": member.get("name", "unknown") if member else "unknown",
+        "trigger_message": trigger_msg[:500],
+        "agent_response": agent_response[:500],
+        "corrections": corrections,
+        "lessons_written_to": f"families/{family_id}/lessons.md",
+    }
+
+    out_path = staging_dir / f"corrections_{ts}.json"
+    with open(out_path, "w") as f:
+        json.dump(record, f, indent=2)
+
+
+def _persist_lessons(
+    corrections: list[str],
+    family_dir: str = "",
+    member: dict | None = None,
+    trigger_msg: str = "",
+    agent_response: str = "",
+) -> None:
+    """Append self-corrections to the family's lessons.md (local) and stage for review.
 
     Falls back to global lessons.md if no family_dir provided.
     """
@@ -642,6 +678,7 @@ def _persist_lessons(corrections: list[str], family_dir: str = "") -> None:
     if family_dir:
         family_lessons_path = Path(family_dir) / "lessons.md"
         append_lessons(family_lessons_path, corrections, max_entries=MAX_FAMILY_LESSONS)
+        _stage_corrections(corrections, family_dir, member, trigger_msg, agent_response)
     else:
         append_lessons(paths.lessons, corrections)
 
@@ -973,10 +1010,12 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     )
 
     # 7. Generate response
+    route_result = care_route(body, member) if _AI_BACKEND == "anthropic" else None
+
     if dry_run:
         from prompt_builder import system_blocks_to_string as _flatten
         ctx_len = len(system_blocks_to_string(system_blocks)) if system_blocks else len(system_context)
-        return {
+        dry_run_result = {
             "success": True,
             "response": "[DRY RUN — would call AI agent here]",
             "member": member,
@@ -989,10 +1028,25 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
                 "phi_access_logged": True,
             },
         }
+        if route_result:
+            dry_run_result["routing"] = {
+                "tier": route_result.tier,
+                "model": route_result.model,
+                "intent": route_result.intent,
+                "reason": route_result.reason,
+            }
+        return dry_run_result
 
     if _AI_BACKEND == "anthropic" and system_blocks is not None:
+        print(
+            f"[CareSupport] Route: {route_result.intent} → {route_result.tier} ({route_result.reason})",
+            file=sys.stderr,
+        )
+
         result_json = await _generate_response_anthropic(
-            system_blocks, messages, member_name=member.get("name", "there"),
+            system_blocks, messages,
+            member_name=member.get("name", "there"),
+            model=route_result.model,
         )
         # If Anthropic failed entirely, fall back to OpenRouter (cross-provider resilience)
         result_check = json.loads(result_json)
@@ -1002,6 +1056,8 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     else:
         result_json = await generate_response(system_context, body, member_name=member.get("name", "there"))
     result = json.loads(result_json)
+    if route_result:
+        result["_routed_tier"] = route_result.tier
 
     sms_response = result.get("sms_response", "")
 
@@ -1118,7 +1174,13 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     # 11. PERSISTENCE: Apply self_corrections to family lessons.md (local)
     raw_corrections = result.get("self_corrections", [])
     if raw_corrections and isinstance(raw_corrections, list):
-        _persist_lessons(raw_corrections, family_dir=member.get("family_dir", ""))
+        _persist_lessons(
+            raw_corrections,
+            family_dir=member.get("family_dir", ""),
+            member=member,
+            trigger_msg=body,
+            agent_response=result.get("sms_response", ""),
+        )
         print(f"{log_prefix} 📝 Learned {len(raw_corrections)} lesson(s) (family)")
 
     # 12. PERSISTENCE: Apply member_updates to member profile
