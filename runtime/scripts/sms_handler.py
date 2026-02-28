@@ -540,10 +540,12 @@ async def _generate_response_anthropic(
     messages: list[dict],
     member_name: str = "there",
     model: str = "claude-haiku-4-5-20251001",
+    family_id: str = "",
 ) -> str:
     """Call Anthropic API directly with cache-aware system blocks.
 
     Uses CareRouter model selection with upward fallback on 429/529/timeout.
+    Extended thinking enabled for improved reasoning quality.
     """
     from prompt_builder import system_blocks_to_string
 
@@ -566,18 +568,37 @@ async def _generate_response_anthropic(
                 def _sync_anthropic_call(_m=current_model):
                     return _anthropic_client.messages.create(
                         model=_m,
-                        max_tokens=4096,
+                        max_tokens=16000,
                         system=system_content,
                         messages=messages,
-                        temperature=0.7,
+                        thinking={
+                            "type": "enabled",
+                            "budget_tokens": 10000,
+                        },
                     )
 
                 response = await asyncio.wait_for(
                     asyncio.to_thread(_sync_anthropic_call),
-                    timeout=45,
+                    timeout=60,
                 )
 
-                raw = response.content[0].text.strip()
+                # Extended thinking returns multiple content blocks:
+                # [ThinkingBlock, TextBlock]. Extract the text block for JSON.
+                raw = None
+                thinking_text = None
+                for block in response.content:
+                    if block.type == "thinking":
+                        thinking_text = block.thinking
+                    elif block.type == "text":
+                        raw = block.text.strip()
+                if raw is None:
+                    raw = response.content[-1].text.strip()
+
+                if thinking_text:
+                    print(
+                        f"[CareSupport] Thinking ({current_model}): {thinking_text[:200]}...",
+                        file=sys.stderr,
+                    )
 
                 usage = response.usage
                 cache_write = getattr(usage, "cache_creation_input_tokens", 0)
@@ -588,6 +609,25 @@ async def _generate_response_anthropic(
                         f"input={usage.input_tokens} model={current_model}",
                         file=sys.stderr,
                     )
+
+                # Token usage ledger — append per-call cost data
+                try:
+                    ledger_dir = Path(__file__).parent.parent.parent / "fork" / "workspace" / "logs"
+                    ledger_dir.mkdir(parents=True, exist_ok=True)
+                    ledger_entry = {
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "family": family_id or "unknown",
+                        "member": member_name,
+                        "model": current_model,
+                        "input": usage.input_tokens,
+                        "output": usage.output_tokens,
+                        "cache_read": cache_read,
+                        "cache_write": cache_write,
+                    }
+                    with open(ledger_dir / "token_ledger.jsonl", "a") as lf:
+                        lf.write(json.dumps(ledger_entry) + "\n")
+                except Exception:
+                    pass  # never let ledger logging break the response path
 
                 cleaned = raw
                 if cleaned.startswith("```"):
@@ -602,8 +642,8 @@ async def _generate_response_anthropic(
                 return json.dumps(result)
 
             except asyncio.TimeoutError:
-                last_error = f"{current_model} timed out after 45s"
-                print(f"[CareSupport] Anthropic {current_model} attempt {attempt+1}/2: TimeoutError", file=sys.stderr)
+                last_error = f"{current_model} timed out after 60s"
+                print(f"[CareSupport] Anthropic {current_model} attempt {attempt+1}/2: TimeoutError (60s)", file=sys.stderr)
             except anthropic.RateLimitError as e:
                 last_error = e
                 print(f"[CareSupport] Anthropic {current_model}: rate limited, trying next model", file=sys.stderr)
@@ -993,11 +1033,15 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
         trigger_message=body,
     )
 
-    # 6. Build system context with FILTERED family data
+    # 6. Classify intent (needed before prompt building for selective context loading)
+    route_result = care_route(body, member) if _AI_BACKEND == "anthropic" else None
+
+    # 7. Build system context with FILTERED family data (intent-driven)
     if _AI_BACKEND == "anthropic":
         from prompt_builder import build_system_blocks, build_messages, system_blocks_to_string
         system_blocks = build_system_blocks(
             member, filtered_context, service=service, member_context=member_context,
+            intent=route_result.intent if route_result else "",
         )
         messages = build_messages(body, conversation_history)
     else:
@@ -1008,9 +1052,6 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
         member, filtered_context, conversation_history,
         service=service, member_context=member_context,
     )
-
-    # 7. Generate response
-    route_result = care_route(body, member) if _AI_BACKEND == "anthropic" else None
 
     if dry_run:
         from prompt_builder import system_blocks_to_string as _flatten
@@ -1047,6 +1088,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             system_blocks, messages,
             member_name=member.get("name", "there"),
             model=route_result.model,
+            family_id=Path(member.get("family_dir", "")).name,
         )
         # If Anthropic failed entirely, fall back to OpenRouter (cross-provider resilience)
         result_check = json.loads(result_json)

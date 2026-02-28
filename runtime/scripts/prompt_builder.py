@@ -11,8 +11,12 @@ Block ordering:
   4. Lessons (global + family)                       — changes weekly
   5. Member identity + member context                — changes per member
      ── CACHE BREAKPOINT ──  (~4,987 tokens, clears 4,096 minimum)
-  6. Family context (filtered by role)               — changes daily/weekly
+  6. Family context (filtered by role)               — intent-driven: full/partial/none
   7. Current datetime + member metadata              — changes every call
+
+Intent-driven loading (Phase 1 of interaction/execution separation):
+  CareRouter classifies intent → prompt builder loads only relevant family sections.
+  EMERGENCY/ESCALATION get full context. GENERAL gets slim. GREETING gets none.
 """
 
 from __future__ import annotations
@@ -70,11 +74,56 @@ BEFORE YOU PROMISE TO CONTACT SOMEONE:
 - Never say "I'll reach out" with an empty needs_outreach. That's a broken promise."""
 
 
+_SECTION_RE = re.compile(r"^## ", re.MULTILINE)
+
+# Sections to include per family context mode
+_FAMILY_SECTIONS = {
+    "family_full": None,  # None = include everything
+    "family_meds": {
+        "Active Medications", "Medication Hold Log", "Full Medication History",
+        "Urgent Notes", "Care Recipient",
+    },
+    "family_team": {
+        "Care Team", "This Week", "Urgent Notes", "Care Recipient",
+    },
+    "family_slim": "_slim",  # special: first 500 chars only
+}
+
+# Intent → which family context mode to use
+_INTENT_FAMILY_MODE = {
+    "EMERGENCY": "family_full",
+    "ESCALATION": "family_full",
+    "MEDICATION_CHANGE": "family_meds",
+    "ONBOARDING": "family_team",
+    "MULTI_MEMBER": "family_team",
+    "GENERAL": "family_slim",
+}
+
+
+def _extract_family_sections(family_text: str, sections: set[str]) -> str:
+    """Extract specific ## sections from family.md text by header name."""
+    if not family_text or not sections:
+        return ""
+
+    parts = _SECTION_RE.split(family_text)
+    # parts[0] is the preamble (before first ##), rest start with section name
+    result = [parts[0].strip()] if parts[0].strip() else []
+
+    for part in parts[1:]:
+        lines = part.split("\n", 1)
+        header = lines[0].strip()
+        if header in sections:
+            result.append(f"## {part.rstrip()}")
+
+    return "\n\n".join(result)
+
+
 def build_system_blocks(
     member: dict,
     family_context: str,
     service: str = "SMS",
     member_context: str = "",
+    intent: str = "",
 ) -> list[dict]:
     """Build system prompt as ordered content blocks for cache-aware API calls.
 
@@ -145,13 +194,28 @@ def build_system_blocks(
 
     blocks.append({"type": "text", "text": member_block, "cache_breakpoint": True})
 
-    # Block 6: Family context — filtered by role (changes daily/weekly)
+    # Block 6: Family context — intent-driven loading
+    family_mode = _INTENT_FAMILY_MODE.get(intent, "family_full")
+    section_filter = _FAMILY_SECTIONS.get(family_mode)
+
     if family_context:
-        blocks.append({
-            "type": "text",
-            "text": f"── FAMILY FILE (scoped to {member['name']}'s access level) ──\n{family_context}",
-            "cache_breakpoint": False,
-        })
+        if section_filter is None:
+            # Full context (EMERGENCY, ESCALATION, or unknown intent)
+            ctx = family_context
+        elif section_filter == "_slim":
+            # Slim: preamble only (name, overview, urgent notes snippet)
+            ctx = family_context[:500].rsplit("\n", 1)[0]
+        elif isinstance(section_filter, set):
+            ctx = _extract_family_sections(family_context, section_filter)
+        else:
+            ctx = family_context
+
+        if ctx.strip():
+            blocks.append({
+                "type": "text",
+                "text": f"── FAMILY FILE (scoped to {member['name']}'s access level) ──\n{ctx}",
+                "cache_breakpoint": False,
+            })
 
     # Block 7: Current datetime (changes EVERY call — must be last)
     now = datetime.now(timezone.utc)
