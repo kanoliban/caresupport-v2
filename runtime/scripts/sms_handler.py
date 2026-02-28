@@ -25,6 +25,7 @@ It does NOT send the SMS — the caller (cron or bridge) handles delivery.
 import argparse
 import json
 import asyncio
+import re
 import sys
 import os
 from datetime import datetime, timezone
@@ -53,7 +54,7 @@ _AI_BACKEND = os.environ.get("CARESUPPORT_AI_BACKEND", "openrouter")
 
 _ANTHROPIC_MODEL_CHAIN = [
     "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5-20241022",
+    "claude-sonnet-4-5-20250514",
 ]
 
 # Enforcement layer — mechanical, not optional
@@ -588,7 +589,13 @@ async def _generate_response_anthropic(
                         file=sys.stderr,
                     )
 
-                result = json.loads(raw)
+                # Strip markdown fences if model wrapped JSON in ```json ... ```
+                cleaned = raw
+                if cleaned.startswith("```"):
+                    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+                    cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+
+                result = json.loads(cleaned)
 
                 if not result.get("sms_response", "").strip():
                     result["sms_response"] = fallback_msg
