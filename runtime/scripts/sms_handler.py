@@ -202,20 +202,69 @@ def load_family_context(family_dir: str) -> str:
 
 
 def load_recent_conversations(phone: str, limit: int = 50) -> str:
-    """Load recent conversation history for this phone number."""
+    """Load recent conversation history for this phone number.
+
+    If the conversation exceeds 20 messages and a summary exists,
+    returns the summary + last 10 raw messages instead of last 50 raw.
+    """
     conv_dir = paths.conversations / phone
     if not conv_dir.exists():
         return "[No conversation history]"
 
-    # Find the most recent log file
     log_files = sorted(conv_dir.glob("*.log"), reverse=True)
     if not log_files:
         return "[No conversation history]"
 
-    # Read last N lines from most recent file
     lines = log_files[0].read_text().strip().split("\n")
+
+    summary_path = conv_dir / "summary.md"
+    if len(lines) > 20 and summary_path.exists():
+        summary = summary_path.read_text().strip()
+        recent = lines[-10:]
+        return f"[Previous conversation summary]\n{summary}\n\n[Recent messages]\n" + "\n".join(recent)
+
     recent = lines[-limit:] if len(lines) > limit else lines
     return "\n".join(recent) if recent else "[No conversation history]"
+
+
+async def _summarize_conversation(phone: str) -> None:
+    """Summarize older messages when conversation exceeds threshold.
+
+    Called as fire-and-forget after message processing. Uses Haiku for
+    cheap summarization. Only re-summarizes when the log has grown.
+    """
+    conv_dir = paths.conversations / phone
+    log_files = sorted(conv_dir.glob("*.log"), reverse=True)
+    if not log_files:
+        return
+
+    lines = log_files[0].read_text().strip().split("\n")
+    if len(lines) <= 20:
+        return
+
+    summary_path = conv_dir / "summary.md"
+    if summary_path.exists():
+        if summary_path.stat().st_mtime >= log_files[0].stat().st_mtime:
+            return
+
+    older = "\n".join(lines[:-10])
+
+    try:
+        summary_response = await asyncio.wait_for(
+            asyncio.to_thread(lambda: _anthropic_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=500,
+                system="Summarize this conversation history into a compact context block. "
+                       "Focus on: key decisions made, unresolved topics, important facts shared, "
+                       "and the relationship dynamic. Keep under 300 words.",
+                messages=[{"role": "user", "content": older}],
+            )),
+            timeout=15,
+        )
+        summary_text = summary_response.content[0].text.strip()
+        summary_path.write_text(summary_text)
+    except Exception as e:
+        print(f"[CareSupport] ⚠ Conversation summarization failed: {e}")
 
 
 def load_member_context(family_dir: str, member_name: str) -> str:
@@ -1387,6 +1436,9 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     }
     if route_result:
         final["_routed_tier"] = route_result.tier
+
+    asyncio.create_task(_summarize_conversation(from_phone))
+
     return final
 
 
