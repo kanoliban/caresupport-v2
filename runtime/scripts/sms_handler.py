@@ -54,7 +54,7 @@ _AI_BACKEND = os.environ.get("CARESUPPORT_AI_BACKEND", "openrouter")
 
 _ANTHROPIC_MODEL_CHAIN = [
     "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5-20250514",
+    "claude-sonnet-4-5-20250929",
 ]
 
 # Enforcement layer — mechanical, not optional
