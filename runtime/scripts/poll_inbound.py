@@ -140,6 +140,7 @@ async def poll_and_process():
     """Main polling loop: check for new messages, process them, respond."""
     from linq_gateway import list_chats, get_messages, send_message, start_typing, mark_as_read, create_chat
     from sms_handler import handle_sms
+    from session import get_or_create as get_or_create_session
 
     now = datetime.now(timezone.utc)
     log_prefix = f"[{now.strftime('%Y-%m-%d %H:%M:%S')}]"
@@ -194,10 +195,15 @@ async def poll_and_process():
                 await mark_as_read(chat_id)
                 await start_typing(chat_id)
 
+                # Track session for cache reuse observability
+                sess = get_or_create_session(from_phone, family_id="kano")
+                if sess.message_count > 1:
+                    print(f"{log_prefix}     Session {sess.session_id[:16]}... msg #{sess.message_count} (cache likely warm)")
+
                 # Run through AI handler (enforcement pipeline)
                 result = await handle_sms(from_phone, body, service=service)
 
-                if result["success"] and result["response"]:
+                if result["success"] and result.get("response"):
                     # Send response via Linq
                     print(f"{log_prefix}     Responding: '{result['response'][:60]}...'")
                     send_result = await send_message(chat_id, result["response"])
@@ -266,6 +272,55 @@ async def poll_and_process():
                     # Log family file updates
                     if result.get("family_file_updates"):
                         print(f"{log_prefix}     📝 File update: {json.dumps(result['family_file_updates'], default=str)[:120]}...")
+
+                elif result["success"] and not result.get("response"):
+                    # AI returned empty sms_response — still process outreach
+                    print(f"{log_prefix}     ⚠️ EMPTY RESPONSE from AI — processing outreach only")
+                    if result.get("needs_outreach"):
+                        sent_names = []
+                        for outreach in result["needs_outreach"]:
+                            raw_phone = outreach.get("phone", "")
+                            digits = re.sub(r"\D", "", raw_phone)
+                            if len(digits) == 10:
+                                phone = "+1" + digits
+                            elif len(digits) == 11 and digits.startswith("1"):
+                                phone = "+" + digits
+                            else:
+                                phone = raw_phone
+                            outreach_msg = outreach.get("message", "")
+                            name = outreach.get("name", raw_phone)
+
+                            verified_phone = _resolve_outreach_phone(
+                                Path(result["member"]["family_dir"]), name, phone
+                            )
+                            if not verified_phone:
+                                print(f"{log_prefix}     ⚠️ Cannot resolve {name} to a phone number — skipping outreach")
+                                continue
+                            phone = verified_phone
+
+                            if phone and outreach_msg:
+                                print(f"{log_prefix}     Outreach to {name} ({phone}): '{outreach_msg[:60]}...'")
+                                outreach_result = await create_chat(phone, outreach_msg)
+                                if outreach_result.get("success"):
+                                    print(f"{log_prefix}     ✅ Outreach sent to {name}")
+                                    sent_names.append(name)
+                                    _auto_register_outreach_recipient(
+                                        family_dir=Path(result["member"]["family_dir"]),
+                                        phone=phone,
+                                        name=name,
+                                        chat_id=outreach_result.get("chat_id", ""),
+                                        service=outreach_result.get("service", "unknown"),
+                                    )
+
+                        if sent_names:
+                            await asyncio.sleep(3)
+                            confirm = "Messaged " + " and ".join(sent_names) + " ✓"
+                            await send_message(chat_id, confirm)
+                            print(f"{log_prefix}     📨 Confirmation: '{confirm}'")
+                        else:
+                            await send_message(chat_id, "Got it — working on that.")
+                    else:
+                        await send_message(chat_id, "Got it — working on that.")
 
                 elif not result["success"]:
                     if result.get("response"):

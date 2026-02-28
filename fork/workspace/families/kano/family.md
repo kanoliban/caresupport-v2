@@ -15,21 +15,27 @@ status: active
 <!-- ═══════════════════════════════════════════════════════════ -->
 
 ## Care Recipient
-- Name: Degitu
-- Age:
-- Primary conditions:
-- Mobility:
+- Name: Degitu Tefera
+- Age: ~66
+- Primary conditions: Post-toe surgery recovery
+- Mobility: Can walk, cannot drive or take public transit
 - Cognitive status:
 - Allergies:
 - Blood type:
 - Language:
-- Emergency contact:
+- Emergency contact: Liban (+16517037981), Roman (+16516214824)
+- Work: Downtown Minneapolis, Mon-Fri 8:00 AM - 4:30 PM
+- Relationship to coordinator: Liban's aunt (Roman's sister)
 
 ## Care Team
 
 | Role | Name | Phone | Access Level | Hours | Active |
 |---|---|---|---|---|---|
 | Primary caregiver / Coordinator | Liban | +16517037981 | full | | ✓ |
+| Family caregiver (mom) | Roman Tefera | +16516214824 | schedule+meds | | ✓ |
+| Family caregiver (brother) | Solan Kano | +16514109390 | limited | | ✓ |
+| Family caregiver (brother) | Yada Kano | +16517031881 | limited | | ✓ |
+| Community supporter | Amanti Melkamu | +19522157878 | schedule | | ✓ |
 
 ### Access Levels
 - **full** — Sees everything. Can approve care plan changes.
@@ -37,28 +43,7 @@ status: active
 - **schedule** — Sees schedule and urgent notes only.
 - **provider** — Sees medical info, medications, appointments, care team.
 
-## This Week
-
-- Mon:
-- Tue:
-- Wed:
-- Thu:
-- Fri:
-- Sat:
-- Sun:
-
-## Active Medications
-
-| Medication | Dose | Schedule | Prescriber | Pharmacy | Last Confirmed | Status | Refill Due |
-|---|---|---|---|---|---|---|---|
-
-<!-- Status: active | held (reason) | tapering | discontinued (date)        -->
-<!-- Refill Due: Calculate from fill date + quantity. Agent requests 7 days   -->
-<!-- before depletion. Log refill requests in Recent Updates.                 -->
-
-### Medication Hold Log
-| Medication | Held Date | Reason | Released Date | Released By |
-|---|---|---|---|---|
+<!-- Schedule: see schedule.md | Medications: see medications.md -->
 
 ## Urgent Notes
 <!-- Active concerns that every team member should see -->
@@ -73,6 +58,10 @@ status: active
 <!-- Updates. Updated when new data arrives. Use for longitudinal trending.   -->
 
 ## Recent Updates
+- 2026-02-27: Added Yada Kano to routing + care team. Fixed outreach routing gap.
+- 2026-02-27: Populated ride schedule (Mon-Fri 7:30am/4:30pm) and care recipient details.
+- 2026-02-26: Roman Tefera, Solan Kano, Amanti Melkamu added to care team.
+- 2026-02-26: First multi-member exchange — relay working (Roman → Liban spinach request).
 - 2026-02-25: Family created. Cold start — CareSupport will learn everything through conversation.
 
 ---

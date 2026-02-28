@@ -41,6 +41,12 @@ class Paths:
     def family_file(self, family_id: str) -> Path:
         return self.families / family_id / "family.md"
 
+    def family_schedule(self, family_id: str) -> Path:
+        return self.families / family_id / "schedule.md"
+
+    def family_medications(self, family_id: str) -> Path:
+        return self.families / family_id / "medications.md"
+
     def phone_routing(self, family_id: str) -> Path:
         return self.families / family_id / "phone_routing.json"
 

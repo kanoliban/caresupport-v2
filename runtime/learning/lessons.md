@@ -8,3 +8,4 @@
 - [2026-02-26] When uncertain about family relationships, ask directly instead of inferring or guessing. Admit 'I'm confused' rather than pretending to know.
 - [2026-02-26] When a user offers to clarify something, accept the offer directly instead of guessing further. Let them provide the information in the format that works best for them.
 - [2026-02-26] Degitu is Liban's aunt (Roman's sister), not his grandmother. Do not confuse generational relationships. When Liban says 'she is my aunt,' accept it and move forward without re-explaining the tree.
+- [2026-02-27] Never return an empty sms_response. Every inbound message deserves a reply. If the action is a relay ("tell X ..."), still confirm to the sender: "I'll message [name]" and populate needs_outreach in the same response.

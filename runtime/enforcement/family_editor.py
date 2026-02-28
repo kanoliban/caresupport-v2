@@ -26,6 +26,24 @@ from pathlib import Path
 
 from enforcement.role_filter import parse_family_sections, Section, SECTION_KEY_MAP
 
+SECTION_FILE_MAP = {
+    "schedule": "schedule.md",
+    "this_week": "schedule.md",
+    "medications": "medications.md",
+    "active_medications": "medications.md",
+    "medication_hold_log": "medications.md",
+}
+
+
+def resolve_target_file(family_dir: Path, section_key: str) -> Path:
+    """Resolve which file a section update should target.
+
+    Sections listed in SECTION_FILE_MAP go to their split file.
+    Everything else targets family.md.
+    """
+    filename = SECTION_FILE_MAP.get(section_key, "family.md")
+    return family_dir / filename
+
 
 # ─── Update Operations ───────────────────────────────────────────────────
 

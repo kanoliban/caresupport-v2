@@ -44,6 +44,18 @@ _ai_client = OpenAI(
     api_key=os.environ.get("OPENROUTER_API_KEY", ""),
 )
 
+import anthropic
+_anthropic_client = anthropic.Anthropic(
+    api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
+)
+
+_AI_BACKEND = os.environ.get("CARESUPPORT_AI_BACKEND", "openrouter")
+
+_ANTHROPIC_MODEL_CHAIN = [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20241022",
+]
+
 # Enforcement layer — mechanical, not optional
 from enforcement.role_filter import (
     filter_family_context,
@@ -56,6 +68,7 @@ from enforcement.family_editor import (
     apply_updates,
     parse_update_instructions,
     FileUpdate,
+    resolve_target_file,
 )
 from enforcement.approval_pipeline import (
     classify_updates,
@@ -172,11 +185,22 @@ def resolve_phone_from_routing(phone: str, routing: dict) -> dict | None:
 # ─── Context Loading ─────────────────────────────────────────────────────
 
 def load_family_context(family_dir: str) -> str:
-    """Load the family.md file."""
-    family_file = Path(family_dir) / "family.md"
+    """Load family context from family.md + split files (schedule.md, medications.md)."""
+    fdir = Path(family_dir)
+    parts = []
+
+    family_file = fdir / "family.md"
     if family_file.exists():
-        return family_file.read_text()
-    return "[No family file found]"
+        parts.append(family_file.read_text())
+    else:
+        return "[No family file found]"
+
+    for extra in ("schedule.md", "medications.md"):
+        extra_path = fdir / extra
+        if extra_path.exists():
+            parts.append(extra_path.read_text())
+
+    return "\n\n".join(parts)
 
 
 def load_recent_conversations(phone: str, limit: int = 50) -> str:
@@ -495,8 +519,9 @@ async def generate_response(system_context: str, user_message: str, member_name:
             raw = response.choices[0].message.content.strip()
             result = json.loads(raw)
 
-            if "sms_response" not in result:
+            if not result.get("sms_response", "").strip():
                 result["sms_response"] = fallback_msg
+                print(f"[CareSupport] ⚠️ AI returned empty sms_response — using fallback", file=sys.stderr)
             return json.dumps(result)
 
         except asyncio.TimeoutError:
@@ -508,6 +533,88 @@ async def generate_response(system_context: str, user_message: str, member_name:
 
         if attempt < 2:
             await asyncio.sleep(3 * (attempt + 1))
+
+    return json.dumps({"sms_response": fallback_msg, "error": str(last_error)})
+
+
+async def _generate_response_anthropic(
+    system_blocks: list[dict], messages: list[dict], member_name: str = "there"
+) -> str:
+    """Call Anthropic API directly with cache-aware system blocks.
+
+    Uses manual model fallback (429/529/timeout → next model in chain).
+    """
+    from prompt_builder import system_blocks_to_string
+
+    fallback_msg = f"I hit a technical glitch processing your last message, {member_name}. Can you send it again?"
+
+    system_content = [
+        {
+            "type": "text",
+            "text": b["text"],
+            **({"cache_control": {"type": "ephemeral"}} if b.get("cache_breakpoint") else {}),
+        }
+        for b in system_blocks
+    ]
+
+    last_error = None
+    for model in _ANTHROPIC_MODEL_CHAIN:
+        for attempt in range(2):
+            try:
+                def _sync_anthropic_call():
+                    return _anthropic_client.messages.create(
+                        model=model,
+                        max_tokens=4096,
+                        system=system_content,
+                        messages=messages,
+                        temperature=0.7,
+                    )
+
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(_sync_anthropic_call),
+                    timeout=45,
+                )
+
+                raw = response.content[0].text.strip()
+
+                # Log cache metrics
+                usage = response.usage
+                cache_write = getattr(usage, "cache_creation_input_tokens", 0)
+                cache_read = getattr(usage, "cache_read_input_tokens", 0)
+                if cache_write or cache_read:
+                    print(
+                        f"[CareSupport] Cache: write={cache_write} read={cache_read} "
+                        f"input={usage.input_tokens} model={model}",
+                        file=sys.stderr,
+                    )
+
+                result = json.loads(raw)
+
+                if not result.get("sms_response", "").strip():
+                    result["sms_response"] = fallback_msg
+                    print("[CareSupport] ⚠️ AI returned empty sms_response — using fallback", file=sys.stderr)
+                return json.dumps(result)
+
+            except asyncio.TimeoutError:
+                last_error = f"{model} timed out after 45s"
+                print(f"[CareSupport] Anthropic {model} attempt {attempt+1}/2: TimeoutError", file=sys.stderr)
+            except anthropic.RateLimitError as e:
+                last_error = e
+                print(f"[CareSupport] Anthropic {model}: rate limited, trying next model", file=sys.stderr)
+                break  # skip to next model
+            except anthropic.InternalServerError as e:
+                last_error = e
+                print(f"[CareSupport] Anthropic {model}: 5xx, trying next model", file=sys.stderr)
+                break  # skip to next model
+            except json.JSONDecodeError as e:
+                last_error = e
+                print(f"[CareSupport] Anthropic {model}: invalid JSON response, retrying", file=sys.stderr)
+            except Exception as e:
+                last_error = e
+                print(f"[CareSupport] Anthropic {model} attempt {attempt+1}/2: {type(e).__name__}: {str(e)[:150]}", file=sys.stderr)
+
+            if attempt < 1:
+                await asyncio.sleep(3)
 
     return json.dumps({"sms_response": fallback_msg, "error": str(last_error)})
 
@@ -843,6 +950,16 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     )
 
     # 6. Build system context with FILTERED family data
+    if _AI_BACKEND == "anthropic":
+        from prompt_builder import build_system_blocks, build_messages, system_blocks_to_string
+        system_blocks = build_system_blocks(
+            member, filtered_context, service=service, member_context=member_context,
+        )
+        messages = build_messages(body, conversation_history)
+    else:
+        system_blocks = None
+        messages = None
+
     system_context = build_system_context(
         member, filtered_context, conversation_history,
         service=service, member_context=member_context,
@@ -850,11 +967,14 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
 
     # 7. Generate response
     if dry_run:
+        from prompt_builder import system_blocks_to_string as _flatten
+        ctx_len = len(system_blocks_to_string(system_blocks)) if system_blocks else len(system_context)
         return {
             "success": True,
             "response": "[DRY RUN — would call AI agent here]",
             "member": member,
-            "context_length": len(system_context),
+            "context_length": ctx_len,
+            "backend": _AI_BACKEND,
             "enforcement": {
                 "access_level": access_level,
                 "sections_visible": visible_sections,
@@ -863,7 +983,12 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             },
         }
 
-    result_json = await generate_response(system_context, body, member_name=member.get("name", "there"))
+    if _AI_BACKEND == "anthropic" and system_blocks is not None:
+        result_json = await _generate_response_anthropic(
+            system_blocks, messages, member_name=member.get("name", "there"),
+        )
+    else:
+        result_json = await generate_response(system_context, body, member_name=member.get("name", "there"))
     result = json.loads(result_json)
 
     sms_response = result.get("sms_response", "")
@@ -918,24 +1043,45 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     pending_confirmations = []
     raw_updates = result.get("family_file_updates", [])
     if raw_updates and isinstance(raw_updates, list):
-        family_md_path = family_dir / "family.md"
-        if family_md_path.exists():
-            updates = parse_update_instructions(raw_updates)
-            if updates:
-                # ENFORCEMENT: classify into auto-apply vs. needs-approval
-                classified = classify_updates(updates)
+        updates = parse_update_instructions(raw_updates)
+        if updates:
+            # ENFORCEMENT: classify into auto-apply vs. needs-approval
+            classified = classify_updates(updates)
 
-                # Auto-apply safe updates immediately
-                if classified.auto_apply:
-                    edit_result = apply_updates(family_md_path, classified.auto_apply)
-                    file_update_result = {
-                        "success": edit_result.success,
-                        "backup_path": edit_result.backup_path,
-                        "updates_applied": edit_result.updates_applied,
-                        "updates_skipped": edit_result.updates_skipped,
-                        "sections_modified": edit_result.sections_modified,
-                        "errors": edit_result.errors,
-                    }
+            # Auto-apply safe updates — route each update to the correct file
+            if classified.auto_apply:
+                from collections import defaultdict
+                updates_by_file: dict[Path, list[FileUpdate]] = defaultdict(list)
+                for upd in classified.auto_apply:
+                    target = resolve_target_file(family_dir, upd.section)
+                    updates_by_file[target].append(upd)
+
+                all_applied = 0
+                all_skipped = 0
+                all_sections: list[str] = []
+                all_errors: list[str] = []
+                last_backup = ""
+                for target_path, target_updates in updates_by_file.items():
+                    if not target_path.exists():
+                        all_errors.append(f"Target file not found: {target_path.name}")
+                        all_skipped += len(target_updates)
+                        continue
+                    edit_result = apply_updates(target_path, target_updates)
+                    all_applied += edit_result.updates_applied
+                    all_skipped += edit_result.updates_skipped
+                    all_sections.extend(edit_result.sections_modified)
+                    all_errors.extend(edit_result.errors)
+                    if edit_result.backup_path:
+                        last_backup = edit_result.backup_path
+
+                file_update_result = {
+                    "success": all_applied > 0 or not all_errors,
+                    "backup_path": last_backup,
+                    "updates_applied": all_applied,
+                    "updates_skipped": all_skipped,
+                    "sections_modified": all_sections,
+                    "errors": all_errors,
+                }
 
                 # Create pending approvals for gated updates
                 if classified.needs_approval:
