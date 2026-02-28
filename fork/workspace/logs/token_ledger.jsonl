@@ -1,0 +1,6 @@
+{"ts": "2026-02-28T21:44:56.396792+00:00", "family": "kano", "member": "Liban", "model": "claude-haiku-4-5-20251001", "input": 1697, "output": 439, "cache_read": 0, "cache_write": 5830, "tool_round": 0}
+{"ts": "2026-02-28T21:45:04.384042+00:00", "family": "kano", "member": "Liban", "model": "claude-haiku-4-5-20251001", "input": 1697, "output": 349, "cache_read": 5830, "cache_write": 0, "tool_round": 0}
+{"ts": "2026-02-28T21:45:09.249006+00:00", "family": "kano", "member": "Liban", "model": "claude-sonnet-4-6", "input": 1674, "output": 161, "cache_read": 0, "cache_write": 5853, "tool_round": 0}
+{"ts": "2026-02-28T21:45:25.769404+00:00", "family": "kano", "member": "Liban", "model": "claude-sonnet-4-6", "input": 1674, "output": 496, "cache_read": 5853, "cache_write": 0, "tool_round": 0}
+{"ts": "2026-02-28T21:45:40.824548+00:00", "family": "kano", "member": "Liban", "model": "claude-opus-4-6", "input": 1674, "output": 570, "cache_read": 0, "cache_write": 5853, "tool_round": 0}
+{"ts": "2026-02-28T21:45:55.458397+00:00", "family": "kano", "member": "Liban", "model": "claude-opus-4-6", "input": 1674, "output": 401, "cache_read": 5853, "cache_write": 0, "tool_round": 0}
