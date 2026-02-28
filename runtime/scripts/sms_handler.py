@@ -535,6 +535,78 @@ async def generate_response(system_context: str, user_message: str, member_name:
     return json.dumps({"sms_response": fallback_msg, "error": str(last_error)})
 
 
+def _extract_json(raw: str | None) -> dict:
+    """Extract structured JSON from model response, handling fences and natural language.
+
+    Strategies (in order):
+    1. Direct parse
+    2. Strip markdown fences, parse
+    3. Find outermost { ... } substring, parse
+    4. Regex extract sms_response from natural language, construct JSON
+    """
+    if not raw:
+        raise json.JSONDecodeError("Empty model response", "", 0)
+
+    text = raw.strip()
+
+    # Strategy 1: direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: strip markdown fences
+    if text.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*\n?", "", text)
+        stripped = re.sub(r"\n?```\s*$", "", stripped)
+        try:
+            return json.loads(stripped.strip())
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 3: find outermost JSON object
+    start = text.find("{")
+    if start >= 0:
+        end = text.rfind("}")
+        if end > start:
+            try:
+                return json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                pass
+
+    # Strategy 4: natural language — model ignored JSON instruction, extract what we can
+    sms_match = re.search(r'"sms_response"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if sms_match:
+        return {
+            "sms_response": sms_match.group(1),
+            "internal_notes": "Extracted from malformed response",
+            "needs_outreach": [],
+            "family_file_updates": [],
+            "self_corrections": [],
+            "member_updates": [],
+            "routing_updates": [],
+        }
+
+    # Strategy 5: treat entire text as the SMS response (model responded conversationally)
+    if len(text) < 500 and not text.startswith("{"):
+        print(f"[CareSupport] Model returned plain text, wrapping as sms_response", file=sys.stderr)
+        return {
+            "sms_response": text[:320],
+            "internal_notes": "Model responded with plain text instead of JSON",
+            "needs_outreach": [],
+            "family_file_updates": [],
+            "self_corrections": [],
+            "member_updates": [],
+            "routing_updates": [],
+        }
+
+    raise json.JSONDecodeError(
+        f"No valid JSON found in response",
+        text[:200],
+        0,
+    )
+
+
 async def _generate_response_anthropic(
     system_blocks: list[dict],
     messages: list[dict],
@@ -542,7 +614,9 @@ async def _generate_response_anthropic(
     model: str = "claude-haiku-4-5-20251001",
     family_id: str = "",
     tools: list[dict] | None = None,
-    family_context: str = "",
+    filtered_context: str = "",
+    conversation_log: str = "",
+    access_level: str = "full",
 ) -> str:
     """Call Anthropic API directly with cache-aware system blocks.
 
@@ -633,8 +707,11 @@ async def _generate_response_anthropic(
                                 result_text = execute_tool(
                                     tool_name=block.name,
                                     tool_input=block.input,
+                                    filtered_context=filtered_context,
+                                    conversation_log=conversation_log,
                                     family_id=family_id,
-                                    conversation_log=family_context,
+                                    access_level=access_level,
+                                    requesting_member=member_name,
                                 )
                                 tool_results.append({
                                     "type": "tool_result",
@@ -665,12 +742,7 @@ async def _generate_response_anthropic(
                         file=sys.stderr,
                     )
 
-                cleaned = raw
-                if cleaned.startswith("```"):
-                    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
-                    cleaned = re.sub(r"\n?```\s*$", "", cleaned)
-
-                result = json.loads(cleaned)
+                result = _extract_json(raw)
 
                 if not result.get("sms_response", "").strip():
                     result["sms_response"] = fallback_msg
@@ -690,7 +762,8 @@ async def _generate_response_anthropic(
                 break
             except json.JSONDecodeError as e:
                 last_error = e
-                print(f"[CareSupport] Anthropic {current_model}: invalid JSON response, retrying", file=sys.stderr)
+                raw_preview = (raw or "")[:300].replace("\n", "\\n")
+                print(f"[CareSupport] Anthropic {current_model}: invalid JSON response, retrying. Raw: {raw_preview}", file=sys.stderr)
             except Exception as e:
                 last_error = e
                 print(f"[CareSupport] Anthropic {current_model} attempt {attempt+1}/2: {type(e).__name__}: {str(e)[:150]}", file=sys.stderr)
@@ -1122,13 +1195,10 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             file=sys.stderr,
         )
 
-        # Offer tools for GENERAL intent (agent retrieves family data on demand)
         api_tools = None
-        tool_context = ""
         if _use_tools:
             from agent_tools import TOOL_DEFINITIONS
             api_tools = TOOL_DEFINITIONS
-            tool_context = conversation_history
 
         result_json = await _generate_response_anthropic(
             system_blocks, messages,
@@ -1136,7 +1206,9 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             model=route_result.model,
             family_id=Path(member.get("family_dir", "")).name,
             tools=api_tools,
-            family_context=tool_context,
+            filtered_context=filtered_context,
+            conversation_log=conversation_history,
+            access_level=access_level,
         )
         # If Anthropic failed entirely, fall back to OpenRouter (cross-provider resilience)
         result_check = json.loads(result_json)

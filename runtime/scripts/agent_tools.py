@@ -1,9 +1,12 @@
 """
 Agent Tools — Scoped retrieval tools for CareSupport's agentic loop.
 
-Gives the AI agent tools to retrieve context on demand instead of
-pre-loading everything into the system prompt. Medium agentic depth:
-max 5 tool calls per message, with self-check before final response.
+All tools operate on pre-filtered family context (access level enforcement
+already applied by role_filter.py). Tools NEVER read raw files from disk
+for family data — the filtered_context string is the only data source.
+
+Exception: read_member reads member profiles from disk but enforces
+access_level checks before returning data.
 """
 
 from __future__ import annotations
@@ -84,11 +87,11 @@ TOOL_DEFINITIONS = [
 
 # ─── Tool Executors ──────────────────────────────────────────────────────
 
-def _grep_file(path: Path, query: str, context_lines: int = 2) -> list[str]:
-    """Search a file for lines matching query, return matches with context."""
-    if not path.exists():
+def _grep_text(text: str, query: str, context_lines: int = 2) -> list[str]:
+    """Search text for lines matching query, return matches with context."""
+    if not text:
         return []
-    lines = path.read_text().splitlines()
+    lines = text.splitlines()
     query_lower = query.lower()
     matches = []
     for i, line in enumerate(lines):
@@ -104,20 +107,17 @@ def _grep_file(path: Path, query: str, context_lines: int = 2) -> list[str]:
 def execute_search_context(
     query: str,
     scope: str = "all",
-    family_id: str = "",
+    filtered_context: str = "",
     conversation_log: str = "",
 ) -> str:
-    """Execute search_context tool."""
+    """Search pre-filtered family context and/or conversation history."""
     results = []
 
-    if scope in ("family", "all") and family_id:
-        family_dir = paths.family_dir(family_id)
-        for fname in ["family.md", "schedule.md", "medications.md"]:
-            fpath = family_dir / fname
-            hits = _grep_file(fpath, query)
-            if hits:
-                results.append(f"── {fname} ──")
-                results.extend(hits)
+    if scope in ("family", "all") and filtered_context:
+        hits = _grep_text(filtered_context, query)
+        if hits:
+            results.append("── Family context ──")
+            results.extend(hits)
 
     if scope in ("conversation", "all") and conversation_log:
         conv_lines = conversation_log.splitlines()
@@ -132,10 +132,20 @@ def execute_search_context(
     return "\n".join(results)
 
 
-def execute_read_member(name: str, family_id: str = "") -> str:
-    """Execute read_member tool."""
+def execute_read_member(
+    name: str,
+    family_id: str = "",
+    access_level: str = "full",
+    requesting_member: str = "",
+) -> str:
+    """Read a member profile from disk with access-level enforcement."""
     if not family_id:
         return "No family context available."
+
+    if access_level not in ("full", "schedule+meds"):
+        req_first = requesting_member.lower().strip().split()[0] if requesting_member else ""
+        if name.lower().strip() != req_first:
+            return "You don't have access to other members' profiles."
 
     members_dir = paths.family_dir(family_id) / "members"
     if not members_dir.exists():
@@ -150,20 +160,13 @@ def execute_read_member(name: str, family_id: str = "") -> str:
     return f"No profile found for '{name}'. Available members: {', '.join(available)}"
 
 
-def execute_check_schedule(day: str, family_id: str = "") -> str:
-    """Execute check_schedule tool."""
-    if not family_id:
-        return "No family context available."
-
-    schedule_path = paths.family_dir(family_id) / "schedule.md"
-    if not schedule_path.exists():
-        return "No schedule file found."
-
-    content = schedule_path.read_text().strip()
+def execute_check_schedule(day: str, filtered_context: str = "") -> str:
+    """Extract schedule entries from pre-filtered context for a specific day."""
+    if not filtered_context:
+        return "No schedule data available."
 
     day_lower = day.lower().strip()
 
-    # Resolve 'today' / 'tomorrow' to day names
     now = datetime.now(timezone.utc)
     day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
     if day_lower == "today":
@@ -171,7 +174,6 @@ def execute_check_schedule(day: str, family_id: str = "") -> str:
     elif day_lower == "tomorrow":
         day_lower = day_names[(now.weekday() + 1) % 7]
 
-    # Match day abbreviations
     day_abbrevs = {"mon": "monday", "tue": "tuesday", "wed": "wednesday",
                    "thu": "thursday", "fri": "friday", "sat": "saturday", "sun": "sunday"}
     for abbrev, full in day_abbrevs.items():
@@ -179,19 +181,18 @@ def execute_check_schedule(day: str, family_id: str = "") -> str:
             day_lower = full
             break
 
-    # Search for the day in schedule
-    lines = content.splitlines()
+    lines = filtered_context.splitlines()
     matches = []
+    header = []
     for line in lines:
+        if line.startswith("#") or line.startswith("<!--"):
+            header.append(line)
         if day_lower[:3] in line.lower():
             matches.append(line.strip())
 
-    # Always include the header/comments for context
-    header = [l for l in lines if l.startswith("#") or l.startswith("<!--")]
-
     if matches:
-        return "\n".join(header + [""] + matches)
-    return f"No schedule entries found for '{day}'.\n\nFull schedule:\n{content}"
+        return "\n".join(header[:3] + [""] + matches)
+    return f"No schedule entries found for '{day}'."
 
 
 # ─── Dispatcher ──────────────────────────────────────────────────────────
@@ -199,26 +200,31 @@ def execute_check_schedule(day: str, family_id: str = "") -> str:
 def execute_tool(
     tool_name: str,
     tool_input: dict,
-    family_id: str = "",
+    filtered_context: str = "",
     conversation_log: str = "",
+    family_id: str = "",
+    access_level: str = "full",
+    requesting_member: str = "",
 ) -> str:
     """Route tool call to the right executor."""
     if tool_name == "search_context":
         return execute_search_context(
             query=tool_input.get("query", ""),
             scope=tool_input.get("scope", "all"),
-            family_id=family_id,
+            filtered_context=filtered_context,
             conversation_log=conversation_log,
         )
     elif tool_name == "read_member":
         return execute_read_member(
             name=tool_input.get("name", ""),
             family_id=family_id,
+            access_level=access_level,
+            requesting_member=requesting_member,
         )
     elif tool_name == "check_schedule":
         return execute_check_schedule(
             day=tool_input.get("day", ""),
-            family_id=family_id,
+            filtered_context=filtered_context,
         )
     else:
         return f"Unknown tool: {tool_name}"
