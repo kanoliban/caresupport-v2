@@ -45,9 +45,10 @@ Usage:
     python review_staging.py restore  --family kano
     python review_staging.py reset    --family kano
     python review_staging.py diff     --family kano
-    python review_staging.py list     --family kano
+    python review_staging.py list     --family kano [--source live]
     python review_staging.py save     --family kano --review 2026-02-26_063623 --name family-tree-confusion
     python review_staging.py promote  --family kano --review 2026-02-26_061700 [--items 0,1]
+    python review_staging.py retract  --family kano --review corrections_20260228_194305 [--items 0]
 """
 
 import argparse
@@ -62,7 +63,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import paths
-from learning import append_lessons
+from learning import append_lessons, remove_lesson, _get_category, _LESSON_CONTENT_RE
 
 
 SNAPSHOT_FILES = ["family.md", "lessons.md"]
@@ -83,6 +84,10 @@ def _baseline_dir(family_id: str) -> Path:
 
 def _reviews_dir(family_id: str) -> Path:
     return _staging_dir(family_id) / "reviews"
+
+
+def _graduations_dir(family_id: str) -> Path:
+    return _staging_dir(family_id) / "graduations"
 
 
 def _saved_dir(family_id: str) -> Path:
@@ -254,7 +259,7 @@ def cmd_diff(family_id: str) -> None:
         print("No differences between baseline and live files.")
 
 
-def _list_json_dir(label: str, dir_path: Path) -> None:
+def _list_json_dir(label: str, dir_path: Path, source_filter: str | None = None) -> None:
     """Print summary of JSON files in a staging subdirectory."""
     if not dir_path.exists():
         print(f"{label}: (none)")
@@ -263,25 +268,48 @@ def _list_json_dir(label: str, dir_path: Path) -> None:
     if not files:
         print(f"{label}: (none)")
         return
-    print(f"{label} ({len(files)}):")
+
+    filtered = []
     for rf in files:
         try:
             data = json.loads(rf.read_text())
         except (json.JSONDecodeError, OSError):
+            filtered.append((rf, None))
+            continue
+        file_source = data.get("source", "batch")
+        if source_filter and file_source != source_filter:
+            continue
+        filtered.append((rf, data))
+
+    if not filtered:
+        print(f"{label}: (none matching --source {source_filter})")
+        return
+
+    print(f"{label} ({len(filtered)}):")
+    for rf, data in filtered:
+        if data is None:
             print(f"  {rf.stem}  (unreadable)")
             continue
-        n_findings = len(data.get("findings", []))
-        n_lessons = len(data.get("lessons", []))
-        n_exchanges = data.get("exchange_count", 0)
-        since = data.get("since", "?")
-        print(f"  {rf.stem}  since={since}  exchanges={n_exchanges}  findings={n_findings}  lessons={n_lessons}")
+        if data.get("source") == "live":
+            member = data.get("member", "?")
+            n_corrections = len(data.get("corrections", []))
+            trigger = data.get("trigger_message", "")[:60]
+            print(f"  {rf.stem}  [live] member={member}  corrections={n_corrections}  \"{trigger}\"")
+        else:
+            n_findings = len(data.get("findings", []))
+            n_lessons = len(data.get("lessons", []))
+            n_exchanges = data.get("exchange_count", 0)
+            since = data.get("since", "?")
+            print(f"  {rf.stem}  since={since}  exchanges={n_exchanges}  findings={n_findings}  lessons={n_lessons}")
 
 
-def cmd_list(family_id: str) -> None:
+def cmd_list(family_id: str, source: str | None = None) -> None:
     """List baseline, pending reviews, and saved reviews."""
     baseline = _baseline_dir(family_id)
 
     print(f"Family: {family_id}")
+    if source:
+        print(f"Filter: source={source}")
     print()
 
     if baseline.exists():
@@ -297,9 +325,9 @@ def cmd_list(family_id: str) -> None:
         print("Baseline: (none)")
 
     print()
-    _list_json_dir("Reviews (disposable test output)", _reviews_dir(family_id))
+    _list_json_dir("Reviews (disposable test output)", _reviews_dir(family_id), source)
     print()
-    _list_json_dir("Saved (curated for Opus)", _saved_dir(family_id))
+    _list_json_dir("Saved (curated for Opus)", _saved_dir(family_id), source)
 
 
 def cmd_promote(family_id: str, review_name: str, items: list[int] | None) -> None:
@@ -335,10 +363,400 @@ def cmd_promote(family_id: str, review_name: str, items: list[int] | None) -> No
         selected = lessons
 
     family_lessons_path = _family_dir(family_id) / "lessons.md"
-    written = append_lessons(family_lessons_path, selected, max_entries=10)
+    written = append_lessons(family_lessons_path, selected, max_entries=30)
     print(f"Promoted {written} lesson(s) to {family_lessons_path}")
     for lesson in selected:
         print(f"  + {lesson}")
+
+
+def cmd_retract(family_id: str, review_name: str, items: list[int] | None) -> None:
+    """Retract live corrections: remove from lessons.md and archive the staged record."""
+    reviews = _reviews_dir(family_id)
+
+    candidates = sorted(reviews.glob(f"{review_name}*.json"))
+    if not candidates:
+        candidates = sorted(_saved_dir(family_id).glob(f"{review_name}*.json")) if _saved_dir(family_id).exists() else []
+    if not candidates:
+        print(f"No review matching '{review_name}' in {reviews}", file=sys.stderr)
+        sys.exit(1)
+    if len(candidates) > 1:
+        print(f"Ambiguous: {[c.stem for c in candidates]}", file=sys.stderr)
+        sys.exit(1)
+
+    review_path = candidates[0]
+    data = json.loads(review_path.read_text())
+
+    corrections = data.get("corrections", [])
+    if not corrections:
+        print("No corrections in this record.")
+        return
+
+    if items is not None:
+        selected = []
+        for i in items:
+            if 0 <= i < len(corrections):
+                selected.append(corrections[i])
+            else:
+                print(f"Item index {i} out of range (0-{len(corrections)-1})", file=sys.stderr)
+                sys.exit(1)
+    else:
+        selected = corrections
+
+    family_lessons_path = _family_dir(family_id) / "lessons.md"
+    retracted = 0
+    for correction in selected:
+        if remove_lesson(family_lessons_path, correction):
+            retracted += 1
+            print(f"  - Retracted: {correction}")
+        else:
+            print(f"  ? Not found in lessons.md (may have been evicted): {correction}")
+
+    saved = _saved_dir(family_id)
+    saved.mkdir(parents=True, exist_ok=True)
+    dest = saved / f"retracted_{review_path.stem}.json"
+    shutil.move(str(review_path), str(dest))
+
+    print(f"\nRetracted {retracted}/{len(selected)} lesson(s). Record archived to saved/{dest.name}")
+
+
+# ─── Graduation Pipeline ─────────────────────────────────────────────────
+
+import re
+from datetime import datetime, timezone, timedelta
+
+_DATE_RE = re.compile(r"^\- \[(\d{4}-\d{2}-\d{2})\]")
+
+# Keywords that signal scheduling/task-related behavioral lessons
+_SCHEDULING_KEYWORDS = (
+    "schedule", "shift", "ride", "drive", "appointment", "availability",
+    "relay", "outreach", "needs_outreach", "confirm",
+)
+
+
+def _parse_lesson_entry(line: str) -> dict | None:
+    """Parse a lessons.md line into structured data."""
+    date_m = _DATE_RE.match(line)
+    if not date_m:
+        return None
+    content_m = _LESSON_CONTENT_RE.match(line)
+    content = content_m.group(1).strip() if content_m else line.split("] ", 1)[-1].strip()
+    category = _get_category(line)
+    try:
+        age_days = (datetime.now(timezone.utc).date() - datetime.strptime(date_m.group(1), "%Y-%m-%d").date()).days
+    except ValueError:
+        age_days = 0
+    return {
+        "raw": line,
+        "date": date_m.group(1),
+        "category": category,
+        "content": content,
+        "age_days": age_days,
+    }
+
+
+def _content_exists_in_file(content: str, file_path: Path) -> bool:
+    """Check if the lesson content (or close match) already exists in a target file."""
+    if not file_path.exists():
+        return False
+    file_text = file_path.read_text().lower()
+    words = [w for w in content.lower().split() if len(w) > 4]
+    if not words:
+        return False
+    matches = sum(1 for w in words if w in file_text)
+    return matches / len(words) > 0.6
+
+
+def _classify_lesson(entry: dict, family_id: str, member_names: list[str]) -> dict:
+    """Classify a lesson entry into a graduation proposal."""
+    content = entry["content"]
+    category = entry["category"]
+    content_lower = content.lower()
+
+    proposal = {
+        "lesson": content,
+        "source": f"families/{family_id}/lessons.md",
+        "date": entry["date"],
+        "age_days": entry["age_days"],
+        "target": None,
+        "section": None,
+        "action": "append",
+        "content": f"- {content}",
+        "remove_from_lessons": True,
+        "reason": None,
+    }
+
+    if entry["age_days"] < 2:
+        proposal["action"] = "skip"
+        proposal["reason"] = f"Too recent ({entry['age_days']}d old, min 2d)"
+        proposal["remove_from_lessons"] = False
+        return proposal
+
+    if category == "factual":
+        mentioned_member = None
+        for name in member_names:
+            if name.lower() in content_lower:
+                mentioned_member = name
+                break
+
+        if mentioned_member:
+            member_path = _family_dir(family_id) / "members" / f"{mentioned_member.lower()}.md"
+            if _content_exists_in_file(content, member_path):
+                proposal["action"] = "skip"
+                proposal["reason"] = f"Already in members/{mentioned_member.lower()}.md"
+            else:
+                proposal["target"] = f"members/{mentioned_member.lower()}.md"
+                proposal["section"] = "Personal Context"
+        else:
+            family_md = _family_dir(family_id) / "family.md"
+            if _content_exists_in_file(content, family_md):
+                proposal["action"] = "skip"
+                proposal["reason"] = "Already in family.md"
+            else:
+                proposal["target"] = "family.md"
+                proposal["section"] = "Care Preferences & Personality"
+
+    elif category == "operational":
+        caps_path = paths.capabilities if hasattr(paths, "capabilities") else Path()
+        if caps_path.exists() and _content_exists_in_file(content, caps_path):
+            proposal["action"] = "skip"
+            proposal["reason"] = "Already in capabilities.md"
+        else:
+            proposal["target"] = "capabilities.md"
+            proposal["section"] = "KNOWN LIMITATIONS (testing mode)"
+
+    elif category == "behavioral":
+        social_path = paths.skills_dir / "social.md" if hasattr(paths, "skills_dir") else Path()
+        scheduling_path = paths.skills_dir / "scheduling.md" if hasattr(paths, "skills_dir") else Path()
+        soul_path = Path(__file__).parent.parent.parent / "SOUL.md"
+
+        if _content_exists_in_file(content, social_path):
+            proposal["action"] = "skip"
+            proposal["reason"] = "Already in skills/social.md"
+        elif _content_exists_in_file(content, scheduling_path):
+            proposal["action"] = "skip"
+            proposal["reason"] = "Already in skills/scheduling.md"
+        elif _content_exists_in_file(content, soul_path):
+            proposal["action"] = "skip"
+            proposal["reason"] = "Already in SOUL.md"
+        elif any(kw in content_lower for kw in _SCHEDULING_KEYWORDS):
+            proposal["target"] = "skills/scheduling.md"
+        else:
+            proposal["target"] = "skills/social.md"
+
+    else:
+        proposal["target"] = "skills/social.md"
+
+    return proposal
+
+
+def cmd_graduate(family_id: str, dry_run: bool = False) -> None:
+    """Classify lessons and write graduation proposal."""
+    family_dir = _family_dir(family_id)
+    if not family_dir.is_dir():
+        print(f"Family directory not found: {family_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    family_lessons_path = family_dir / "lessons.md"
+    entries = []
+    if family_lessons_path.exists():
+        for line in family_lessons_path.read_text().strip().split("\n"):
+            parsed = _parse_lesson_entry(line)
+            if parsed:
+                parsed["source"] = "family"
+                entries.append(parsed)
+
+    if paths.lessons.exists():
+        for line in paths.lessons.read_text().strip().split("\n"):
+            parsed = _parse_lesson_entry(line)
+            if parsed:
+                parsed["source"] = "global"
+                entries.append(parsed)
+
+    if not entries:
+        print("No lessons to graduate.")
+        return
+
+    members_dir = family_dir / "members"
+    member_names = [f.stem.title() for f in members_dir.glob("*.md")] if members_dir.exists() else []
+
+    proposals = []
+    for entry in entries:
+        proposal = _classify_lesson(entry, family_id, member_names)
+        proposal["source"] = f"families/{family_id}/lessons.md" if entry["source"] == "family" else "runtime/learning/lessons.md"
+        proposals.append(proposal)
+
+    by_target: dict[str, list] = {}
+    for i, p in enumerate(proposals):
+        key = p["target"] or ("SKIP" if p["action"] == "skip" else "UNKNOWN")
+        by_target.setdefault(key, []).append((i, p))
+
+    print(f"\nGraduation proposal for {family_id} ({len(entries)} lessons reviewed):\n")
+
+    target_labels = {
+        "family.md": "FAMILY.MD",
+        "capabilities.md": "CAPABILITIES.MD",
+        "SKIP": "NO ACTION",
+    }
+
+    for target, items in sorted(by_target.items()):
+        label = target_labels.get(target, target.upper())
+        print(f"  {label} ({len(items)}):")
+        for idx, p in items:
+            if p["action"] == "skip":
+                print(f"    [{idx}] {p['lesson'][:70]}  ← {p['reason']}")
+            else:
+                section = f" → {p['section']}" if p["section"] else ""
+                print(f"    [{idx}] {p['lesson'][:70]}{section}")
+        print()
+
+    if dry_run:
+        print("(dry run — no files written)")
+        return
+
+    graduations = _graduations_dir(family_id)
+    graduations.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.now(timezone.utc)
+    ts = now.strftime("%Y-%m-%d_%H%M%S")
+
+    record = {
+        "timestamp": now.isoformat(),
+        "family_id": family_id,
+        "proposals": proposals,
+    }
+
+    out_path = graduations / f"{ts}.json"
+    with open(out_path, "w") as f:
+        json.dump(record, f, indent=2)
+
+    print(f"Saved to: {out_path}")
+    print(f"Review and apply: python review_staging.py merge --family {family_id} --graduation {ts}")
+
+
+def cmd_merge(family_id: str, graduation_name: str, items: list[int] | None, force: bool = False) -> None:
+    """Apply graduation proposals: write to target files, remove from lessons.md."""
+    graduations = _graduations_dir(family_id)
+
+    candidates = sorted(graduations.glob(f"{graduation_name}*.json"))
+    if not candidates:
+        print(f"No graduation matching '{graduation_name}' in {graduations}", file=sys.stderr)
+        sys.exit(1)
+    if len(candidates) > 1:
+        print(f"Ambiguous: {[c.stem for c in candidates]}", file=sys.stderr)
+        sys.exit(1)
+
+    grad_path = candidates[0]
+    data = json.loads(grad_path.read_text())
+    proposals = data.get("proposals", [])
+
+    if not proposals:
+        print("No proposals in this graduation.")
+        return
+
+    if items is not None:
+        selected_indices = items
+    else:
+        selected_indices = list(range(len(proposals)))
+
+    family_dir = _family_dir(family_id)
+    merged = 0
+    skipped = 0
+    removed = 0
+
+    for i in selected_indices:
+        if i < 0 or i >= len(proposals):
+            print(f"  Index {i} out of range (0-{len(proposals)-1})", file=sys.stderr)
+            continue
+
+        p = proposals[i]
+
+        if p["action"] == "skip":
+            print(f"  [{i}] SKIP: {p['lesson'][:60]}  ({p.get('reason', '')})")
+            skipped += 1
+            continue
+
+        target = p.get("target")
+        if not target:
+            print(f"  [{i}] SKIP: no target for {p['lesson'][:60]}")
+            skipped += 1
+            continue
+
+        if "SOUL" in target and not force:
+            print(f"  [{i}] BLOCKED: {target} is protected. Use --force to merge into SOUL.md")
+            skipped += 1
+            continue
+
+        if target.startswith("members/"):
+            target_path = family_dir / target
+        elif target == "family.md":
+            target_path = family_dir / "family.md"
+        elif target.startswith("skills/"):
+            target_path = paths.skills_dir / target.replace("skills/", "")
+        elif target == "capabilities.md":
+            target_path = paths.capabilities if hasattr(paths, "capabilities") else None
+        elif target == "SOUL.md":
+            target_path = Path(__file__).parent.parent.parent / "SOUL.md"
+        else:
+            print(f"  [{i}] SKIP: unknown target {target}")
+            skipped += 1
+            continue
+
+        if target_path is None or not target_path.exists():
+            print(f"  [{i}] SKIP: target file not found: {target}")
+            skipped += 1
+            continue
+
+        content_to_add = p.get("content", f"- {p['lesson']}")
+        section = p.get("section")
+
+        if section and target in ("family.md",) or target.startswith("members/"):
+            from enforcement.family_editor import apply_updates, FileUpdate
+            updates = [FileUpdate(
+                section=section,
+                operation="append",
+                content=content_to_add,
+            )]
+            result = apply_updates(target_path, updates)
+            if result.updates_applied > 0:
+                print(f"  [{i}] MERGED → {target} ({section}): {p['lesson'][:50]}")
+                merged += 1
+            else:
+                print(f"  [{i}] FAILED → {target}: {result.errors}")
+                skipped += 1
+                continue
+        else:
+            existing = target_path.read_text()
+            if not existing.endswith("\n"):
+                existing += "\n"
+            target_path.write_text(existing + content_to_add + "\n")
+            print(f"  [{i}] MERGED → {target}: {p['lesson'][:50]}")
+            merged += 1
+
+        if p.get("remove_from_lessons"):
+            source = p.get("source", "")
+            if "families/" in source:
+                lessons_path = family_dir / "lessons.md"
+            else:
+                lessons_path = paths.lessons
+            if remove_lesson(lessons_path, p["lesson"]):
+                removed += 1
+
+    saved = _saved_dir(family_id)
+    saved.mkdir(parents=True, exist_ok=True)
+    dest = saved / f"graduated_{grad_path.stem}.json"
+    shutil.move(str(grad_path), str(dest))
+
+    print(f"\nMerged: {merged}  Skipped: {skipped}  Removed from lessons: {removed}")
+    print(f"Archived to: saved/{dest.name}")
+
+
+def cmd_export_training(family_id: str) -> None:
+    """Export fine-tuning training examples. (Stub — not yet implemented.)"""
+    print("export-training is not yet implemented.")
+    print(f"Fine-tuning examples will be collected from graduated proposals for family '{family_id}'.")
+    ft_dir = Path(__file__).parent.parent.parent / "fine-tuning" / "examples" / family_id
+    ft_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Directory ready: {ft_dir}")
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────
@@ -349,9 +767,13 @@ def main():
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("snapshot", "restore", "reset", "diff", "list"):
+    for name in ("snapshot", "restore", "reset", "diff"):
         p = sub.add_parser(name)
         p.add_argument("--family", required=True, help="Family ID (e.g., kano)")
+
+    list_p = sub.add_parser("list")
+    list_p.add_argument("--family", required=True, help="Family ID (e.g., kano)")
+    list_p.add_argument("--source", default=None, help="Filter by source: 'live' or 'batch'")
 
     save_p = sub.add_parser("save")
     save_p.add_argument("--family", required=True, help="Family ID")
@@ -362,6 +784,24 @@ def main():
     promote_p.add_argument("--family", required=True, help="Family ID")
     promote_p.add_argument("--review", required=True, help="Review timestamp (e.g., 2026-02-26_061700)")
     promote_p.add_argument("--items", default=None, help="Comma-separated lesson indices (default: all)")
+
+    retract_p = sub.add_parser("retract")
+    retract_p.add_argument("--family", required=True, help="Family ID")
+    retract_p.add_argument("--review", required=True, help="Review name (e.g., corrections_20260228_194305)")
+    retract_p.add_argument("--items", default=None, help="Comma-separated correction indices (default: all)")
+
+    graduate_p = sub.add_parser("graduate")
+    graduate_p.add_argument("--family", required=True, help="Family ID")
+    graduate_p.add_argument("--dry-run", action="store_true", help="Classify only, don't write proposal")
+
+    merge_p = sub.add_parser("merge")
+    merge_p.add_argument("--family", required=True, help="Family ID")
+    merge_p.add_argument("--graduation", required=True, help="Graduation timestamp (e.g., 2026-02-28_210000)")
+    merge_p.add_argument("--items", default=None, help="Comma-separated proposal indices (default: all)")
+    merge_p.add_argument("--force", action="store_true", help="Allow merging into SOUL.md (protected)")
+
+    export_p = sub.add_parser("export-training")
+    export_p.add_argument("--family", required=True, help="Family ID")
 
     args = parser.parse_args()
 
@@ -374,7 +814,7 @@ def main():
     elif args.command == "diff":
         cmd_diff(args.family)
     elif args.command == "list":
-        cmd_list(args.family)
+        cmd_list(args.family, source=args.source)
     elif args.command == "save":
         cmd_save(args.family, args.review, args.name)
     elif args.command == "promote":
@@ -382,6 +822,20 @@ def main():
         if args.items is not None:
             item_list = [int(x.strip()) for x in args.items.split(",")]
         cmd_promote(args.family, args.review, item_list)
+    elif args.command == "retract":
+        item_list = None
+        if args.items is not None:
+            item_list = [int(x.strip()) for x in args.items.split(",")]
+        cmd_retract(args.family, args.review, item_list)
+    elif args.command == "graduate":
+        cmd_graduate(args.family, dry_run=args.dry_run)
+    elif args.command == "merge":
+        item_list = None
+        if args.items is not None:
+            item_list = [int(x.strip()) for x in args.items.split(",")]
+        cmd_merge(args.family, args.graduation, item_list, force=args.force)
+    elif args.command == "export-training":
+        cmd_export_training(args.family)
 
 
 if __name__ == "__main__":

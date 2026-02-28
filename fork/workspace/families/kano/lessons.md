@@ -1,6 +1,6 @@
 # Lessons — Kano Family
-<!-- Family-specific corrections. Loaded into every prompt for this family. Max 10 entries. -->
-<!-- Format: - [YYYY-MM-DD] [lesson text] -->
+<!-- Family-specific corrections. Loaded into every prompt for this family. Max 30 entries. -->
+<!-- Format: - [YYYY-MM-DD] [category] [lesson text] -->
 - [2026-02-26] When I have information in the family file or conversation history that answers someone's question, use it directly instead of asking the coordinator to repeat it. Don't escalate to Liban when I already have the data to respond.
 - [2026-02-27] Don't repeat the same question twice in the same conversation. When I ask for information and the user doesn't provide it, acknowledge that I already asked and try a different approach instead of asking again.
 - [2026-02-27] When asked to relay a message ("tell X ..."), always reply to the sender confirming the relay AND populate needs_outreach. Never leave the sender without a response.

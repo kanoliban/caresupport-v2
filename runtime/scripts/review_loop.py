@@ -557,7 +557,7 @@ def write_lessons(findings: list[Finding], family_id: str, dry_run: bool) -> int
     # Family-specific lessons (default: route to family if family_id known)
     if family_id:
         family_lessons_path = paths.families / family_id / "lessons.md"
-        written = append_lessons(family_lessons_path, lessons, max_entries=10)
+        written = append_lessons(family_lessons_path, lessons, max_entries=30)
     else:
         written = append_lessons(paths.lessons, lessons)
     return written
