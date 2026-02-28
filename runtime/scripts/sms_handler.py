@@ -626,21 +626,23 @@ async def _generate_response_anthropic(
 
                     # Handle tool use: execute tools and continue loop
                     if response.stop_reason == "tool_use" and tools and tool_round < 3:
-                        from care_tools import handle_tool_call, TOOL_NAMES
+                        from agent_tools import execute_tool
                         tool_results = []
                         for block in response.content:
                             if block.type == "tool_use":
-                                if block.name in TOOL_NAMES:
-                                    result_text = handle_tool_call(block.name, family_context)
-                                else:
-                                    result_text = f"Unknown tool: {block.name}"
+                                result_text = execute_tool(
+                                    tool_name=block.name,
+                                    tool_input=block.input,
+                                    family_id=family_id,
+                                    conversation_log=family_context,
+                                )
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": block.id,
                                     "content": result_text,
                                 })
                                 print(
-                                    f"[CareSupport] Tool: {block.name} → {len(result_text)} chars",
+                                    f"[CareSupport] Tool: {block.name}({json.dumps(block.input)[:80]}) → {len(result_text)} chars",
                                     file=sys.stderr,
                                 )
                         loop_messages.append({"role": "assistant", "content": response.content})
@@ -1073,7 +1075,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     # 7. Build system context with FILTERED family data (intent-driven)
     if _AI_BACKEND == "anthropic":
         from prompt_builder import build_system_blocks, build_messages, system_blocks_to_string
-        _use_tools = route_result and route_result.intent == "GENERAL"
+        _use_tools = route_result and route_result.intent in ("GENERAL", "MULTI_MEMBER")
         system_blocks = build_system_blocks(
             member, filtered_context, service=service, member_context=member_context,
             intent=route_result.intent if route_result else "",
@@ -1123,10 +1125,10 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
         # Offer tools for GENERAL intent (agent retrieves family data on demand)
         api_tools = None
         tool_context = ""
-        if route_result.intent == "GENERAL":
-            from care_tools import CARE_TOOLS
-            api_tools = CARE_TOOLS
-            tool_context = filtered_context
+        if _use_tools:
+            from agent_tools import TOOL_DEFINITIONS
+            api_tools = TOOL_DEFINITIONS
+            tool_context = conversation_history
 
         result_json = await _generate_response_anthropic(
             system_blocks, messages,

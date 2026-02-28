@@ -203,28 +203,45 @@ def build_system_blocks(
 
     blocks.append({"type": "text", "text": member_block, "cache_breakpoint": True})
 
-    # Block 6: Family context — intent-driven loading
-    family_mode = _INTENT_FAMILY_MODE.get(intent, "family_full")
-    section_filter = _FAMILY_SECTIONS.get(family_mode)
+    # Block 6: Family context — tools_active skips pre-loading (agent retrieves via tools)
+    if tools_active:
+        family_id = Path(member.get("family_dir", "")).name
+        members_dir = paths.family_dir(family_id) / "members" if family_id else None
+        available_members = []
+        if members_dir and members_dir.exists():
+            available_members = [f.stem.capitalize() for f in members_dir.glob("*.md")]
+        blocks.append({
+            "type": "text",
+            "text": (
+                f"── FAMILY CONTEXT (use tools to retrieve) ──\n"
+                f"Family: {family_id}\n"
+                f"Care recipient: {member.get('relationship', 'unknown relationship')}\n"
+                f"Available data files: family.md, schedule.md, medications.md\n"
+                f"Member profiles: {', '.join(available_members) or 'none'}\n"
+                f"Use search_context, read_member, or check_schedule to look up details."
+            ),
+            "cache_breakpoint": False,
+        })
+    else:
+        family_mode = _INTENT_FAMILY_MODE.get(intent, "family_full")
+        section_filter = _FAMILY_SECTIONS.get(family_mode)
 
-    if family_context:
-        if section_filter is None:
-            # Full context (EMERGENCY, ESCALATION, or unknown intent)
-            ctx = family_context
-        elif section_filter == "_slim":
-            # Slim: preamble only (name, overview, urgent notes snippet)
-            ctx = family_context[:500].rsplit("\n", 1)[0]
-        elif isinstance(section_filter, set):
-            ctx = _extract_family_sections(family_context, section_filter)
-        else:
-            ctx = family_context
+        if family_context:
+            if section_filter is None:
+                ctx = family_context
+            elif section_filter == "_slim":
+                ctx = family_context[:500].rsplit("\n", 1)[0]
+            elif isinstance(section_filter, set):
+                ctx = _extract_family_sections(family_context, section_filter)
+            else:
+                ctx = family_context
 
-        if ctx.strip():
-            blocks.append({
-                "type": "text",
-                "text": f"── FAMILY FILE (scoped to {member['name']}'s access level) ──\n{ctx}",
-                "cache_breakpoint": False,
-            })
+            if ctx.strip():
+                blocks.append({
+                    "type": "text",
+                    "text": f"── FAMILY FILE (scoped to {member['name']}'s access level) ──\n{ctx}",
+                    "cache_breakpoint": False,
+                })
 
     # Block 7: Current datetime (changes EVERY call — must be last)
     now = datetime.now(timezone.utc)
