@@ -1204,7 +1204,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
     if sms_response:
         log_message(from_phone, "OUTBOUND", sms_response, family_id)
 
-    return {
+    final = {
         "success": True,
         "response": sms_response,
         "needs_outreach": result.get("needs_outreach", []),
@@ -1223,6 +1223,9 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             "approvals_required": len(pending_confirmations),
         },
     }
+    if route_result:
+        final["_routed_tier"] = route_result.tier
+    return final
 
 
 # ─── CLI ──────────────────────────────────────────────────────────────────
