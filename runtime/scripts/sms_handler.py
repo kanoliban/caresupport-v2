@@ -219,7 +219,8 @@ def load_recent_conversations(phone: str, limit: int = 50) -> str:
 
     summary_path = conv_dir / "summary.md"
     if len(lines) > 20 and summary_path.exists():
-        summary = summary_path.read_text().strip()
+        raw = summary_path.read_text().strip()
+        summary = raw.split("\n", 1)[1].strip() if raw.startswith("<!-- lines:") else raw
         recent = lines[-10:]
         return f"[Previous conversation summary]\n{summary}\n\n[Recent messages]\n" + "\n".join(recent)
 
@@ -233,23 +234,26 @@ async def _summarize_conversation(phone: str) -> None:
     Called as fire-and-forget after message processing. Uses Haiku for
     cheap summarization. Only re-summarizes when the log has grown.
     """
-    conv_dir = paths.conversations / phone
-    log_files = sorted(conv_dir.glob("*.log"), reverse=True)
-    if not log_files:
-        return
-
-    lines = log_files[0].read_text().strip().split("\n")
-    if len(lines) <= 20:
-        return
-
-    summary_path = conv_dir / "summary.md"
-    if summary_path.exists():
-        if summary_path.stat().st_mtime >= log_files[0].stat().st_mtime:
+    try:
+        conv_dir = paths.conversations / phone
+        log_files = sorted(conv_dir.glob("*.log"), reverse=True)
+        if not log_files:
             return
 
-    older = "\n".join(lines[:-10])
+        lines = log_files[0].read_text().strip().split("\n")
+        if len(lines) <= 20:
+            return
 
-    try:
+        summary_path = conv_dir / "summary.md"
+        if summary_path.exists():
+            header = summary_path.read_text().split("\n", 1)[0]
+            if header.startswith("<!-- lines:"):
+                summarized_count = int(header.split(":")[1].rstrip(" -->"))
+                if summarized_count >= len(lines):
+                    return
+
+        older = "\n".join(lines[:-10])
+
         summary_response = await asyncio.wait_for(
             asyncio.to_thread(lambda: _anthropic_client.messages.create(
                 model="claude-haiku-4-5-20251001",
@@ -262,7 +266,7 @@ async def _summarize_conversation(phone: str) -> None:
             timeout=15,
         )
         summary_text = summary_response.content[0].text.strip()
-        summary_path.write_text(summary_text)
+        summary_path.write_text(f"<!-- lines:{len(lines)} -->\n{summary_text}")
     except Exception as e:
         print(f"[CareSupport] ⚠ Conversation summarization failed: {e}")
 

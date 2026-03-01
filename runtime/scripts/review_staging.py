@@ -762,7 +762,11 @@ def cmd_export_training(family_id: str) -> None:
     graduations_dir = _graduations_dir(family_id)
     if graduations_dir.exists():
         for gfile in sorted(graduations_dir.glob("*.json")):
-            data = json.loads(gfile.read_text())
+            try:
+                data = json.loads(gfile.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"  Skipping {gfile.name}: {e}", file=sys.stderr)
+                continue
             for proposal in data.get("proposals", []):
                 if proposal.get("action") == "skip":
                     continue
@@ -776,7 +780,11 @@ def cmd_export_training(family_id: str) -> None:
     saved_dir = _saved_dir(family_id)
     if saved_dir.exists():
         for sfile in sorted(saved_dir.glob("*.json")):
-            data = json.loads(sfile.read_text())
+            try:
+                data = json.loads(sfile.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"  Skipping {sfile.name}: {e}", file=sys.stderr)
+                continue
             for finding in data.get("findings", []):
                 lesson = finding.get("lesson") or finding.get("title", "")
                 if not lesson:
@@ -803,7 +811,7 @@ def cmd_export_training(family_id: str) -> None:
             "metadata": {"source": ex["source"], "category": ex.get("category")},
         }))
 
-    output_path.write_text("\n".join(training_lines) + "\n" if training_lines else "")
+    output_path.write_text(("\n".join(training_lines) + "\n") if training_lines else "")
     print(f"Exported {len(training_lines)} examples to {output_path}")
     print(f"Target: 100+ examples. Current: {len(training_lines)}. Gap: {max(0, 100 - len(training_lines))}")
 
