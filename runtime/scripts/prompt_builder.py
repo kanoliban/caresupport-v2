@@ -125,6 +125,7 @@ def build_system_blocks(
     member_context: str = "",
     intent: str = "",
     tools_active: bool = False,
+    conversation_history: str = "",
 ) -> list[dict]:
     """Build system prompt as ordered content blocks for cache-aware API calls.
 
@@ -222,6 +223,15 @@ def build_system_blocks(
             ),
             "cache_breakpoint": False,
         })
+        # Inject conversation summary so AI has authoritative context even when tools are active
+        if conversation_history and "[Previous conversation summary]" in conversation_history:
+            summary_part = conversation_history.split("[Recent messages]")[0].replace("[Previous conversation summary]\n", "").strip()
+            if summary_part:
+                blocks.append({
+                    "type": "text",
+                    "text": f"── CONVERSATION CONTEXT (authoritative — use this to answer questions) ──\n{summary_part}",
+                    "cache_breakpoint": False,
+                })
     else:
         family_mode = _INTENT_FAMILY_MODE.get(intent, "family_full")
         section_filter = _FAMILY_SECTIONS.get(family_mode)

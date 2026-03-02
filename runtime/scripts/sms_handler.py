@@ -242,9 +242,9 @@ def load_recent_conversations(phone: str, limit: int = 50) -> str:
             entries[-1] += "\n" + line
 
     summary_path = conv_dir / "summary.md"
-    if len(entries) > 20 and summary_path.exists():
+    if summary_path.exists():
         raw = summary_path.read_text().strip()
-        summary = raw.split("\n", 1)[1].strip() if raw.startswith("<!-- lines:") else raw
+        summary = raw.split("\n", 1)[1].strip() if raw.startswith("<!--") else raw
         recent = entries[-10:]
         return f"[Previous conversation summary]\n{summary}\n\n[Recent messages]\n" + "\n".join(recent)
 
@@ -264,16 +264,26 @@ async def _summarize_conversation(phone: str) -> None:
         if not log_files:
             return
 
-        lines = log_files[0].read_text().strip().split("\n")
+        current_lines = log_files[0].read_text().strip().split("\n")
+        lines = current_lines
+        if len(current_lines) <= 20 and len(log_files) > 1:
+            prev_lines = log_files[1].read_text().strip().split("\n")
+            lines = prev_lines + current_lines
         if len(lines) <= 20:
             return
 
         summary_path = conv_dir / "summary.md"
         if summary_path.exists():
             header = summary_path.read_text().split("\n", 1)[0]
-            if header.startswith("<!-- lines:"):
-                summarized_count = int(header.split(":")[1].rstrip(" -->"))
-                if summarized_count >= len(lines):
+            if header.startswith("<!--"):
+                parts = {}
+                for token in header.strip("<!- >").split():
+                    if ":" in token:
+                        k, v = token.split(":", 1)
+                        parts[k] = v
+                watermark_file = parts.get("file", "")
+                summarized_count = int(parts.get("lines", "0"))
+                if watermark_file == log_files[0].name and summarized_count >= len(current_lines):
                     return
 
         older = "\n".join(lines[:-10])
@@ -290,7 +300,7 @@ async def _summarize_conversation(phone: str) -> None:
             timeout=15,
         )
         summary_text = summary_response.content[0].text.strip()
-        summary_path.write_text(f"<!-- lines:{len(lines)} -->\n{summary_text}")
+        summary_path.write_text(f"<!-- file:{log_files[0].name} lines:{len(current_lines)} -->\n{summary_text}")
     except Exception as e:
         print(f"[CareSupport] ⚠ Conversation summarization failed: {e}")
 
@@ -668,7 +678,7 @@ def _extract_json(raw: str | None) -> dict:
     if len(text) < 500 and not text.startswith("{"):
         print(f"[CareSupport] Model returned plain text, wrapping as sms_response", file=sys.stderr)
         return {
-            "sms_response": text[:320],
+            "sms_response": text,
             "internal_notes": "Model responded with plain text instead of JSON",
             "needs_outreach": [],
             "family_file_updates": [],
@@ -1137,7 +1147,7 @@ BLOCKED_RESPONSE = (
 )
 
 
-async def handle_sms(from_phone: str, body: str, dry_run: bool = False, service: str = "SMS") -> dict:
+async def handle_sms(from_phone: str, body: str, dry_run: bool = False, service: str = "SMS", cli_mode: bool = False) -> dict:
     """
     Main entry point: process an inbound SMS and return the response.
 
@@ -1182,18 +1192,20 @@ async def handle_sms(from_phone: str, body: str, dry_run: bool = False, service:
     # SERIALIZATION: Acquire per-family lock before touching family.md
     # Prevents race conditions when two messages arrive for the same family
     with family_lock(family_id, phone=from_phone):
-        return await _process_message(member, family_id, family_dir, access_level, from_phone, body, dry_run, service)
+        return await _process_message(member, family_id, family_dir, access_level, from_phone, body, dry_run, service, cli_mode=cli_mode)
 
 
 async def _process_message(member: dict, family_id: str, family_dir: Path,
                            access_level: str, from_phone: str, body: str,
-                           dry_run: bool, service: str = "SMS") -> dict:
+                           dry_run: bool, service: str = "SMS",
+                           cli_mode: bool = False) -> dict:
     """Process a message under the family lock. All family.md reads/writes are serialized."""
 
     log_prefix = "[CareSupport]"
 
-    # 2. Log inbound message
-    log_message(from_phone, "INBOUND", body, family_id)
+    # 2. Log inbound message (skip for CLI — poller logs the real inbound)
+    if not cli_mode:
+        log_message(from_phone, "INBOUND", body, family_id)
 
     # 2.5 ENFORCEMENT: Check if this is an approval response (early return)
     approval_response = _handle_approval_response(member, body, family_dir)
@@ -1230,6 +1242,7 @@ async def _process_message(member: dict, family_id: str, family_dir: Path,
             member, filtered_context, service=service, member_context=member_context,
             intent=route_result.intent if route_result else "",
             tools_active=bool(_use_tools),
+            conversation_history=conversation_history,
         )
         messages = build_messages(body, conversation_history)
     else:
@@ -1480,5 +1493,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    result = asyncio.run(handle_sms(args.from_phone, args.body, args.dry_run))
+    result = asyncio.run(handle_sms(args.from_phone, args.body, args.dry_run, cli_mode=True))
     print(json.dumps(result, indent=2))
