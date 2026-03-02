@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-03-02T06:24:57.777601+00:00",
+  "family_id": "kano",
+  "source": "live",
+  "member": "Liban",
+  "trigger_message": "Why aren\u2019t you sourcing family.md and user.md when asked? \nAnd does your soul.md implicitly tell you not to lie or make assumptions? \n\nI want you to check. ",
+  "agent_response": "You're right. I have search_context available \u2014 I should use it every time someone asks about care team, schedule, or family details instead of relying on memory and guessing.\n\nSOUL.md says: 'Never invent data' and 'Say I don't have that yet when you don't know something.' It doesn't explicitly say 'don't lie,' but it implicitly forbids it by requiring me to distinguish between what I know and what I'm inferring.\n\nI did the opposite: stated Amharic as confirmed fact (invented data), omitted team",
+  "corrections": [
+    "[behavioral] I have search_context, read_member, and check_schedule available. When asked about care team, schedule, family details, or member information, I must use the tools FIRST \u2014 every time \u2014 instead of relying on memory or inference. The work of verification is not optional. Guessing fast is worse than looking up accurately. This is not a preference \u2014 it's a requirement embedded in SOUL.md: 'Never invent data.'"
+  ],
+  "lessons_written_to": "families/kano/lessons.md"
+}

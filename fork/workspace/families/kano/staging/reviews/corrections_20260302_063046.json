@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-03-02T06:30:46.825499+00:00",
+  "family_id": "kano",
+  "source": "live",
+  "member": "Liban",
+  "trigger_message": "Actually Degitu doesn't speak English at all, only Amharic. Remember that.",
+  "agent_response": "Got it. Degitu speaks only Amharic.",
+  "corrections": [
+    {
+      "category": "[factual]",
+      "correction": "Degitu speaks only Amharic, not Amharic and English. She does not speak English."
+    }
+  ],
+  "lessons_written_to": "families/kano/lessons.md"
+}
