@@ -36,6 +36,21 @@
       "active": true,
       "relationship": "community_helper",
       "chat_id": "753c8dcf-b13e-4727-b85a-a4f253db0eca"
+    },
+    "+16125905605": {
+      "name": "Haley Purvis",
+      "role": "family_caregiver",
+      "access_level": "limited",
+      "active": true,
+      "relationship": "Partner of primary caregiver",
+      "chat_id": "95832fc3-92f0-4f8f-a92b-95eefba12ab5"
+    },
+    "+16514109609": {
+      "name": "Kano Banjaw",
+      "role": "family_caregiver",
+      "access_level": "limited",
+      "active": true,
+      "relationship": "father of primary caregiver"
     }
   },
   "care_recipient": "Degitu",

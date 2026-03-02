@@ -46,6 +46,18 @@ _ai_client = OpenAI(
 )
 
 import anthropic
+# Monkey-patch: Anthropic SDK v0.77.0 passes by_alias=None to Pydantic v2's
+# model_dump(), which requires a bool.  The SDK's _compat.model_dump wrapper
+# passes None through to model.model_dump() which hits Pydantic's Rust core.
+# Patch at the Pydantic level since SDK callers bypass _compat in some paths.
+import pydantic as _pyd
+_orig_pyd_model_dump = _pyd.BaseModel.model_dump
+def _safe_model_dump(self, **kwargs):
+    if 'by_alias' in kwargs and kwargs['by_alias'] is None:
+        kwargs['by_alias'] = False
+    return _orig_pyd_model_dump(self, **kwargs)
+_pyd.BaseModel.model_dump = _safe_model_dump
+
 _anthropic_client = anthropic.Anthropic(
     api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
 )
@@ -434,7 +446,7 @@ If you previously sent an error message or glitch occurred, acknowledge it direc
 Respond with ONLY valid JSON matching the required schema. No markdown fencing, no explanation.
 
 FIELD GUIDE:
-- sms_response: The text message to send back. Keep under 320 chars when possible.
+- sms_response: The text message to send back. Use paragraph breaks (blank lines) to separate distinct thoughts — each paragraph becomes a separate message bubble. Keep each paragraph under 320 chars. For short responses (greetings, confirmations), a single paragraph is fine.
 - internal_notes: Your reasoning (not shown to user).
 - needs_outreach: Array of objects with phone (E.164 format: +1 then 10 digits, no dashes — e.g. +16514109390), name, message for people to contact. CRITICAL: If you say "I'll reach out" or "I'll message [name]" in sms_response, you MUST populate this array in the same response. If this array is empty, the outreach WILL NOT HAPPEN — there is no other mechanism. Say "I'll message [name]" in sms_response — never "I'm texting them now."
 - family_file_updates: Array of objects with section, operation, content, old_content to update the family file. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
