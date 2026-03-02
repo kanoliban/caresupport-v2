@@ -88,14 +88,20 @@ TOOL_DEFINITIONS = [
 # ─── Tool Executors ──────────────────────────────────────────────────────
 
 def _grep_text(text: str, query: str, context_lines: int = 2) -> list[str]:
-    """Search text for lines matching query, return matches with context."""
+    """Search text for lines matching query, return matches with context.
+
+    Matches any line containing ALL query terms (split by whitespace),
+    so 'care team phone' matches a line with all three words anywhere.
+    Falls back to substring match for single-word queries.
+    """
     if not text:
         return []
     lines = text.splitlines()
-    query_lower = query.lower()
+    terms = query.lower().split()
     matches = []
     for i, line in enumerate(lines):
-        if query_lower in line.lower():
+        line_lower = line.lower()
+        if all(t in line_lower for t in terms) or (len(terms) > 1 and any(t in line_lower for t in terms)):
             start = max(0, i - context_lines)
             end = min(len(lines), i + context_lines + 1)
             chunk = "\n".join(lines[start:end])

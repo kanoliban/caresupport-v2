@@ -466,10 +466,10 @@ If the conversation history shows the system sent an error message on your behal
 CRITICAL: Never claim a technical error occurred unless the conversation history explicitly shows one. Saying "I hit a glitch" when no glitch happened is fabrication. If you don't know the answer, say so — don't invent a system error as an excuse.
 
 ── RESPONSE FORMAT ──
-Respond with ONLY valid JSON matching the required schema. No markdown fencing, no explanation.
+Your output must be valid JSON matching the required schema. No markdown fencing, no explanation outside the JSON.
 
 FIELD GUIDE:
-- sms_response: The text message to send back. To send multiple message bubbles, separate paragraphs with a double newline (\\n\\n in JSON). Each \\n\\n-separated paragraph becomes its own iMessage bubble. Keep each paragraph under 450 chars. A single \\n does NOT create a new bubble. For short responses (greetings, confirmations), a single paragraph is fine.
+- sms_response: REQUIRED. The text message sent to the user via SMS/iMessage. This is what they see. It must ALWAYS contain your actual reply — never leave it empty. To send multiple message bubbles, separate paragraphs with a double newline (\\n\\n in JSON). Each \\n\\n-separated paragraph becomes its own iMessage bubble. Keep each paragraph under 450 chars. A single \\n does NOT create a new bubble. For short responses (greetings, confirmations), a single paragraph is fine.
 - internal_notes: Your reasoning (not shown to user).
 - needs_outreach: Array of objects with phone (E.164 format: +1 then 10 digits, no dashes — e.g. +16514109390), name, message for people to contact. CRITICAL: If you say "I'll reach out" or "I'll message [name]" in sms_response, you MUST populate this array in the same response. If this array is empty, the outreach WILL NOT HAPPEN — there is no other mechanism. Say "I'll message [name]" in sms_response — never "I'm texting them now."
 - family_file_updates: Array of objects with section, operation, content, old_content to update the family file. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
@@ -844,7 +844,7 @@ async def _generate_response_anthropic(
 
                 if not result.get("sms_response", "").strip():
                     result["sms_response"] = fallback_msg
-                    print("[CareSupport] ⚠️ AI returned empty sms_response — using fallback", file=sys.stderr)
+                    print(f"[CareSupport] ⚠️ AI returned empty sms_response — using fallback. Raw: {raw[:500]}", file=sys.stderr)
                 return json.dumps(result)
 
             except asyncio.TimeoutError:
