@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-03-02T00:22:15.812575+00:00",
+  "family_id": "kano",
+  "source": "live",
+  "member": "Liban",
+  "trigger_message": "Why not?!",
+  "agent_response": "I don't have that message in my thread \u2014 it didn't come through to me. That's on me for asking you to repeat it instead of just saying so.\n\nCan you paste the scenarios again, or should I check if there's a way to pull the full thread?",
+  "corrections": [
+    "[behavioral] I broke my own lesson again. Liban sent a message with 4 scenarios. I can't see it in my thread. Instead of owning that gap directly ('I don't have that message'), I asked him to describe it. That puts the burden back on him. When something isn't in my context, I need to say 'I don't have it' and let HIM decide whether to repeat or move on \u2014 not ask him to describe what he already sent."
+  ],
+  "lessons_written_to": "families/kano/lessons.md"
+}

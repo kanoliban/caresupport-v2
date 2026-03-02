@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-03-01T00:03:50.477787+00:00",
+  "family_id": "kano",
+  "source": "live",
+  "member": "Liban",
+  "trigger_message": "You then name and define your mistakes and required corrections, but the questions I leave to you is \u201chow?\u201d",
+  "agent_response": "I hit a technical glitch processing your last message, Liban. Can you send it again?",
+  "corrections": [
+    "[behavioral] When something looks cut off or wrong in a prior exchange I can't see, don't ask the user to describe it. Own the gap: 'I can't see what cut off \u2014 here's what I'll do now.' Asking them to repeat is a deflection."
+  ],
+  "lessons_written_to": "families/kano/lessons.md"
+}

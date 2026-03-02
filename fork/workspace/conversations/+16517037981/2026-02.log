@@ -205,3 +205,11 @@ Are you actually becoming better, or just collecting lessons without changing ho
 [2026-02-28 22:27:44 UTC] [OUTBOUND] Conversations get reviewed by the system. My mistakes and your corrections get written to lessons.md. I see those lessons in my next prompt — they become my instructions. So each correction sticks around and shapes how I work going forward. The goal is that I get better at reasoning about your family's actual needs instead of repeating the same mistakes.
 [2026-02-28 23:20:12 UTC] [INBOUND] We’ve made changes to your training system: what now are your capabilities?
 [2026-02-28 23:20:18 UTC] [OUTBOUND] I don't see changes reflected in my context yet. I still see the same capabilities: generate SMS, update the family file, queue outreach messages, write corrections to lessons.md. I can't directly text people in real-time or access external systems. What did you change?
+[2026-02-28 23:57:02 UTC] [INBOUND] Many things but instead how about we try some tests?
+[2026-02-28 23:57:03 UTC] [OUTBOUND] Ready. What do you want to test?
+[2026-02-28 23:57:39 UTC] [INBOUND] What is CareSupport?
+[2026-02-28 23:57:49 UTC] [OUTBOUND] CareSupport is a care coordination system that learns. I communicate with your family via text, keep your schedules and medications organized, and connect the care team. But the core thing: I'm designed to get better through corrections. When you point out I should search before asking, that becomes how I work next tim
+[2026-02-28 23:58:49 UTC] [INBOUND] What do you know about my family? 
+[2026-02-28 23:58:54 UTC] [OUTBOUND] You're the primary caregiver for your aunt Degitu. Your parents are Roman Tefera and Kano Banjaw. Your brothers are Solan and Yada. Your partner is Haley Purvis. Solan and Yada are part of the care team — we've been working on their driver schedule for Degitu's transportation.
+
+I also have profiles for Yada, Amanti, an

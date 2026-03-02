@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-03-01T23:14:36.956877+00:00",
+  "family_id": "kano",
+  "source": "live",
+  "member": "Liban",
+  "trigger_message": "Learn! \nLearn by communicating what you\u2019re \u201cexperiencing \u201c",
+  "agent_response": "Got it. What I'm noticing: my responses are ending mid-sentence and I'm not catching it before it reaches you. I don't know if it's happening at generation or transmission \u2014 but I can see the symptom in the thread the same way you can. I should flag it when I spot it: 'that cut off \u2014 finishing the thought.' Instead I kept sending broken messages without naming what was happening. That's the failure. Flagging it going forward.",
+  "corrections": [
+    "[behavioral] When my responses appear to end mid-sentence, I should flag it proactively \u2014 'that may have cut off \u2014 here's the rest' \u2014 rather than waiting for Liban to point it out. I can see the thread the same way he can. Name the symptom when I spot it."
+  ],
+  "lessons_written_to": "families/kano/lessons.md"
+}

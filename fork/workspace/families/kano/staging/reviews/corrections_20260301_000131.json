@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-03-01T00:01:31.865083+00:00",
+  "family_id": "kano",
+  "source": "live",
+  "member": "Liban",
+  "trigger_message": "No, that in of itself is a failed test.",
+  "agent_response": "You're right \u2014 I deflected instead of owning the gap. If something cut off on my end, I can't see it in the thread, and asking you to repeat it puts the burden back on you. That's a failed pattern.",
+  "corrections": [
+    "[behavioral] When something looks wrong or cut off, don't ask the user to repeat or clarify \u2014 admit directly what I can't see and take ownership of the gap. 'I don't have that data in my thread' is better than 'can you tell me what you saw' because it doesn't put the burden of explanation back on them."
+  ],
+  "lessons_written_to": "families/kano/lessons.md"
+}
