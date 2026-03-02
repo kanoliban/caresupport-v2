@@ -154,7 +154,8 @@ async def _handle_message_received(event_data: dict) -> dict:
     inbound message regardless of whether it arrived via iMessage or SMS.
     """
     from sms_handler import handle_sms
-    from linq_gateway import send_message, start_typing, share_contact_card
+    from linq_gateway import (send_message, start_typing, share_contact_card,
+                               split_into_bubbles, send_message_sequence)
 
     sender_phone = _extract_sender_phone(event_data)
     message_text = _extract_message_text(event_data)
@@ -180,9 +181,11 @@ async def _handle_message_received(event_data: dict) -> dict:
     # Route through the EXISTING handler — enforcement is wired in
     result = await handle_sms(sender_phone, message_text)
 
-    # Send response via Linq (not Twilio)
+    # Send response via Linq (split into natural bubbles)
     if result.get("success") and result.get("response") and chat_id:
-        send_result = await send_message(chat_id, result["response"])
+        bubbles = split_into_bubbles(result["response"])
+        send_results = await send_message_sequence(chat_id, bubbles)
+        send_result = send_results[0] if send_results else {"success": False}
 
         if not send_result.get("success"):
             _log_event("message.send_failed", {

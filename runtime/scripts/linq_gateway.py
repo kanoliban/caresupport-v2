@@ -173,6 +173,70 @@ async def send_message(chat_id: str, text: str,
     return {"success": False, "error": result["data"], "status": result["status"]}
 
 
+import re as _re
+
+
+def split_into_bubbles(text: str, max_len: int = 450, min_len: int = 40) -> list[str]:
+    """Split a message into natural bubbles for sequential sending.
+
+    1. Split on paragraph breaks (\\n\\n) — always respected
+    2. If any paragraph > max_len, split on sentence boundaries
+    3. Merge tiny sentence fragments (< min_len) back into previous sentence group
+    4. Cap at 5 bubbles; merge remainder into last
+    """
+    text = text.strip()
+    if not text:
+        return []
+
+    paragraphs = [s.strip() for s in text.split("\n\n") if s.strip()]
+
+    bubbles: list[str] = []
+    for para in paragraphs:
+        if len(para) <= max_len:
+            bubbles.append(para)
+            continue
+        # Oversized paragraph: split on sentence boundaries
+        sentences = _re.split(r"(?<=[.?!])\s+", para)
+        current = ""
+        for sentence in sentences:
+            if current and len(current) + len(sentence) + 1 > max_len:
+                bubbles.append(current.strip())
+                current = sentence
+            else:
+                current = f"{current} {sentence}".strip() if current else sentence
+        if current:
+            if bubbles and len(current.strip()) < min_len:
+                bubbles[-1] = f"{bubbles[-1]} {current.strip()}"
+            else:
+                bubbles.append(current.strip())
+
+    # Cap at 5 bubbles
+    if len(bubbles) > 5:
+        tail = "\n\n".join(bubbles[4:])
+        bubbles = bubbles[:4] + [tail]
+
+    return bubbles or [text]
+
+
+async def send_message_sequence(chat_id: str, bubbles: list[str],
+                                delay: float = 0.8) -> list[dict]:
+    """Send bubbles sequentially with typing indicators between them."""
+    results = []
+    for i, bubble in enumerate(bubbles):
+        if i > 0:
+            try:
+                await start_typing(chat_id)
+            except Exception:
+                pass
+            await asyncio.sleep(delay)
+        try:
+            result = await send_message(chat_id, bubble)
+            results.append(result)
+        except Exception as e:
+            results.append({"success": False, "error": str(e)})
+    return results
+
+
 async def get_messages(chat_id: str, limit: int = 50, cursor: str = "") -> dict:
     """Get messages from a chat."""
     params = {"limit": str(limit)}

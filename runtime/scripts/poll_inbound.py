@@ -139,7 +139,9 @@ def _resolve_outreach_phone(family_dir: Path, name: str, ai_phone: str) -> str |
 
 async def poll_and_process():
     """Main polling loop: check for new messages, process them, respond."""
-    from linq_gateway import list_chats, get_messages, send_message, start_typing, mark_as_read, create_chat
+    from linq_gateway import (list_chats, get_messages, send_message, start_typing,
+                               mark_as_read, create_chat, split_into_bubbles,
+                               send_message_sequence)
     from sms_handler import handle_sms
     from session import get_or_create as get_or_create_session
 
@@ -213,9 +215,11 @@ async def poll_and_process():
                     if tier and os.environ.get("CARESUPPORT_DEBUG_RECEIPTS"):
                         response_text = f"{response_text}\n· {_TIER_RECEIPTS.get(tier, tier)}"
 
-                    # Send response via Linq
+                    # Send response via Linq (split into natural bubbles)
                     print(f"{log_prefix}     Responding: '{response_text[:60]}...'")
-                    send_result = await send_message(chat_id, response_text)
+                    bubbles = split_into_bubbles(response_text)
+                    send_results = await send_message_sequence(chat_id, bubbles)
+                    send_result = send_results[0] if send_results else {"success": False}
 
                     if send_result.get("success"):
                         print(f"{log_prefix}     ✅ Sent (ID: {send_result.get('message_id', '?')[:8]}...)")

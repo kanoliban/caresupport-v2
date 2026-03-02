@@ -213,11 +213,15 @@ def load_family_context(family_dir: str) -> str:
     return "\n\n".join(parts)
 
 
+_ENTRY_START_RE = re.compile(r"^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\] \[(INBOUND|OUTBOUND)")
+
 def load_recent_conversations(phone: str, limit: int = 50) -> str:
     """Load recent conversation history for this phone number.
 
-    If the conversation exceeds 20 messages and a summary exists,
-    returns the summary + last 10 raw messages instead of last 50 raw.
+    If the conversation exceeds 20 log entries and a summary exists,
+    returns the summary + last 10 log entries instead of last 50.
+    Counts actual log entries (not raw lines) so multi-line responses
+    don't consume the window.
     """
     conv_dir = paths.conversations / phone
     if not conv_dir.exists():
@@ -229,14 +233,22 @@ def load_recent_conversations(phone: str, limit: int = 50) -> str:
 
     lines = log_files[0].read_text().strip().split("\n")
 
+    # Reassemble multi-line log entries so each entry = one message
+    entries: list[str] = []
+    for line in lines:
+        if _ENTRY_START_RE.match(line):
+            entries.append(line)
+        elif entries:
+            entries[-1] += "\n" + line
+
     summary_path = conv_dir / "summary.md"
-    if len(lines) > 20 and summary_path.exists():
+    if len(entries) > 20 and summary_path.exists():
         raw = summary_path.read_text().strip()
         summary = raw.split("\n", 1)[1].strip() if raw.startswith("<!-- lines:") else raw
-        recent = lines[-10:]
+        recent = entries[-10:]
         return f"[Previous conversation summary]\n{summary}\n\n[Recent messages]\n" + "\n".join(recent)
 
-    recent = lines[-limit:] if len(lines) > limit else lines
+    recent = entries[-limit:] if len(entries) > limit else entries
     return "\n".join(recent) if recent else "[No conversation history]"
 
 
@@ -446,7 +458,7 @@ If you previously sent an error message or glitch occurred, acknowledge it direc
 Respond with ONLY valid JSON matching the required schema. No markdown fencing, no explanation.
 
 FIELD GUIDE:
-- sms_response: The text message to send back. Use paragraph breaks (blank lines) to separate distinct thoughts — each paragraph becomes a separate message bubble. Keep each paragraph under 320 chars. For short responses (greetings, confirmations), a single paragraph is fine.
+- sms_response: The text message to send back. To send multiple message bubbles, separate paragraphs with a double newline (\\n\\n in JSON). Each \\n\\n-separated paragraph becomes its own iMessage bubble. Keep each paragraph under 320 chars. A single \\n does NOT create a new bubble. For short responses (greetings, confirmations), a single paragraph is fine.
 - internal_notes: Your reasoning (not shown to user).
 - needs_outreach: Array of objects with phone (E.164 format: +1 then 10 digits, no dashes — e.g. +16514109390), name, message for people to contact. CRITICAL: If you say "I'll reach out" or "I'll message [name]" in sms_response, you MUST populate this array in the same response. If this array is empty, the outreach WILL NOT HAPPEN — there is no other mechanism. Say "I'll message [name]" in sms_response — never "I'm texting them now."
 - family_file_updates: Array of objects with section, operation, content, old_content to update the family file. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
