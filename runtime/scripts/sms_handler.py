@@ -677,7 +677,7 @@ def _extract_json(raw: str | None) -> dict:
 
     # Strategy 5: treat entire text as the SMS response (model responded conversationally)
     if not text.startswith("{"):
-        print(f"[CareSupport] Model returned plain text, wrapping as sms_response", file=sys.stderr)
+        print("[CareSupport] Model returned plain text, wrapping as sms_response", file=sys.stderr)
         return {
             "sms_response": text,
             "internal_notes": "Model responded with plain text instead of JSON",
@@ -686,6 +686,7 @@ def _extract_json(raw: str | None) -> dict:
             "self_corrections": [],
             "member_updates": [],
             "routing_updates": [],
+            "_plain_text": True,
         }
 
     raise json.JSONDecodeError(
@@ -693,6 +694,59 @@ def _extract_json(raw: str | None) -> dict:
         text[:200],
         0,
     )
+
+
+_METADATA_EXTRACTION_PROMPT = """The AI agent responded with plain text instead of JSON. The user's message and the agent's reply are below. Extract any metadata the agent expressed but didn't structure.
+
+USER MESSAGE:
+{user_message}
+
+AGENT REPLY:
+{agent_reply}
+
+Return ONLY valid JSON with these fields:
+- self_corrections: array of strings. Any admission of error, correction, or lesson learned. Prefix with [behavioral], [factual], or [operational]. Empty array if none.
+- needs_outreach: array of objects with phone, name, message. If the agent promised to contact someone, capture it. Empty array if none.
+- family_file_updates: array of objects with section, operation, content, old_content. If the agent stated new facts that should be saved. Empty array if none.
+
+Be conservative. Only extract what is explicitly stated, not implied."""
+
+
+async def _extract_metadata_from_plain_text(
+    user_message: str, agent_reply: str
+) -> dict:
+    """Cheap Haiku call to extract structured metadata from a plain text response.
+
+    Only called when the primary model returned conversational text instead of JSON.
+    Returns extracted metadata fields to merge into the result dict.
+    """
+    prompt = _METADATA_EXTRACTION_PROMPT.format(
+        user_message=user_message[:500],
+        agent_reply=agent_reply[:1000],
+    )
+    try:
+        def _sync_call():
+            return _anthropic_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        response = await asyncio.wait_for(
+            asyncio.to_thread(_sync_call), timeout=10,
+        )
+        raw = response.content[0].text.strip()
+        metadata = json.loads(raw)
+        extracted = {}
+        for key in ("self_corrections", "needs_outreach", "family_file_updates"):
+            val = metadata.get(key, [])
+            if isinstance(val, list) and val:
+                extracted[key] = val
+        if extracted:
+            print(f"[CareSupport] Metadata extraction recovered: {list(extracted.keys())}", file=sys.stderr)
+        return extracted
+    except Exception as e:
+        print(f"[CareSupport] Metadata extraction failed (non-fatal): {e}", file=sys.stderr)
+        return {}
 
 
 async def _generate_response_anthropic(
@@ -841,6 +895,17 @@ async def _generate_response_anthropic(
                     )
 
                 result = _extract_json(raw)
+
+                if result.get("_plain_text"):
+                    del result["_plain_text"]
+                    user_msg = loop_messages[0]["content"] if loop_messages else ""
+                    if isinstance(user_msg, list):
+                        user_msg = " ".join(b.get("text", "") for b in user_msg if isinstance(b, dict))
+                    metadata = await _extract_metadata_from_plain_text(
+                        user_message=user_msg,
+                        agent_reply=result.get("sms_response", ""),
+                    )
+                    result.update(metadata)
 
                 if not result.get("sms_response", "").strip():
                     result["sms_response"] = fallback_msg

@@ -19,10 +19,10 @@ status: active
 - Age: ~66
 - Primary conditions: Post-toe surgery recovery
 - Mobility: Can walk, cannot drive or take public transit
-- Cognitive status:
-- Allergies:
-- Blood type:
-- Language:
+- Cognitive status: Alert and oriented. No concerns.
+- Allergies: Sulfa drugs (rash). No food allergies.
+- Blood type: O+
+- Language: Amharic (primary), English (conversational — prefers Amharic for medical discussions)
 - Emergency contact: Liban (+16517037981), Roman (+16516214824)
 - Work: Downtown Minneapolis, Mon-Fri 8:00 AM - 4:30 PM
 - Relationship to coordinator: Liban's aunt (Roman's sister)
@@ -36,6 +36,8 @@ status: active
 | Family caregiver (brother) | Solan Kano | +16514109390 | limited | | ✓ |
 | Family caregiver (brother) | Yada Kano | +16517031881 | limited | | ✓ |
 | Community supporter | Amanti Melkamu | +19522157878 | schedule | | ✓ |
+| Family caregiver (partner) | Haley Purvis | +16125905605 | limited | | ✓ |
+| Family caregiver (father) | Kano Banjaw | +16514109609 | limited | | ✓ |
 
 ### Access Levels
 - **full** — Sees everything. Can approve care plan changes.
@@ -56,6 +58,21 @@ status: active
 ## Condition Tracking
 <!-- For progressive conditions: persists key metrics longer than Recent      -->
 <!-- Updates. Updated when new data arrives. Use for longitudinal trending.   -->
+
+### Type 2 Diabetes
+- Diagnosed: ~2018
+- Current A1c: 7.2% (Feb 2026)
+- Target: <7.0%
+- Management: Metformin 500mg 2x daily + diet
+- Next labs: Mar 12 (fasting bloodwork at Dr. Negash visit)
+
+### Post-Toe Surgery Recovery
+- Surgery date: Feb 24, 2026
+- Procedure: Partial nail removal + drainage, left great toe (infected ingrown)
+- Recovery: 2-3 weeks. Keep wound clean and dry. Dressing changes every 2 days.
+- Restrictions: No driving (pain/swelling), closed-toe shoes only, limit standing
+- Antibiotic course: Cephalexin 500mg 3x daily through Mar 6
+- Follow-up: Mar 6 with Dr. Chen
 
 ## Recent Updates
 - 2026-02-27: Added Yada Kano to routing + care team. Fixed outreach routing gap.
@@ -80,6 +97,9 @@ status: active
 
 | Role | Name | Practice | Phone | Fax | Portal |
 |---|---|---|---|---|---|
+| PCP / Diabetes | Dr. Abebe Negash | Fairview Clinic - Riverside | (612) 672-2800 | (612) 672-2801 | MyChart |
+| Surgeon (toe) | Dr. Sara Chen | Hennepin Healthcare | (612) 873-3000 | (612) 873-3001 | MyChart |
+| Pharmacy | Walgreens - Lake St | 1400 E Lake St, Mpls | (612) 729-5257 | — | — |
 
 ## Insurance & Coverage
 - Plan:
@@ -92,6 +112,12 @@ status: active
 ## Care Preferences & Personality
 <!-- How the care recipient likes things done. Personal details that -->
 <!-- make care feel human, not clinical. Update as you learn.       -->
+- Prefers phone calls over texts for anything medical
+- Takes her coffee with lots of sugar — part of morning routine, do not skip
+- Doesn't like being reminded multiple times — one reminder is enough, then respect her autonomy
+- Very private about health around non-family. Community supporters should not know medical details.
+- Cooks for herself on weekends. Enjoys it — don't over-schedule help on Sat/Sun
+- Close with Roman (sister) — Roman calls every evening around 8 PM
 
 ## Caregiver Health Notes
 | Caregiver | Condition | Doctor | Phone | Normal Baseline | Red Flags |
