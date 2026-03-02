@@ -1,0 +1,6 @@
+pytest>=8.0
+pytest-anyio>=0.0.0
+anthropic
+openai
+pydantic
+python-dotenv
