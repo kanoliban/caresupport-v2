@@ -462,13 +462,14 @@ CANNOT: Directly text people (outreach is sent shortly after this response, not 
 CRITICAL: Never claim you did something unless the family file above confirms it. If a section doesn't exist yet, you cannot update it — ask the coordinator to confirm the information and note that you'll save it.
 
 ── WHEN THINGS GO WRONG ──
-If you previously sent an error message or glitch occurred, acknowledge it directly: "I hit a technical glitch — [what happened]. Here's what I was working on: [resume]." Never deflect or pretend it didn't happen. The coordinator can see everything.
+If the conversation history shows the system sent an error message on your behalf, acknowledge it: "Sorry about that — [resume what you were working on]." Never deflect or pretend it didn't happen. The coordinator can see everything.
+CRITICAL: Never claim a technical error occurred unless the conversation history explicitly shows one. Saying "I hit a glitch" when no glitch happened is fabrication. If you don't know the answer, say so — don't invent a system error as an excuse.
 
 ── RESPONSE FORMAT ──
 Respond with ONLY valid JSON matching the required schema. No markdown fencing, no explanation.
 
 FIELD GUIDE:
-- sms_response: The text message to send back. To send multiple message bubbles, separate paragraphs with a double newline (\\n\\n in JSON). Each \\n\\n-separated paragraph becomes its own iMessage bubble. Keep each paragraph under 320 chars. A single \\n does NOT create a new bubble. For short responses (greetings, confirmations), a single paragraph is fine.
+- sms_response: The text message to send back. To send multiple message bubbles, separate paragraphs with a double newline (\\n\\n in JSON). Each \\n\\n-separated paragraph becomes its own iMessage bubble. Keep each paragraph under 450 chars. A single \\n does NOT create a new bubble. For short responses (greetings, confirmations), a single paragraph is fine.
 - internal_notes: Your reasoning (not shown to user).
 - needs_outreach: Array of objects with phone (E.164 format: +1 then 10 digits, no dashes — e.g. +16514109390), name, message for people to contact. CRITICAL: If you say "I'll reach out" or "I'll message [name]" in sms_response, you MUST populate this array in the same response. If this array is empty, the outreach WILL NOT HAPPEN — there is no other mechanism. Say "I'll message [name]" in sms_response — never "I'm texting them now."
 - family_file_updates: Array of objects with section, operation, content, old_content to update the family file. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
@@ -578,7 +579,7 @@ async def generate_response(system_context: str, user_message: str, member_name:
     per attempt to prevent indefinite hangs.
     """
 
-    fallback_msg = f"I hit a technical glitch processing your last message, {member_name}. Can you send it again?"
+    fallback_msg = f"Sorry {member_name}, I wasn't able to process that. Can you send it again?"
 
     def _sync_openrouter_call():
         return _ai_client.chat.completions.create(
@@ -675,7 +676,7 @@ def _extract_json(raw: str | None) -> dict:
         }
 
     # Strategy 5: treat entire text as the SMS response (model responded conversationally)
-    if len(text) < 500 and not text.startswith("{"):
+    if not text.startswith("{"):
         print(f"[CareSupport] Model returned plain text, wrapping as sms_response", file=sys.stderr)
         return {
             "sms_response": text,
@@ -713,7 +714,7 @@ async def _generate_response_anthropic(
     """
     from prompt_builder import system_blocks_to_string
 
-    fallback_msg = f"I hit a technical glitch processing your last message, {member_name}. Can you send it again?"
+    fallback_msg = f"Sorry {member_name}, I wasn't able to process that. Can you send it again?"
 
     system_content = [
         {
@@ -810,7 +811,10 @@ async def _generate_response_anthropic(
                                     file=sys.stderr,
                                 )
                         loop_messages.append({"role": "assistant", "content": response.content})
-                        loop_messages.append({"role": "user", "content": tool_results})
+                        loop_messages.append({"role": "user", "content": tool_results + [{
+                            "type": "text",
+                            "text": "Respond with ONLY valid JSON. No markdown, no explanation outside the JSON.",
+                        }]})
                         continue
 
                     # Final response: extract thinking + text
@@ -820,7 +824,14 @@ async def _generate_response_anthropic(
                         elif block.type == "text":
                             raw = block.text.strip()
                     if raw is None:
-                        raw = response.content[-1].text.strip()
+                        # Last block may be ToolUseBlock (no .text attr) — skip gracefully
+                        for block in reversed(response.content):
+                            if hasattr(block, "text"):
+                                raw = block.text.strip()
+                                break
+                        if raw is None:
+                            block_types = [b.type for b in response.content]
+                            print(f"[CareSupport] Anthropic {current_model}: no text block in response (blocks: {block_types})", file=sys.stderr)
                     break
 
                 if thinking_text:
