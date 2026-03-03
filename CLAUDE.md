@@ -21,11 +21,8 @@ SMS/iMessage arrives
 
 ## Build/Lint/Test Commands
 
-- **Build:** `npm run build` (tsc -b && vite build)
-- **Dev:** `npm run dev` (vite)
-- **Lint:** `npm run lint` (eslint .)
-- **Test:** `cd runtime && PYTHONPATH=. python -m pytest tests/ -v`
-- **Dry run SMS:** `python runtime/scripts/sms_handler.py --from "+1..." --body "test" --dry-run`
+- **Test:** `cd runtime && PYTHONPATH=. python3 -m pytest tests/ -v`
+- **Dry run SMS:** `python3 runtime/scripts/sms_handler.py --from "+1..." --body "test" --dry-run`
 - **Start poller:** `tmux new-session -d -s caresupport "python3 runtime/scripts/poll_inbound.py --interval 15"`
 - **Dev poller (auto-reload):** `tmux new-session -d -s caresupport "runtime/scripts/dev_watch.sh 15"`
 

@@ -16,6 +16,8 @@ Usage:
 Per the "description = brain" insight: the logic lives here, not in a prompt.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import re

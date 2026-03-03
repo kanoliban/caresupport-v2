@@ -19,7 +19,7 @@ from pathlib import Path
 # ─── Base paths ──────────────────────────────────────────────────────────
 # All paths derived from CARESUPPORT_ROOT (defaults to /work for Viktor's env)
 
-ROOT = Path(os.environ.get("CARESUPPORT_ROOT", "/work"))
+ROOT = Path(os.environ.get("CARESUPPORT_ROOT", str(Path(__file__).parent.parent / "fork" / "workspace")))
 SDK_DIR = ROOT / "sdk"
 RUNTIME_DIR = Path(__file__).parent
 SCRIPTS_DIR = RUNTIME_DIR / "scripts"

@@ -10,6 +10,8 @@ THE QUESTIONS THESE TESTS ANSWER:
   Does the file stay valid after pruning?
 """
 
+from __future__ import annotations
+
 import json
 import shutil
 import sys
