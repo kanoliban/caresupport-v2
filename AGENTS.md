@@ -56,6 +56,7 @@ Full product context for strategic decisions.
 - `docs/VISION.md` — product vision and north-star narrative
 - `docs/ROADMAP.md` — product roadmap, phases, and scaling challenges
 - `ARCHITECTURE.md` — system diagram, domains, dependency rules
+- `docs/design-docs/convex-schema-assurance-rfc.md` — canonical Convex v2 schema invariants and migration mapping
 
 ### Project State & History
 What's been built, what's in progress, what's broken.
