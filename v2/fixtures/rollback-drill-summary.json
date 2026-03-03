@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-03-03T03:24:02.010Z",
+  "mode": "live",
+  "totalDurationMs": 19,
+  "estimatedFailbackSeconds": 1,
+  "pass": true,
+  "steps": [
+    {
+      "name": "Runbook exists",
+      "ok": true,
+      "detail": "/Users/libankano/Desktop/CareSupport.com/CareSupport-original/docs/cutover-runbook-v2.md",
+      "durationMs": 0
+    },
+    {
+      "name": "V1 health reachable",
+      "ok": true,
+      "detail": "OK http://127.0.0.1:8787/healthz",
+      "durationMs": 17
+    },
+    {
+      "name": "V2 health reachable",
+      "ok": true,
+      "detail": "OK http://127.0.0.1:8787/healthz",
+      "durationMs": 2
+    },
+    {
+      "name": "Rollback command configured",
+      "ok": true,
+      "detail": "npm run linq-webhook -- --apply --to-env=v1 --delete-old",
+      "durationMs": 0
+    },
+    {
+      "name": "Rollforward command configured",
+      "ok": true,
+      "detail": "npm run linq-webhook -- --apply --to-env=v2 --delete-old",
+      "durationMs": 0
+    }
+  ]
+}

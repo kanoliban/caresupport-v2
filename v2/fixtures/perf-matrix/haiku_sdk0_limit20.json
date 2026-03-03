@@ -1,0 +1,193 @@
+{
+  "generatedAt": "2026-03-02T18:28:19.544Z",
+  "mode": "live",
+  "total": 20,
+  "success": 1,
+  "failed": 19,
+  "errorRate": 0.95,
+  "promiseWithoutAction": 0,
+  "latencyMs": {
+    "mean": 20234.05,
+    "p50": 20001,
+    "p95": 20003,
+    "p99": 38542,
+    "max": 38542
+  },
+  "stageLatencyMs": {
+    "totalMs": {
+      "mean": 17482,
+      "p50": 17482,
+      "p95": 17482,
+      "p99": 17482,
+      "max": 17482
+    },
+    "idempotencyMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "resolveActorMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "loadContextMs": {
+      "mean": 3,
+      "p50": 3,
+      "p95": 3,
+      "p99": 3,
+      "max": 3
+    },
+    "preGuardMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "modelMs": {
+      "mean": 17479,
+      "p50": 17479,
+      "p95": 17479,
+      "p99": 17479,
+      "max": 17479
+    },
+    "postGuardMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "persistMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "outboundMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "outreachMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    }
+  },
+  "concurrency": 1,
+  "limit": 20,
+  "start": 0,
+  "thresholds": {
+    "p95Ms": 5000,
+    "errorRate": 0.005
+  },
+  "pass": false,
+  "failures": [
+    {
+      "caseId": "+16514109390-1",
+      "error": "+16514109390-1 exceeded 20000ms",
+      "latencyMs": 20003
+    },
+    {
+      "caseId": "+16514109390-2",
+      "error": "+16514109390-2 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16514109390-3",
+      "error": "+16514109390-3 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16514109390-4",
+      "error": "+16514109390-4 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16514109390-5",
+      "error": "+16514109390-5 exceeded 20000ms",
+      "latencyMs": 20002
+    },
+    {
+      "caseId": "+16516214824-1",
+      "error": "+16516214824-1 exceeded 20000ms",
+      "latencyMs": 20000
+    },
+    {
+      "caseId": "+16516214824-2",
+      "error": "+16516214824-2 exceeded 20000ms",
+      "latencyMs": 38542
+    },
+    {
+      "caseId": "+16516214824-3",
+      "error": "+16516214824-3 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16516214824-4",
+      "error": "500 {\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"Internal server error\"},\"request_id\":\"req_011CYeiq1QtWbqc3jRCzKjZZ\"}",
+      "latencyMs": 8639
+    },
+    {
+      "caseId": "+16516214824-5",
+      "error": "+16516214824-5 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16516214824-6",
+      "error": "+16516214824-6 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16516214824-7",
+      "error": "+16516214824-7 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16516214824-8",
+      "error": "+16516214824-8 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16517037981-1",
+      "error": "+16517037981-1 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16517037981-2",
+      "error": "+16517037981-2 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16517037981-3",
+      "error": "+16517037981-3 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16517037981-4",
+      "error": "+16517037981-4 exceeded 20000ms",
+      "latencyMs": 20001
+    },
+    {
+      "caseId": "+16517037981-6",
+      "error": "+16517037981-6 exceeded 20000ms",
+      "latencyMs": 20000
+    },
+    {
+      "caseId": "+16517037981-7",
+      "error": "+16517037981-7 exceeded 20000ms",
+      "latencyMs": 20001
+    }
+  ]
+}

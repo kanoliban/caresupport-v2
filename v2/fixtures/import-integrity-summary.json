@@ -1,0 +1,29 @@
+{
+  "generatedAt": "2026-03-03T03:29:28.154Z",
+  "expected": {
+    "counts": {
+      "families": 2,
+      "members": 6,
+      "conversations": 5
+    },
+    "routingMembers": 7
+  },
+  "actual": {
+    "counts": {
+      "conversations": 5,
+      "families": 2,
+      "members": 13
+    }
+  },
+  "checks": {
+    "familyCountMatch": true,
+    "memberCountAtLeastSnapshot": true,
+    "conversationCompleteness": 1,
+    "conversationOverage": 0,
+    "missingFamilies": [],
+    "missingRoutingMembers": [],
+    "familyChecksumMismatches": [],
+    "memberChecksumMismatches": []
+  },
+  "pass": true
+}

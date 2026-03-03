@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-03-03T03:22:12.998Z",
+  "passed": true,
+  "command": "npm run test -- tests/enforcement.test.ts tests/contracts.test.ts tests/process-inbound-idempotency.test.ts",
+  "exitCode": 0,
+  "durationMs": 907,
+  "testFiles": [
+    "tests/enforcement.test.ts",
+    "tests/contracts.test.ts",
+    "tests/process-inbound-idempotency.test.ts"
+  ],
+  "stderrTail": "> caresupport-v2@0.1.0 test\n> vitest run tests/enforcement.test.ts tests/contracts.test.ts tests/process-inbound-idempotency.test.ts\n\n\n RUN  v3.2.4 /Users/libankano/Desktop/CareSupport.com/CareSupport-original/v2\n\n ✓ tests/enforcement.test.ts (2 tests) 1ms\n ✓ tests/contracts.test.ts (3 tests) 3ms\n ✓ tests/process-inbound-idempotency.test.ts (2 tests) 3ms\n\n Test Files  3 passed (3)\n      Tests  7 passed (7)\n   Start at  21:22:12\n   Duration  436ms (transform 118ms, setup 0ms, collect 270ms, tests 8ms, environment 0ms, prepare 197ms)"
+}

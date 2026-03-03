@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+fixtures/*.ndjson
+fixtures/*-checksums.json
+fixtures/replay-summary.json
+
+.env.local

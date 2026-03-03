@@ -1,0 +1,39 @@
+{
+  "name": "caresupport-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CareSupport 2.0 big-bang rewrite workspace (TS + Convex + Claude Agent SDK)",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "snapshot": "tsx scripts/snapshot-export.ts",
+    "import": "tsx scripts/import-to-convex.ts",
+    "verify-import": "tsx scripts/verify-import-integrity.ts",
+    "replay": "tsx scripts/replay-historical.ts",
+    "safety-check": "tsx scripts/safety-check.ts",
+    "perf-check": "tsx scripts/perf-check.ts",
+    "linq-webhook": "tsx scripts/linq-webhook-target.ts",
+    "rollback-drill": "tsx scripts/rollback-drill.ts",
+    "gate-check": "tsx scripts/gate-check.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "convex": "^1.32.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "pino": "^9.9.0",
+    "pino-pretty": "^13.1.2",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.23",
+    "@types/node": "^22.14.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
+  }
+}

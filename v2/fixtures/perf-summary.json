@@ -1,0 +1,97 @@
+{
+  "generatedAt": "2026-03-03T03:23:27.230Z",
+  "mode": "live",
+  "total": 4,
+  "success": 4,
+  "failed": 0,
+  "errorRate": 0,
+  "promiseWithoutAction": 0,
+  "latencyMs": {
+    "mean": 2605.25,
+    "p50": 1989,
+    "p95": 4079,
+    "p99": 4079,
+    "max": 4079
+  },
+  "stageLatencyMs": {
+    "totalMs": {
+      "mean": 2605.25,
+      "p50": 1989,
+      "p95": 4079,
+      "p99": 4079,
+      "max": 4079
+    },
+    "idempotencyMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "resolveActorMs": {
+      "mean": 0.5,
+      "p50": 0,
+      "p95": 2,
+      "p99": 2,
+      "max": 2
+    },
+    "loadContextMs": {
+      "mean": 0.75,
+      "p50": 1,
+      "p95": 1,
+      "p99": 1,
+      "max": 1
+    },
+    "preGuardMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "modelMs": {
+      "mean": 2603.75,
+      "p50": 1987,
+      "p95": 4077,
+      "p99": 4077,
+      "max": 4077
+    },
+    "postGuardMs": {
+      "mean": 0.25,
+      "p50": 0,
+      "p95": 1,
+      "p99": 1,
+      "max": 1
+    },
+    "persistMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "outboundMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "outreachMs": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    }
+  },
+  "concurrency": 1,
+  "limit": 4,
+  "start": 0,
+  "thresholds": {
+    "p95Ms": 5000,
+    "errorRate": 0.005
+  },
+  "pass": true,
+  "failures": []
+}
