@@ -21,6 +21,7 @@ export type {
   MessageTurn,
   FamilyContextMode,
   AgentResponse,
+  HandlerResult,
   SystemBlocksInput,
   OutreachEntry,
   FileUpdate,

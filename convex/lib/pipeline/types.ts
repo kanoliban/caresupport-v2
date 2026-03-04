@@ -74,6 +74,20 @@ export interface RoutingUpdate {
   accessLevel: string;
 }
 
+export interface HandlerResult {
+  success: boolean;
+  response: string;
+  error?: string;
+  approvalHandled?: boolean;
+  blocked?: boolean;
+  leakedCategories?: string[];
+  routedTier?: string;
+  routedIntent?: string;
+  lessonsLearned?: number;
+  approvalsCreated?: number;
+  outreachSent?: number;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
