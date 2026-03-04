@@ -118,8 +118,17 @@ Two languages is friction. Convex functions are TypeScript. The frontend will be
 1. Set up Convex project with schema derived from PR #13 (cleaned up)
 2. Expand access model from PR #13's `full | limited` to the existing 5-level model
 3. Python pipeline writes to Convex via HTTP mutations (replaces family_editor.py writes)
-4. `family.md` becomes a **read-only projection** generated from Convex data
+4. `family.md` becomes a **read-only projection** generated from Convex data (eager, on-write — triggered by Convex mutation hook)
 5. ALL existing safety code (enforcement, PHI, approvals) stays in Python unchanged
+
+**Dual-write cutover sequence:**
+1. Deploy Convex schema + seed data from current files
+2. Update `family_editor.py` to dual-write (files + Convex)
+3. Validate: diff Convex projection vs current `family.md` after each write for N interactions
+4. Switch `family.md` reads to use the Convex-generated projection
+5. Remove file writes
+
+Step 2-3 is the risky part — the validation diff catches projection fidelity issues early before we trust the projection as source of truth.
 
 **What to extract from PR #13:**
 - Convex schema design (14 tables, good index strategy)
@@ -151,6 +160,8 @@ Two languages is friction. Convex functions are TypeScript. The frontend will be
 4. Each port gets tested before the next starts
 
 **Use PR #13 as reference, not starting point** (too many unresolved dependencies).
+
+**Test migration strategy:** Use Python tests as golden output generators. Run each Python test, capture expected inputs/outputs, and use those as fixtures for TypeScript tests. This turns "port 148 tests" from "rewrite from scratch" into "match known-good behavior."
 
 **Exit criteria:**
 - `npm test` — equivalent coverage to Python tests (148+ tests)
@@ -211,12 +222,15 @@ These can happen regardless of migration decision:
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. **Convex pricing at scale** — What's the cost model for 100+ families with real-time mutations?
-2. **Projection strategy** — Should `family.md` projection be generated on-read (lazy) or on-write (eager)? Eager is simpler but costs more mutations.
-3. **Learning loop migration** — The self-correction → lessons → graduation pipeline is Python-specific. How does this translate to a TypeScript runtime?
-4. **Protocol activation** — 16 protocol directories are empty stubs. Should they be populated before or during the migration?
+1. **Convex pricing at scale** — Not a blocker. At 100 families (~25K function calls/day), Convex costs ~$50-100/mo. LLM token costs dominate 10x over database costs — the token budget per-interaction matters more.
+
+2. **Projection strategy** — Eager (on-write), triggered by Convex mutation hook. Writes are less frequent than reads (~1 in 5 interactions). Lazy introduces cold-start latency at the exact moment a family member is waiting. If projection generation fails, underlying structured data remains correct.
+
+3. **Learning loop migration** — Maps to a `lessons` table with `family_id`, `category`, `content`, `created_at`, `graduated_at`. Graduation becomes a scheduled Convex action. Self-correction detection uses the same pattern (cheap Haiku call via Anthropic SDK). Projection must include recent lessons so the agent sees its own corrections.
+
+4. **Protocol activation** — After Phase 1. Protocols need structured data to query — activating them against flat files means rewriting during migration anyway.
 
 ---
 
