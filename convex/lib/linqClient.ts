@@ -279,3 +279,23 @@ export function extractService(eventData: Record<string, unknown>): string {
     "unknown"
   );
 }
+
+export function extractMessageId(eventData: Record<string, unknown>): string {
+  const msg = (eventData.message ?? {}) as Record<string, unknown>;
+  return (
+    (msg.id as string) ??
+    (eventData.message_id as string) ??
+    (eventData.id as string) ??
+    ""
+  );
+}
+
+export function extractFailureReason(
+  eventData: Record<string, unknown>,
+): string {
+  if (typeof eventData.error === "string") return eventData.error;
+  if (typeof eventData.reason === "string") return eventData.reason;
+  const msg = (eventData.message ?? {}) as Record<string, unknown>;
+  if (typeof msg.error === "string") return msg.error;
+  return "unknown";
+}
