@@ -7,6 +7,8 @@ const eventValidator = v.union(
   v.literal("response_blocked"),
   v.literal("outreach_sent"),
   v.literal("unknown_number"),
+  v.literal("message_failed"),
+  v.literal("message_status_update"),
 );
 
 const detailsValidator = v.object({
@@ -27,6 +29,9 @@ const detailsValidator = v.object({
   ),
   purpose: v.optional(v.string()),
   phiDisclosed: v.optional(v.boolean()),
+  sourceMessageId: v.optional(v.string()),
+  failureReason: v.optional(v.string()),
+  deliveryStatus: v.optional(v.string()),
 });
 
 export const listByFamily = query({

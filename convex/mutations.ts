@@ -12,6 +12,8 @@ const eventValidator = v.union(
   v.literal("response_blocked"),
   v.literal("outreach_sent"),
   v.literal("unknown_number"),
+  v.literal("message_failed"),
+  v.literal("message_status_update"),
 );
 
 const detailsValidator = v.object({
@@ -27,6 +29,9 @@ const detailsValidator = v.object({
   sentTo: v.optional(v.object({ phone: v.string(), name: v.string() })),
   purpose: v.optional(v.string()),
   phiDisclosed: v.optional(v.boolean()),
+  sourceMessageId: v.optional(v.string()),
+  failureReason: v.optional(v.string()),
+  deliveryStatus: v.optional(v.string()),
 });
 
 const scopeValidator = v.union(v.literal("global"), v.literal("family"));
@@ -183,5 +188,36 @@ export const getPendingApprovals = internalMutation({
         q.eq("familyId", args.familyId).eq("status", "pending"),
       )
       .collect();
+  },
+});
+
+export const getConversationBySourceMessageId = internalMutation({
+  args: { sourceMessageId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("conversations")
+      .withIndex("by_source_message_id", (q) =>
+        q.eq("sourceMessageId", args.sourceMessageId),
+      )
+      .first();
+  },
+});
+
+export const updateMessageStatus = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    deliveryStatus: v.union(
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("read"),
+      v.literal("failed"),
+    ),
+    deliveredAt: v.optional(v.number()),
+    readAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { conversationId, ...patch } = args;
+    await ctx.db.patch(conversationId, patch);
   },
 });

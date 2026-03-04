@@ -71,12 +71,21 @@ const approvalUpdate = v.object({
   oldContent: v.string(),
 });
 
+const deliveryStatus = v.union(
+  v.literal("sent"),
+  v.literal("delivered"),
+  v.literal("read"),
+  v.literal("failed"),
+);
+
 const auditEventType = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
   v.literal("response_blocked"),
   v.literal("outreach_sent"),
   v.literal("unknown_number"),
+  v.literal("message_failed"),
+  v.literal("message_status_update"),
 );
 
 const auditDetails = v.object({
@@ -97,6 +106,9 @@ const auditDetails = v.object({
   ),
   purpose: v.optional(v.string()),
   phiDisclosed: v.optional(v.boolean()),
+  sourceMessageId: v.optional(v.string()),
+  failureReason: v.optional(v.string()),
+  deliveryStatus: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -166,10 +178,15 @@ export default defineSchema({
     body: v.string(),
     timestamp: v.number(),
     sourceMessageId: v.optional(v.string()),
+    deliveryStatus: v.optional(deliveryStatus),
+    deliveredAt: v.optional(v.number()),
+    readAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
   })
     .index("by_family", ["familyId"])
     .index("by_phone", ["phone"])
-    .index("by_timestamp", ["timestamp"]),
+    .index("by_timestamp", ["timestamp"])
+    .index("by_source_message_id", ["sourceMessageId"]),
 
   timelineEvents: defineTable({
     familyId: v.string(),
