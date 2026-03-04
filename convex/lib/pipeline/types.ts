@@ -29,8 +29,7 @@ export interface MessageTurn {
 export type FamilyContextMode =
   | "family_full"
   | "family_meds"
-  | "family_team"
-  | "family_slim";
+  | "family_team";
 
 export interface SystemBlocksInput {
   soulContent: string;

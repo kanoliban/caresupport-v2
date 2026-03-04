@@ -244,11 +244,16 @@ export const handleMessage = internalAction({
       });
 
       parsed = extractJson(aiResult.text);
-    } catch {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      console.error("[handleMessage] AI call failed:", errMsg);
+      if (err instanceof Error && err.stack) {
+        console.error("[handleMessage] Stack:", err.stack.slice(0, 500));
+      }
       const fallbackMsg = `Sorry ${memberName}, I wasn't able to process that. Can you send it again?`;
       await logOutbound(ctx, familyId, senderPhone, memberName, fallbackMsg, now);
       await sendResponse(chatId, fallbackMsg, env());
-      return { success: false, response: fallbackMsg, error: "AI call failed" };
+      return { success: false, response: fallbackMsg, error: errMsg };
     }
 
     const smsResponse = parsed.smsResponse;
@@ -295,6 +300,13 @@ export const handleMessage = internalAction({
     }));
     const classified = classifyUpdates(updates);
 
+    if (classified.autoApply.length > 0) {
+      await ctx.runMutation(internal.familyContext.applyContextUpdates, {
+        familyId,
+        updates: classified.autoApply,
+      });
+    }
+
     if (classified.needsApproval.length > 0) {
       const approverMembers = await ctx.runMutation(
         internal.mutations.getMemberByPhone,
@@ -336,6 +348,7 @@ export const handleMessage = internalAction({
     await sendResponse(chatId, smsResponse, env());
 
     // Step 16: Process outreach
+    const envVars = env();
     for (const entry of parsed.needsOutreach) {
       try {
         const outreachEvent = buildOutreachSentEvent({
@@ -346,7 +359,28 @@ export const handleMessage = internalAction({
           purpose: entry.message.slice(0, 200),
         });
         await ctx.runMutation(internal.mutations.logAudit, outreachEvent);
-        await sendMessage(chatId, entry.message, env().linqApiToken);
+
+        const targetMember = await ctx.runMutation(
+          internal.mutations.getMemberByPhone,
+          { phone: entry.phone },
+        );
+
+        if (targetMember?.chatId) {
+          await sendMessage(targetMember.chatId, entry.message, envVars.linqApiToken);
+        } else {
+          const result = await createChat(
+            entry.phone,
+            entry.message,
+            envVars.linqPhoneNumber,
+            envVars.linqApiToken,
+          );
+          if (result.success && result.chatId && targetMember) {
+            await ctx.runMutation(internal.mutations.updateMemberChatId, {
+              memberId: targetMember._id,
+              chatId: result.chatId,
+            });
+          }
+        }
       } catch {
         // outreach is best-effort
       }

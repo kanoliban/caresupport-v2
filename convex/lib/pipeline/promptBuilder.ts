@@ -29,22 +29,18 @@ BEFORE YOU PROMISE TO CONTACT SOMEONE:
 
 const SECTION_RE = /^## /gm;
 
-export const FAMILY_SECTIONS: Record<FamilyContextMode, Set<string> | null | "_slim"> = {
+export const FAMILY_SECTIONS: Record<FamilyContextMode, Set<string> | null> = {
   family_full: null,
   family_meds: new Set([
     "Active Medications",
-    "Medication Hold Log",
-    "Full Medication History",
-    "Urgent Notes",
-    "Care Recipient",
+    "Care Tasks",
   ]),
   family_team: new Set([
     "Care Team",
-    "This Week",
-    "Urgent Notes",
-    "Care Recipient",
+    "Rides",
+    "Care Tasks",
+    "Appointments",
   ]),
-  family_slim: "_slim",
 };
 
 export const INTENT_FAMILY_MODE: Record<string, FamilyContextMode> = {
@@ -53,7 +49,7 @@ export const INTENT_FAMILY_MODE: Record<string, FamilyContextMode> = {
   MEDICATION_CHANGE: "family_meds",
   ONBOARDING: "family_team",
   MULTI_MEMBER: "family_team",
-  GENERAL: "family_slim",
+  GENERAL: "family_full",
 };
 
 export function extractFamilySections(familyText: string, sections: Set<string>): string {
@@ -181,12 +177,8 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     let ctx: string;
     if (sectionFilter === null) {
       ctx = input.familyContext;
-    } else if (sectionFilter === "_slim") {
-      const trimmed = input.familyContext.slice(0, 500);
-      const lastNewline = trimmed.lastIndexOf("\n");
-      ctx = lastNewline > 0 ? trimmed.slice(0, lastNewline) : trimmed;
     } else {
-      ctx = extractFamilySections(input.familyContext, sectionFilter);
+      ctx = extractFamilySections(input.familyContext, sectionFilter as Set<string>);
     }
 
     if (ctx.trim()) {

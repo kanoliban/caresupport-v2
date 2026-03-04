@@ -7,8 +7,8 @@ const DEFAULT_TIMEOUT_MS = 45_000;
 
 const MODEL_FALLBACK_CHAIN = [
   "claude-haiku-4-5-20251001",
-  "claude-sonnet-4-5-20250514",
-  "claude-opus-4-20250514",
+  "claude-sonnet-4-6",
+  "claude-opus-4-6",
 ] as const;
 
 export interface AnthropicInput {

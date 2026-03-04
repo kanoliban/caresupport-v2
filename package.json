@@ -12,15 +12,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "convex": "^1.32.0",
-    "@anthropic-ai/sdk": "^0.39.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
     "@types/node": "^22.0.0",
-    "vitest": "^3.0.0",
+    "convex-test": "^0.0.35",
     "tsx": "^4.19.0",
-    "convex-test": "^0.0.35"
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   }
 }

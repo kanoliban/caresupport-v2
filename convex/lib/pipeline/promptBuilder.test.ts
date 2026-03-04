@@ -175,12 +175,13 @@ describe("buildSystemBlocks", () => {
     expect(familyBlock!.text).toContain("Financial");
   });
 
-  it("GENERAL intent loads slim family context (first 500 chars)", () => {
-    const longContext = "A".repeat(600);
+  it("GENERAL intent loads full family context", () => {
+    const longContext = "## Care Team\nMembers\n\n## Active Medications\nMeds here";
     const blocks = buildSystemBlocks(makeInput({ intent: "GENERAL", familyContext: longContext }));
     const familyBlock = blocks.find((b) => b.text.includes("FAMILY FILE"));
     expect(familyBlock).toBeDefined();
-    expect(familyBlock!.text.length).toBeLessThan(600);
+    expect(familyBlock!.text).toContain("Care Team");
+    expect(familyBlock!.text).toContain("Active Medications");
   });
 
   it("toolsActive mode skips family context pre-loading", () => {
@@ -219,7 +220,7 @@ describe("INTENT_FAMILY_MODE mapping", () => {
     expect(INTENT_FAMILY_MODE.MEDICATION_CHANGE).toBe("family_meds");
   });
 
-  it("maps GENERAL to family_slim", () => {
-    expect(INTENT_FAMILY_MODE.GENERAL).toBe("family_slim");
+  it("maps GENERAL to family_full", () => {
+    expect(INTENT_FAMILY_MODE.GENERAL).toBe("family_full");
   });
 });

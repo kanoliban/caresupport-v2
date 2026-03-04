@@ -136,6 +136,94 @@ export const materialize = internalMutation({
   },
 });
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function applySectionUpdate(
+  markdown: string,
+  section: string,
+  operation: string,
+  content: string,
+  oldContent: string,
+): string {
+  const sectionPattern = new RegExp(`^## ${escapeRegex(section)}\\b`, "m");
+  const match = sectionPattern.exec(markdown);
+
+  if (!match) {
+    if (operation === "append" || operation === "prepend") {
+      return markdown.trimEnd() + `\n\n## ${section}\n\n${content}\n`;
+    }
+    return markdown;
+  }
+
+  const sectionStart = match.index;
+  const headerEnd = markdown.indexOf("\n", sectionStart);
+  const nextSection = markdown.indexOf("\n## ", headerEnd);
+  const sectionEnd = nextSection >= 0 ? nextSection : markdown.length;
+  const sectionBody = markdown.slice(headerEnd, sectionEnd);
+
+  let newBody: string;
+  switch (operation) {
+    case "append":
+      newBody = sectionBody.trimEnd() + "\n" + content + "\n";
+      break;
+    case "prepend":
+      newBody = "\n" + content + sectionBody;
+      break;
+    case "replace":
+      if (oldContent && sectionBody.includes(oldContent)) {
+        newBody = sectionBody.replace(oldContent, content);
+      } else {
+        newBody = sectionBody;
+      }
+      break;
+    default:
+      newBody = sectionBody;
+  }
+
+  return markdown.slice(0, headerEnd) + newBody + markdown.slice(sectionEnd);
+}
+
+export const applyContextUpdates = internalMutation({
+  args: {
+    familyId: v.string(),
+    updates: v.array(
+      v.object({
+        section: v.string(),
+        operation: v.string(),
+        content: v.string(),
+        oldContent: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("familyContext")
+      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .first();
+
+    if (!existing) return { applied: 0 };
+
+    let md = existing.contextMarkdown;
+    let applied = 0;
+    for (const u of args.updates) {
+      const before = md;
+      md = applySectionUpdate(md, u.section, u.operation, u.content, u.oldContent);
+      if (md !== before) applied++;
+    }
+
+    if (applied > 0) {
+      await ctx.db.patch(existing._id, {
+        contextMarkdown: md,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { applied };
+  },
+});
+
 export const seedContext = mutation({
   args: { familyId: v.string() },
   handler: async (ctx, args) => {
