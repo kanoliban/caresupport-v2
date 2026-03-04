@@ -55,7 +55,7 @@ describe("callAnthropic", () => {
       }
       return { default: MockAnthropic };
     });
-    const { callAnthropic } = await import("./anthropic-client");
+    const { callAnthropic } = await import("./anthropicClient");
     return callAnthropic({
       systemBlocks: SYSTEM_BLOCKS,
       messages: MESSAGES,

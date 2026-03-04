@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fallbackChain, MODELS, route, TIER_ORDER } from "./care-router";
+import { fallbackChain, MODELS, route, TIER_ORDER } from "./careRouter";
 
 describe("route — emergency patterns", () => {
   it("routes '911' to critical/EMERGENCY", () => {

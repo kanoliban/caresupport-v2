@@ -9,7 +9,7 @@ import {
   extractMessageText,
   extractChatId,
   extractService,
-} from "./lib/linq-client";
+} from "./lib/linqClient";
 
 const http = httpRouter();
 

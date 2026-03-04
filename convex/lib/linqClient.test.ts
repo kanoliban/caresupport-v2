@@ -10,7 +10,7 @@ import {
   createChat,
   startTyping,
   sendMessageSequence,
-} from "./linq-client";
+} from "./linqClient";
 import { createHmac } from "crypto";
 
 // ─── splitIntoBubbles ────────────────────────────────────────────────────

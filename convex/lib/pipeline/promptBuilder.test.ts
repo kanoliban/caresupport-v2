@@ -6,7 +6,7 @@ import {
   extractFamilySections,
   INTENT_FAMILY_MODE,
   systemBlocksToString,
-} from "./prompt-builder";
+} from "./promptBuilder";
 import type { SystemBlocksInput } from "./types";
 
 const STUB_MEMBER = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractJson, normalizeResponse } from "./response-parser";
+import { extractJson, normalizeResponse } from "./responseParser";
 
 describe("extractJson", () => {
   it("parses clean JSON directly", () => {
