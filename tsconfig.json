@@ -14,7 +14,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "lib": ["ES2022"],
-    "types": ["node"]
+    "types": ["node", "vite/client"]
   },
   "include": ["convex/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules"]
