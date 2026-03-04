@@ -13,6 +13,8 @@ import {
   extractMessageText,
   extractChatId,
   extractService,
+  extractMessageId,
+  extractFailureReason,
 } from "./lib/linqClient";
 
 // ─── Webhook payload construction helpers ────────────────────────────────
@@ -150,5 +152,46 @@ describe("webhook payload extraction", () => {
 
     // #then
     expect(text).toBe("Part 1 Part 2");
+  });
+});
+
+// ─── Status event extraction (used by webhook handler) ──────────────────
+
+describe("webhook status event extraction", () => {
+  it("extracts message ID from message.failed payload", () => {
+    // #given
+    const data = {
+      message: { id: "msg-fail-1" },
+      error: "delivery failed",
+    };
+
+    // #when / #then
+    expect(extractMessageId(data)).toBe("msg-fail-1");
+    expect(extractFailureReason(data)).toBe("delivery failed");
+  });
+
+  it("extracts message ID from message.delivered payload", () => {
+    // #given
+    const data = { message: { id: "msg-del-1" } };
+
+    // #when / #then
+    expect(extractMessageId(data)).toBe("msg-del-1");
+  });
+
+  it("extracts message ID from message.read payload", () => {
+    // #given
+    const data = { message_id: "msg-read-1" };
+
+    // #when / #then
+    expect(extractMessageId(data)).toBe("msg-read-1");
+  });
+
+  it("returns defaults for unknown event payloads", () => {
+    // #given
+    const data = {};
+
+    // #when / #then
+    expect(extractMessageId(data)).toBe("");
+    expect(extractFailureReason(data)).toBe("unknown");
   });
 });
