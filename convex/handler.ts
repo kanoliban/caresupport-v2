@@ -35,6 +35,12 @@ import {
   splitIntoBubbles,
   createChat,
 } from "./lib/linqClient";
+import {
+  SOUL_CONTENT,
+  ROUTING_CONTENT,
+  CAPABILITIES_CONTENT,
+  SKILLS_CONTENT,
+} from "./lib/promptContent";
 
 const BLOCKED_RESPONSE =
   "I'm sorry, I can't share that information with your access level. " +
@@ -201,10 +207,10 @@ export const handleMessage = internalAction({
 
     // Step 9: Build system prompt
     const systemBlocks = buildSystemBlocks({
-      soulContent: "",
-      routingContent: "",
-      capabilitiesContent: "",
-      skillsContent: "",
+      soulContent: SOUL_CONTENT,
+      routingContent: ROUTING_CONTENT,
+      capabilitiesContent: CAPABILITIES_CONTENT,
+      skillsContent: SKILLS_CONTENT,
       lessonsContent: lessonsText,
       member: {
         name: memberName,
