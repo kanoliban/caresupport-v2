@@ -56,6 +56,7 @@ Full product context for strategic decisions.
 - `docs/VISION.md` — product vision and north-star narrative
 - `docs/ROADMAP.md` — product roadmap, phases, and scaling challenges
 - `ARCHITECTURE.md` — system diagram, domains, dependency rules
+- `docs/adr/` — Architecture Decision Records (migration strategy, technical decisions)
 
 ### Project State & History
 What's been built, what's in progress, what's broken.
@@ -164,6 +165,8 @@ SOUL.md                   ← Runtime agent identity (loaded into every system p
 agent_root.md             ← Runtime agent routing (loaded into every system prompt)
 ARCHITECTURE.md           ← System diagram, domains, dependency rules
 docs/
+  adr/                    ← Architecture Decision Records
+    001-v2-migration.md   ← V2 migration strategy (Python → TypeScript/Convex)
   PRODUCT_STRATEGY.md     ← Full product strategy (sections 0-16)
   MEMORY.md               ← Project chronological log
   member-onboarding.md    ← How to add families and members

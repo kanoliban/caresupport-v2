@@ -21,10 +21,17 @@ SMS/iMessage arrives
 
 ## Build/Lint/Test Commands
 
+### Python (runtime)
 - **Test:** `cd runtime && PYTHONPATH=. python3 -m pytest tests/ -v`
 - **Dry run SMS:** `python3 runtime/scripts/sms_handler.py --from "+1..." --body "test" --dry-run`
 - **Start poller:** `tmux new-session -d -s caresupport "python3 runtime/scripts/poll_inbound.py --interval 15"`
 - **Dev poller (auto-reload):** `tmux new-session -d -s caresupport "runtime/scripts/dev_watch.sh 15"`
+
+### TypeScript (Convex)
+- **Type-check:** `npx tsc --noEmit`
+- **Test:** `npm test` (vitest)
+- **Convex dev:** `npx convex dev`
+- **Seed data:** `npm run seed` (requires Convex running)
 
 ## Key Rules
 
