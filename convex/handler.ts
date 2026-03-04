@@ -47,8 +47,8 @@ const BLOCKED_RESPONSE =
   "Please contact the care coordinator if you need more details.";
 
 const UNKNOWN_NUMBER_RESPONSE =
-  "Sorry, this number isn't set up to receive messages. " +
-  "If you think this is an error, please check with whoever gave you this number.";
+  "Hi! Welcome to CareSupport — I help families coordinate care.\n\n" +
+  "To get started: are you caring for someone, or are you being cared for?";
 
 const VALID_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
 
@@ -105,6 +105,7 @@ export const handleMessage = internalAction({
     if (!member) {
       const auditEvent = buildUnknownNumberEvent({ phone: senderPhone });
       await ctx.runMutation(internal.mutations.logAudit, auditEvent);
+      await sendResponse(chatId, UNKNOWN_NUMBER_RESPONSE, env());
       return {
         success: false,
         response: UNKNOWN_NUMBER_RESPONSE,
@@ -400,7 +401,20 @@ async function sendResponse(
   text: string,
   envVars: { linqApiToken: string },
 ): Promise<void> {
-  if (!envVars.linqApiToken) return;
+  if (!envVars.linqApiToken) {
+    console.error("[sendResponse] No LINQ_API_TOKEN — skipping send");
+    return;
+  }
+  if (!chatId) {
+    console.error("[sendResponse] No chatId — cannot send");
+    return;
+  }
+  console.log(`[sendResponse] Sending to chatId=${chatId}, text length=${text.length}`);
   const bubbles = splitIntoBubbles(text);
-  await sendMessageSequence(chatId, bubbles, envVars.linqApiToken, 800);
+  const results = await sendMessageSequence(chatId, bubbles, envVars.linqApiToken, 800);
+  for (const r of results) {
+    if (!r.success) {
+      console.error("[sendResponse] Send failed:", JSON.stringify(r.error));
+    }
+  }
 }

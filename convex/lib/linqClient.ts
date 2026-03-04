@@ -1,4 +1,4 @@
-const LINQ_BASE_URL = "https://api.linq.chat/v1";
+const LINQ_BASE_URL = "https://api.linqapp.com/api/partner/v3";
 const MAX_BUBBLES = 5;
 const REPLAY_WINDOW_SECONDS = 300;
 
@@ -223,11 +223,14 @@ export async function verifyWebhookSignature(
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  if (expected.length !== signature.length) return false;
-  // Constant-time comparison
+  const provided = signature.startsWith("sha256=")
+    ? signature.slice(7)
+    : signature;
+
+  if (expected.length !== provided.length) return false;
   let mismatch = 0;
   for (let i = 0; i < expected.length; i++) {
-    mismatch |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+    mismatch |= expected.charCodeAt(i) ^ provided.charCodeAt(i);
   }
   return mismatch === 0;
 }

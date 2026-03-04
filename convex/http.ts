@@ -50,7 +50,8 @@ http.route({
       return jsonResponse({ error: "invalid_json" }, 400);
     }
 
-    const eventType = (payload.event as string) ?? "";
+    const eventType =
+      (payload.event_type as string) ?? (payload.event as string) ?? "";
     const eventData = (payload.data ?? payload) as Record<string, unknown>;
 
     if (eventType === "message.received") {
