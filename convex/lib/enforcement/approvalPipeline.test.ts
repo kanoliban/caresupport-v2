@@ -7,7 +7,7 @@ import {
   classifyUpdates,
   detectApprovalResponse,
   formatConfirmationSms,
-} from "./approval-pipeline";
+} from "./approvalPipeline";
 import type { ApprovalUpdate } from "./types";
 import { PHONES, FAMILY_ID } from "./fixtures";
 

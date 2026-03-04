@@ -28,13 +28,13 @@ import {
   EXPIRY_HOURS,
 } from "./lib/enforcement";
 import type { AccessLevel } from "./lib/enforcement";
-import { callAnthropic } from "./lib/anthropic-client";
+import { callAnthropic } from "./lib/anthropicClient";
 import {
   sendMessage,
   sendMessageSequence,
   splitIntoBubbles,
   createChat,
-} from "./lib/linq-client";
+} from "./lib/linqClient";
 
 const BLOCKED_RESPONSE =
   "I'm sorry, I can't share that information with your access level. " +

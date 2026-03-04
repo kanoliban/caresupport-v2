@@ -8,7 +8,7 @@ import {
   buildResponseBlockedEvent,
   buildOutreachSentEvent,
   buildUnknownNumberEvent,
-} from "./phi-audit";
+} from "./phiAudit";
 import { PHONES, FAMILY_ID } from "./fixtures";
 
 const modules = import.meta.glob("../../**/*.ts");

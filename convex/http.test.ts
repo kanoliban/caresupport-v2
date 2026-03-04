@@ -13,7 +13,7 @@ import {
   extractMessageText,
   extractChatId,
   extractService,
-} from "./lib/linq-client";
+} from "./lib/linqClient";
 
 // ─── Webhook payload construction helpers ────────────────────────────────
 

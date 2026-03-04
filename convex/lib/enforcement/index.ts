@@ -6,7 +6,7 @@ export {
   canApprove,
   scanForMedicationLeakage,
   scanForConditionLeakage,
-} from "./role-filter";
+} from "./roleFilter";
 
 export {
   buildContextLoadEvent,
@@ -15,8 +15,8 @@ export {
   buildOutreachSentEvent,
   buildUnknownNumberEvent,
   writeAuditEvent,
-} from "./phi-audit";
-export type { AuditEventArgs } from "./phi-audit";
+} from "./phiAudit";
+export type { AuditEventArgs } from "./phiAudit";
 
 export {
   requiresApproval,
@@ -24,8 +24,8 @@ export {
   detectApprovalResponse,
   formatConfirmationSms,
   EXPIRY_HOURS,
-} from "./approval-pipeline";
-export type { ApprovalResponse } from "./approval-pipeline";
+} from "./approvalPipeline";
+export type { ApprovalResponse } from "./approvalPipeline";
 
 export type {
   AccessLevel,

@@ -7,7 +7,7 @@ import {
   canApprove,
   scanForMedicationLeakage,
   scanForConditionLeakage,
-} from "./role-filter";
+} from "./roleFilter";
 import { FAMILY_MD } from "./fixtures";
 
 describe("parseFamilySections", () => {
