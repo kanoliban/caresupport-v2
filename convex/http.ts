@@ -7,9 +7,21 @@ import {
   extractMessageText,
   extractChatId,
   extractService,
+  extractMessageId,
+  extractFailureReason,
 } from "./lib/linqClient";
 
 const http = httpRouter();
+
+function jsonResponse(
+  data: Record<string, unknown>,
+  status = 200,
+): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 http.route({
   path: "/webhook/linq",
@@ -28,59 +40,126 @@ http.route({
       signingSecret,
     );
     if (!valid) {
-      return new Response(JSON.stringify({ error: "invalid_signature" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "invalid_signature" }, 401);
     }
 
     let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(body) as Record<string, unknown>;
     } catch {
-      return new Response(JSON.stringify({ error: "invalid_json" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "invalid_json" }, 400);
     }
 
     const eventType = (payload.event as string) ?? "";
-    if (eventType !== "message.received") {
-      return new Response(
-        JSON.stringify({ handled: false, event: eventType }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
     const eventData = (payload.data ?? payload) as Record<string, unknown>;
-    const senderPhone = extractSenderPhone(eventData);
-    const messageBody = extractMessageText(eventData);
-    const chatId = extractChatId(eventData);
-    const service = extractService(eventData);
-    const sourceMessageId =
-      ((eventData.message as Record<string, unknown>)?.id as string) ??
-      (eventData.id as string) ??
-      undefined;
 
-    if (!senderPhone || !messageBody) {
-      return new Response(
-        JSON.stringify({ error: "missing_sender_or_message" }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+    if (eventType === "message.received") {
+      const senderPhone = extractSenderPhone(eventData);
+      const messageBody = extractMessageText(eventData);
+      const chatId = extractChatId(eventData);
+      const service = extractService(eventData);
+      const sourceMessageId = extractMessageId(eventData) || undefined;
+
+      if (!senderPhone || !messageBody) {
+        return jsonResponse({ error: "missing_sender_or_message" });
+      }
+
+      await ctx.scheduler.runAfter(0, internal.handler.handleMessage, {
+        senderPhone,
+        messageBody,
+        chatId,
+        service,
+        sourceMessageId,
+      });
+
+      return jsonResponse({ accepted: true });
     }
 
-    await ctx.scheduler.runAfter(0, internal.handler.handleMessage, {
-      senderPhone,
-      messageBody,
-      chatId,
-      service,
-      sourceMessageId,
-    });
+    if (eventType === "message.failed") {
+      const sourceMessageId = extractMessageId(eventData);
+      const failureReason = extractFailureReason(eventData);
+      const now = Date.now();
 
-    return new Response(
-      JSON.stringify({ accepted: true }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
+      if (sourceMessageId) {
+        const conversation = await ctx.runMutation(
+          internal.mutations.getConversationBySourceMessageId,
+          { sourceMessageId },
+        );
+
+        if (conversation) {
+          await ctx.runMutation(internal.mutations.updateMessageStatus, {
+            conversationId: conversation._id,
+            deliveryStatus: "failed",
+            failureReason,
+          });
+
+          await ctx.runMutation(internal.mutations.logAudit, {
+            familyId: conversation.familyId,
+            event: "message_failed",
+            phone: conversation.phone,
+            details: { sourceMessageId, failureReason },
+            timestamp: now,
+          });
+
+          return jsonResponse({ handled: true, event: eventType });
+        }
+      }
+
+      await ctx.runMutation(internal.mutations.logAudit, {
+        familyId: "unknown",
+        event: "message_failed",
+        phone: "",
+        details: {
+          sourceMessageId: sourceMessageId || undefined,
+          failureReason,
+        },
+        timestamp: now,
+      });
+
+      return jsonResponse({ handled: true, event: eventType });
+    }
+
+    if (eventType === "message.delivered") {
+      const sourceMessageId = extractMessageId(eventData);
+      if (sourceMessageId) {
+        const conversation = await ctx.runMutation(
+          internal.mutations.getConversationBySourceMessageId,
+          { sourceMessageId },
+        );
+
+        if (conversation) {
+          await ctx.runMutation(internal.mutations.updateMessageStatus, {
+            conversationId: conversation._id,
+            deliveryStatus: "delivered",
+            deliveredAt: Date.now(),
+          });
+        }
+      }
+
+      return jsonResponse({ handled: true, event: eventType });
+    }
+
+    if (eventType === "message.read") {
+      const sourceMessageId = extractMessageId(eventData);
+      if (sourceMessageId) {
+        const conversation = await ctx.runMutation(
+          internal.mutations.getConversationBySourceMessageId,
+          { sourceMessageId },
+        );
+
+        if (conversation) {
+          await ctx.runMutation(internal.mutations.updateMessageStatus, {
+            conversationId: conversation._id,
+            deliveryStatus: "read",
+            readAt: Date.now(),
+          });
+        }
+      }
+
+      return jsonResponse({ handled: true, event: eventType });
+    }
+
+    return jsonResponse({ handled: false, event: eventType });
   }),
 });
 

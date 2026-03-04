@@ -6,6 +6,8 @@ import {
   extractMessageText,
   extractChatId,
   extractService,
+  extractMessageId,
+  extractFailureReason,
   sendMessage,
   createChat,
   startTyping,
@@ -325,5 +327,61 @@ describe("sendMessageSequence", () => {
     expect(results).toHaveLength(2);
     expect(results.every((r) => r.success)).toBe(true);
     expect(calls.some((c) => c.includes("/typing"))).toBe(true);
+  });
+});
+
+// ─── extractMessageId ────────────────────────────────────────────────────
+
+describe("extractMessageId", () => {
+  it("extracts from nested message.id", () => {
+    expect(extractMessageId({ message: { id: "msg-123" } })).toBe("msg-123");
+  });
+
+  it("extracts from top-level message_id", () => {
+    expect(extractMessageId({ message_id: "msg-456" })).toBe("msg-456");
+  });
+
+  it("extracts from top-level id", () => {
+    expect(extractMessageId({ id: "msg-789" })).toBe("msg-789");
+  });
+
+  it("prefers message.id over top-level id", () => {
+    expect(
+      extractMessageId({ message: { id: "nested" }, id: "top" }),
+    ).toBe("nested");
+  });
+
+  it("returns empty string when missing", () => {
+    expect(extractMessageId({})).toBe("");
+  });
+});
+
+// ─── extractFailureReason ────────────────────────────────────────────────
+
+describe("extractFailureReason", () => {
+  it("extracts from top-level error string", () => {
+    expect(extractFailureReason({ error: "delivery failed" })).toBe(
+      "delivery failed",
+    );
+  });
+
+  it("extracts from top-level reason string", () => {
+    expect(extractFailureReason({ reason: "number blocked" })).toBe(
+      "number blocked",
+    );
+  });
+
+  it("extracts from nested message.error", () => {
+    expect(
+      extractFailureReason({ message: { error: "timeout" } }),
+    ).toBe("timeout");
+  });
+
+  it("returns 'unknown' when no reason found", () => {
+    expect(extractFailureReason({})).toBe("unknown");
+  });
+
+  it("ignores non-string error values", () => {
+    expect(extractFailureReason({ error: { code: 500 } })).toBe("unknown");
   });
 });
