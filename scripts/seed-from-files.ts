@@ -426,6 +426,9 @@ async function main() {
   await seedLessons(client);
   await seedApprovals(client);
 
+  await client.mutation(api.familyContext.seedContext, { familyId: FAMILY_ID });
+  console.log("  Family context: materialized");
+
   console.log("\nSeed complete.");
 }
 
