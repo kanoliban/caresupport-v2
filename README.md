@@ -47,20 +47,28 @@ npx convex deploy
 ## Repo Structure
 
 ```
-docs/design.md         — Design document (source of truth)
 CLAUDE.md              — Build commands, project rules
 SOUL.md                — Agent identity and voice
+docs/design.md         — Design document (source of truth)
 
 convex/
-  schema.ts            — Database schema (families, members, chats, messages, meds, schedules)
-  http.ts              — Linq webhook handler
+  schema.ts            — Database schema
+  http.ts              — Linq webhook entry point
   handler.ts           — Message processing pipeline
-  lib/                 — Pipeline stages, enforcement, Linq/Anthropic clients
+  lib/enforcement/     — Access control, PHI filtering, approval gates
+  lib/pipeline/        — Intent routing, prompt building, response parsing
+  lib/anthropicClient  — Claude API client
+  lib/linqClient       — Linq iMessage API client
 
-fork/
-  workspace/families/  — Seed data for pilot families
+fork/workspace/
+  protocols/           — 16 care protocol files (domain knowledge)
+  families/kano/       — Pilot family seed data
+
+scripts/               — Seed scripts
+tests/                 — Integration tests
+archive/v1/            — Archived v1 artifacts (Python runtime, old docs)
 ```
 
 ## For AI Agents
 
-Read [`CLAUDE.md`](CLAUDE.md) for build commands and project rules. Read [`docs/design.md`](docs/design.md) for product context.
+Read [`CLAUDE.md`](CLAUDE.md) for build commands and project rules. Read [`docs/design.md`](docs/design.md) for product context. Ignore `archive/v1/` — it contains superseded v1 artifacts kept for reference only.

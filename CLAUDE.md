@@ -22,6 +22,7 @@ iMessage arrives via Linq webhook
 - **Type-check:** `npx tsc --noEmit`
 - **Test:** `npm test` (vitest)
 - **Convex dev:** `npx convex dev`
+- **Seed:** `npm run seed` (populate Convex with pilot family data)
 - **Deploy:** `npx convex deploy`
 
 ## Key Rules
@@ -46,3 +47,7 @@ iMessage arrives via Linq webhook
 | `approvals` | Pending coordinator confirmations |
 | `auditLogs` | Audit trail |
 | `lessons` | Agent corrections and learned patterns |
+
+## Transitional State
+
+The Convex schema (schema.ts) is v2 — structured tables for medications, schedules, and agent-written context fields. However, handler.ts and promptContent.ts still use v1 field names in the agent's structured output (familyFileUpdates, memberUpdates). The migration to v2 output format (familyContextUpdate, memberContextUpdate with typed table operations) is a separate task. Match the working code, not the design aspirations.
