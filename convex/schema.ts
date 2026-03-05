@@ -2,24 +2,23 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 const familyStatus = v.union(
+  v.literal("onboarding"),
   v.literal("active"),
   v.literal("paused"),
   v.literal("archived"),
 );
 
 const memberRole = v.union(
-  v.literal("primary_caregiver"),
+  v.literal("care_recipient"),
   v.literal("family_caregiver"),
+  v.literal("professional_caregiver"),
   v.literal("community_supporter"),
-  v.literal("provider"),
 );
 
 const accessLevel = v.union(
   v.literal("full"),
-  v.literal("schedule+meds"),
-  v.literal("schedule"),
-  v.literal("provider"),
-  v.literal("limited"),
+  v.literal("standard"),
+  v.literal("view_only"),
 );
 
 const medicationStatus = v.union(
@@ -30,13 +29,14 @@ const medicationStatus = v.union(
 );
 
 const scheduleItemType = v.union(
-  v.literal("ride"),
-  v.literal("careTask"),
+  v.literal("shift"),
   v.literal("appointment"),
+  v.literal("task"),
+  v.literal("ride"),
 );
 
 const scheduleItemStatus = v.union(
-  v.literal("active"),
+  v.literal("scheduled"),
   v.literal("completed"),
   v.literal("cancelled"),
 );
@@ -44,6 +44,20 @@ const scheduleItemStatus = v.union(
 const messageDirection = v.union(
   v.literal("inbound"),
   v.literal("outbound"),
+);
+
+const deliveryStatus = v.union(
+  v.literal("sent"),
+  v.literal("delivered"),
+  v.literal("read"),
+  v.literal("failed"),
+);
+
+const approvalStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("rejected"),
+  v.literal("expired"),
 );
 
 const lessonScope = v.union(
@@ -57,149 +71,113 @@ const lessonCategory = v.union(
   v.literal("operational"),
 );
 
-const approvalStatus = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
-  v.literal("expired"),
-);
-
-const approvalUpdate = v.object({
-  section: v.string(),
-  operation: v.string(),
-  content: v.string(),
-  oldContent: v.string(),
-});
-
-const deliveryStatus = v.union(
-  v.literal("sent"),
-  v.literal("delivered"),
-  v.literal("read"),
-  v.literal("failed"),
-);
-
-const auditEventType = v.union(
-  v.literal("context_load"),
-  v.literal("response_sent"),
-  v.literal("response_blocked"),
-  v.literal("outreach_sent"),
-  v.literal("unknown_number"),
-  v.literal("message_failed"),
-  v.literal("message_status_update"),
-);
-
-const auditDetails = v.object({
-  sectionsLoaded: v.optional(v.array(v.string())),
-  triggerMessage: v.optional(v.string()),
-  responseLength: v.optional(v.number()),
-  leakageCheckPassed: v.optional(v.boolean()),
-  leakedCategories: v.optional(v.array(v.string())),
-  leakedTerms: v.optional(v.array(v.string())),
-  severity: v.optional(v.string()),
-  recipientPhone: v.optional(v.string()),
-  initiatedBy: v.optional(v.string()),
-  sentTo: v.optional(
-    v.object({
-      phone: v.string(),
-      name: v.string(),
-    }),
-  ),
-  purpose: v.optional(v.string()),
-  phiDisclosed: v.optional(v.boolean()),
-  sourceMessageId: v.optional(v.string()),
-  failureReason: v.optional(v.string()),
-  deliveryStatus: v.optional(v.string()),
-});
-
 export default defineSchema({
   families: defineTable({
-    familyId: v.string(),
-    familyName: v.string(),
-    careRecipient: v.string(),
+    name: v.string(),
     status: familyStatus,
     timezone: v.string(),
-    notes: v.optional(v.string()),
+    context: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  })
-    .index("by_family_id", ["familyId"])
-    .index("by_status", ["status"]),
+  }).index("by_status", ["status"]),
 
   members: defineTable({
-    familyId: v.string(),
+    familyId: v.id("families"),
     phone: v.string(),
     name: v.string(),
     role: memberRole,
     accessLevel: accessLevel,
+    isCoordinator: v.boolean(),
+    isEmergencyContact: v.boolean(),
     active: v.boolean(),
-    chatId: v.optional(v.string()),
+    context: v.optional(v.string()),
     relationship: v.optional(v.string()),
   })
     .index("by_family", ["familyId"])
     .index("by_phone", ["phone"])
-    .index("by_chat_id", ["chatId"])
-    .index("by_family_member", ["familyId", "phone"]),
+    .index("by_family_phone", ["familyId", "phone"]),
 
-  medications: defineTable({
-    familyId: v.string(),
-    name: v.string(),
-    dose: v.string(),
-    schedule: v.string(),
-    prescriber: v.optional(v.string()),
-    pharmacy: v.optional(v.string()),
-    lastConfirmed: v.optional(v.string()),
-    refillDue: v.optional(v.string()),
-    status: medicationStatus,
+  chats: defineTable({
+    familyId: v.id("families"),
+    linqChatId: v.string(),
+    isGroup: v.boolean(),
+    participants: v.array(v.string()),
+    createdAt: v.number(),
   })
-    .index("by_family", ["familyId"])
-    .index("by_family_active", ["familyId", "status"]),
+    .index("by_linq_chat_id", ["linqChatId"])
+    .index("by_family", ["familyId"]),
 
-  scheduleItems: defineTable({
-    familyId: v.string(),
-    type: scheduleItemType,
-    title: v.string(),
-    day: v.optional(v.string()),
-    time: v.optional(v.string()),
-    assignedTo: v.optional(v.string()),
-    provider: v.optional(v.string()),
-    location: v.optional(v.string()),
-    transport: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    status: scheduleItemStatus,
-  })
-    .index("by_family", ["familyId"])
-    .index("by_family_type", ["familyId", "type"]),
-
-  conversations: defineTable({
-    familyId: v.string(),
-    phone: v.string(),
+  messages: defineTable({
+    chatId: v.id("chats"),
+    familyId: v.id("families"),
+    senderPhone: v.optional(v.string()),
     direction: messageDirection,
-    memberName: v.optional(v.string()),
     body: v.string(),
     timestamp: v.number(),
-    sourceMessageId: v.optional(v.string()),
+    linqMessageId: v.optional(v.string()),
     deliveryStatus: v.optional(deliveryStatus),
     deliveredAt: v.optional(v.number()),
     readAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
   })
+    .index("by_chat", ["chatId"])
     .index("by_family", ["familyId"])
-    .index("by_phone", ["phone"])
-    .index("by_timestamp", ["timestamp"])
-    .index("by_source_message_id", ["sourceMessageId"]),
+    .index("by_family_timestamp", ["familyId", "timestamp"])
+    .index("by_linq_message_id", ["linqMessageId"]),
 
-  timelineEvents: defineTable({
-    familyId: v.string(),
+  medications: defineTable({
+    familyId: v.id("families"),
+    name: v.string(),
+    dose: v.string(),
+    schedule: v.string(),
+    prescriber: v.optional(v.string()),
+    status: medicationStatus,
+  })
+    .index("by_family", ["familyId"])
+    .index("by_family_status", ["familyId", "status"]),
+
+  scheduleItems: defineTable({
+    familyId: v.id("families"),
+    type: scheduleItemType,
+    title: v.string(),
+    date: v.optional(v.string()),
+    time: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    recurrence: v.optional(v.string()),
+    assignedTo: v.optional(v.id("members")),
+    location: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    status: scheduleItemStatus,
+  })
+    .index("by_family", ["familyId"])
+    .index("by_family_type", ["familyId", "type"])
+    .index("by_family_date", ["familyId", "date"]),
+
+  approvals: defineTable({
+    familyId: v.id("families"),
+    status: approvalStatus,
+    requestedBy: v.id("members"),
+    description: v.string(),
+    changeType: v.string(),
+    changePayload: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    resolvedBy: v.optional(v.id("members")),
+  }).index("by_family_status", ["familyId", "status"]),
+
+  auditLogs: defineTable({
+    familyId: v.id("families"),
+    event: v.string(),
+    phone: v.optional(v.string()),
+    details: v.optional(v.string()),
     timestamp: v.number(),
-    direction: messageDirection,
-    memberName: v.string(),
-    body: v.string(),
   })
     .index("by_family", ["familyId"])
     .index("by_family_timestamp", ["familyId", "timestamp"]),
 
   lessons: defineTable({
-    familyId: v.optional(v.string()),
+    familyId: v.optional(v.id("families")),
     scope: lessonScope,
     category: lessonCategory,
     text: v.string(),
@@ -207,36 +185,4 @@ export default defineSchema({
   })
     .index("by_scope", ["scope"])
     .index("by_family", ["familyId"]),
-
-  approvals: defineTable({
-    familyId: v.string(),
-    status: approvalStatus,
-    requesterPhone: v.string(),
-    requesterName: v.string(),
-    approverPhones: v.array(v.string()),
-    description: v.string(),
-    update: approvalUpdate,
-    createdAt: v.number(),
-    expiresAt: v.number(),
-    resolvedAt: v.optional(v.number()),
-    resolvedBy: v.optional(v.string()),
-  }).index("by_family_status", ["familyId", "status"]),
-
-  auditLogs: defineTable({
-    familyId: v.string(),
-    event: auditEventType,
-    phone: v.string(),
-    accessLevel: v.optional(v.string()),
-    role: v.optional(v.string()),
-    details: auditDetails,
-    timestamp: v.number(),
-  })
-    .index("by_family", ["familyId"])
-    .index("by_family_timestamp", ["familyId", "timestamp"]),
-
-  familyContext: defineTable({
-    familyId: v.string(),
-    contextMarkdown: v.string(),
-    updatedAt: v.number(),
-  }).index("by_family", ["familyId"]),
 });

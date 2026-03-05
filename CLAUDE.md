@@ -1,41 +1,48 @@
-# CLAUDE.md — CareSupport
-
-> **Agents:** Read `AGENTS.md` first — it routes you to the right files based on your task.
+# CLAUDE.md — CareSupport v2
 
 ## What This Is
 
-CareSupport is a care coordination agent that texts with family members 1-to-1 via iMessage/SMS. Files are the database: `family.md` holds operational state, `SOUL.md` defines agent identity, member profiles track individual context.
+CareSupport is a care coordination agent that texts with family members 1:1 and in group chats via iMessage/SMS. Convex is the backend. Linq is the iMessage gateway. Claude is the LLM.
 
-For full product strategy and domain model → `docs/PRODUCT_STRATEGY.md`
+For the full design document → `docs/design.md`
 
 ## How It Works
 
 ```
-SMS/iMessage arrives
-  → poll_inbound.py picks up via Linq API
-  → routing.json maps phone → family → member
-  → sms_handler.py builds system prompt (SOUL.md + capabilities + lessons + family + member context)
-  → AI responds via OpenRouter (claude-haiku primary)
-  → Response sent back via Linq
+iMessage arrives via Linq webhook
+  → convex/http.ts verifies signature, resolves chat → family
+  → handler.ts: route sender → build prompt → call Claude
+  → structured output: sms response + table updates (meds, schedules, context)
+  → enforcement: access control, PHI filtering, approval gates
+  → response sent via Linq API
 ```
 
 ## Build/Lint/Test Commands
 
-### Python (runtime)
-- **Test:** `cd runtime && PYTHONPATH=. python3 -m pytest tests/ -v`
-- **Dry run SMS:** `python3 runtime/scripts/sms_handler.py --from "+1..." --body "test" --dry-run`
-- **Start poller:** `tmux new-session -d -s caresupport "python3 runtime/scripts/poll_inbound.py --interval 15"`
-- **Dev poller (auto-reload):** `tmux new-session -d -s caresupport "runtime/scripts/dev_watch.sh 15"`
-
-### TypeScript (Convex)
 - **Type-check:** `npx tsc --noEmit`
 - **Test:** `npm test` (vitest)
 - **Convex dev:** `npx convex dev`
-- **Seed data:** `npm run seed` (requires Convex running)
+- **Deploy:** `npx convex deploy`
 
 ## Key Rules
 
-1. Import from `runtime/config.py` — never hardcode paths
-2. Safety enforcement is mechanical (code), not just prompt-level
-3. family.md changes use Edit (surgical replacement), not Write (overwrite)
-4. Check `docs/exec-plans/active/` before starting new work
+1. Safety enforcement is mechanical (code in `convex/lib/enforcement/`), not just prompt-level
+2. All state mutations go through Convex mutations — no direct file edits
+3. Three access levels: `full`, `standard`, `view_only` — enforced per-membership
+4. Medication changes always require coordinator approval (hardcoded safety rule)
+5. Medical info is 1:1 only — never shared in group chats
+6. Agent writes to `context` fields on families and members — no markdown blob round-trips
+
+## Schema Overview
+
+| Table | Purpose |
+|-------|---------|
+| `families` | Family/network info + agent-written context |
+| `members` | People in families, roles, access levels, agent-written context |
+| `chats` | Linq chat tracking (1:1 and group) |
+| `messages` | Conversation history linked to chats |
+| `medications` | Structured med records (access-controlled) |
+| `scheduleItems` | Shifts, appointments, tasks, rides |
+| `approvals` | Pending coordinator confirmations |
+| `auditLogs` | Audit trail |
+| `lessons` | Agent corrections and learned patterns |

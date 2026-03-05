@@ -1,82 +1,66 @@
 # CareSupport
 
-Care coordination that runs on text messages and markdown files.
+Care coordination that runs on text messages.
 
-CareSupport is an AI agent that coordinates care teams over SMS/iMessage. Family members, caregivers, and agencies text a single number. The agent tracks schedules, medications, handoffs, and escalations — writing everything to `family.md` files that serve as the operational database.
+CareSupport is an AI agent that coordinates care teams over iMessage/SMS. Family members, caregivers, and the care recipient text a single number. The agent tracks schedules, medications, tasks, and member context — storing everything in Convex tables that serve as the operational database.
 
 ## How It Works
 
 ```
-SMS/iMessage arrives via Linq API
-  → phone number resolved to family + member
-  → system prompt assembled (SOUL.md + capabilities + family context)
-  → AI generates response (Claude Haiku via OpenRouter)
-  → enforcement layer filters PHI, audits, and gates approvals
-  → response sent back via Linq
+iMessage/SMS arrives via Linq webhook
+  → convex/http.ts verifies signature, resolves chat → family
+  → handler.ts: route sender → build prompt → call Claude
+  → structured output: sms response + table updates
+  → enforcement layer: access control, PHI filtering, approval gates
+  → response sent back via Linq API
 ```
 
-The core pipeline lives in `runtime/scripts/sms_handler.py`. Identity in `SOUL.md`. Safety gates in `runtime/enforcement/`.
+## Design
+
+See [`docs/design.md`](docs/design.md) for the full design document — decisions, data model, and design principles.
+
+## Key Concepts
+
+- **iMessage is the UI.** No app, no dashboard. Coordinator onboards via text, invites their team.
+- **Three access levels** — full (coordinator), standard (most members), view-only.
+- **Coordinator is a role flag**, not a fixed person. Can be the care recipient (Rob), a family member (Liban), or shared.
+- **Context fields** — each family and member has an agent-written `context` field that captures preferences, observations, and learned behavior. The agent reads and updates these on every message.
+- **Structured tables** for medications and schedules (code needs these for access control, reminders, gap detection). Everything else lives in context fields.
+- **Safety rules are code, not prompts** — PHI filtering, medication approval gates, and audit logging are enforced mechanically.
 
 ## Running It
 
 ```bash
-# Start the poller (in tmux)
-tmux new-session -d -s caresupport "python3 runtime/scripts/poll_inbound.py --interval 15"
+# Convex dev server
+npx convex dev
 
-# Dry-run a message
-python runtime/scripts/sms_handler.py --from "+1..." --body "test" --dry-run
+# Type-check
+npx tsc --noEmit
 
-# Send via Linq CLI
-python runtime/scripts/linq_gateway.py create --to "+1..." --body "Hello" --service iMessage
+# Tests
+npm test
 
-# Run tests
-cd runtime && PYTHONPATH=. python -m pytest tests/ -v
+# Deploy
+npx convex deploy
 ```
 
 ## Repo Structure
 
 ```
-AGENTS.md              — Agent routing table (start here if you're an AI)
-SOUL.md                — Agent identity and voice (loaded every message)
-ARCHITECTURE.md        — System diagram and domain boundaries
-agent_root.md          — Runtime routing for intent-based doc loading
+docs/design.md         — Design document (source of truth)
+CLAUDE.md              — Build commands, project rules
+SOUL.md                — Agent identity and voice
 
-runtime/
-  scripts/             — sms_handler, poll_inbound, linq_gateway, webhooks
-  enforcement/         — role_filter, phi_audit, family_editor, approval_pipeline
-  learning/            — capabilities, lessons, correction tracking
-  tests/               — test suites (88 structural checks)
+convex/
+  schema.ts            — Database schema (families, members, chats, messages, meds, schedules)
+  http.ts              — Linq webhook handler
+  handler.ts           — Message processing pipeline
+  lib/                 — Pipeline stages, enforcement, Linq/Anthropic clients
 
 fork/
-  workspace/
-    families/          — live family data (routing.json, family.md, members/)
-    protocols/         — 16 care protocols (meds, scheduling, handoffs, etc.)
-  simulation/          — 5 test families + synthesis results
-  onboarding/          — schedule templates (JSON)
-
-docs/
-  PRODUCT_STRATEGY.md  — full strategy: network types, roles, roadmap
-  VISION.md            — product vision and north-star narrative
-  SECURITY.md          — enforcement posture and threat model
-  RELIABILITY.md       — system reliability assessment
-  QUALITY_SCORE.md     — grades per layer
-  product-specs/       — SMS coordination spec
-  design-docs/         — architecture decision records
-  references/          — Linq, HIPAA, Twilio setup docs
-  exec-plans/          — active work plans and tech debt tracker
+  workspace/families/  — Seed data for pilot families
 ```
-
-## Key Decisions
-
-- **Files as database** — `family.md` is the source of truth per family. No external DB.
-- **Mechanical safety** — PHI filtering, approval gates, and audit logging are code, not prompt instructions.
-- **Surgical edits** — family files are updated with `Edit` (find-and-replace), never overwritten.
-- **16 care protocols** — domain knowledge the agent loads on demand based on message intent.
 
 ## For AI Agents
 
-Read [`AGENTS.md`](AGENTS.md) first. It routes you to exactly the files you need for your task.
-
-## For Humans
-
-Read [`CLAUDE.md`](CLAUDE.md) for build commands, project rules, and the full product context.
+Read [`CLAUDE.md`](CLAUDE.md) for build commands and project rules. Read [`docs/design.md`](docs/design.md) for product context.
