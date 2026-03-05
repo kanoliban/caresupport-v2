@@ -34,6 +34,8 @@ import {
   sendMessageSequence,
   splitIntoBubbles,
   createChat,
+  markAsRead,
+  startTyping,
 } from "./lib/linqClient";
 import {
   SOUL_CONTENT,
@@ -41,6 +43,8 @@ import {
   CAPABILITIES_CONTENT,
   SKILLS_CONTENT,
 } from "./lib/promptContent";
+
+const MIN_RESPONSE_MS = 3_000;
 
 const BLOCKED_RESPONSE =
   "I'm sorry, I can't share that information with your access level. " +
@@ -123,6 +127,18 @@ export const handleMessage = internalAction({
         memberId: member._id,
         chatId,
       });
+    }
+
+    // Step 2b: Read receipt + typing indicator (human feel)
+    const pacingStart = Date.now();
+    const envVarsEarly = env();
+    if (chatId && envVarsEarly.linqApiToken) {
+      try {
+        await markAsRead(chatId, envVarsEarly.linqApiToken);
+        await startTyping(chatId, envVarsEarly.linqApiToken);
+      } catch {
+        // best-effort — don't block the pipeline
+      }
     }
 
     // Step 3: Log inbound message
@@ -343,7 +359,11 @@ export const handleMessage = internalAction({
       }
     }
 
-    // Step 15: Log outbound + send response
+    // Step 15: Pace response + log outbound + send
+    const elapsed = Date.now() - pacingStart;
+    if (elapsed < MIN_RESPONSE_MS) {
+      await new Promise((r) => setTimeout(r, MIN_RESPONSE_MS - elapsed));
+    }
     await logOutbound(ctx, familyId, senderPhone, memberName, smsResponse, now);
     await sendResponse(chatId, smsResponse, env());
 

@@ -101,6 +101,18 @@ export async function createChat(
   return { success: false, error: data };
 }
 
+export async function markAsRead(
+  chatId: string,
+  apiToken: string,
+): Promise<{ success: boolean }> {
+  const { status } = await linqRequest(
+    "POST",
+    `/chats/${chatId}/read`,
+    apiToken,
+  );
+  return { success: status === 204 };
+}
+
 export async function startTyping(
   chatId: string,
   apiToken: string,
