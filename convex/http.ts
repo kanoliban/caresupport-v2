@@ -8,6 +8,7 @@ import {
   extractChatId,
   extractService,
   extractMessageId,
+  extractReplyTo,
   extractFailureReason,
 } from "./lib/linqClient";
 
@@ -60,6 +61,7 @@ http.route({
       const chatId = extractChatId(eventData);
       const service = extractService(eventData);
       const sourceMessageId = extractMessageId(eventData) || undefined;
+      const replyTo = extractReplyTo(eventData);
 
       if (!senderPhone || !messageBody) {
         return jsonResponse({ error: "missing_sender_or_message" });
@@ -71,6 +73,7 @@ http.route({
         chatId,
         service,
         sourceMessageId,
+        replyToMessageId: replyTo?.messageId,
       });
 
       return jsonResponse({ accepted: true });

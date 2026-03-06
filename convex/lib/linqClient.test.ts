@@ -7,6 +7,7 @@ import {
   extractChatId,
   extractService,
   extractMessageId,
+  extractReplyTo,
   extractFailureReason,
   sendMessage,
   createChat,
@@ -353,6 +354,39 @@ describe("extractMessageId", () => {
 
   it("returns empty string when missing", () => {
     expect(extractMessageId({})).toBe("");
+  });
+});
+
+// ─── extractReplyTo ──────────────────────────────────────────────────────
+
+describe("extractReplyTo", () => {
+  it("extracts from top-level reply_to", () => {
+    expect(
+      extractReplyTo({
+        reply_to: { message_id: "msg-123", part_index: 2 },
+      }),
+    ).toEqual({ messageId: "msg-123", partIndex: 2 });
+  });
+
+  it("extracts from nested message.reply_to", () => {
+    expect(
+      extractReplyTo({
+        message: { reply_to: { message_id: "msg-456", part_index: 1 } },
+      }),
+    ).toEqual({ messageId: "msg-456", partIndex: 1 });
+  });
+
+  it("defaults partIndex to 0 when missing", () => {
+    expect(
+      extractReplyTo({
+        reply_to: { message_id: "msg-789" },
+      }),
+    ).toEqual({ messageId: "msg-789", partIndex: 0 });
+  });
+
+  it("returns null when reply_to is missing or invalid", () => {
+    expect(extractReplyTo({})).toBeNull();
+    expect(extractReplyTo({ reply_to: { part_index: 1 } })).toBeNull();
   });
 });
 

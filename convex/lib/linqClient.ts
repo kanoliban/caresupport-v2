@@ -305,6 +305,35 @@ export function extractMessageId(eventData: Record<string, unknown>): string {
   );
 }
 
+export function extractReplyTo(
+  eventData: Record<string, unknown>,
+): { messageId: string; partIndex: number } | null {
+  const topLevelReplyTo = eventData.reply_to as Record<string, unknown> | undefined;
+  if (typeof topLevelReplyTo?.message_id === "string") {
+    return {
+      messageId: topLevelReplyTo.message_id,
+      partIndex:
+        typeof topLevelReplyTo.part_index === "number"
+          ? topLevelReplyTo.part_index
+          : 0,
+    };
+  }
+
+  const msg = (eventData.message ?? {}) as Record<string, unknown>;
+  const nestedReplyTo = msg.reply_to as Record<string, unknown> | undefined;
+  if (typeof nestedReplyTo?.message_id === "string") {
+    return {
+      messageId: nestedReplyTo.message_id,
+      partIndex:
+        typeof nestedReplyTo.part_index === "number"
+          ? nestedReplyTo.part_index
+          : 0,
+    };
+  }
+
+  return null;
+}
+
 export function extractFailureReason(
   eventData: Record<string, unknown>,
 ): string {

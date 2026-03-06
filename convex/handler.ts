@@ -46,6 +46,7 @@ import {
 } from "./lib/promptContent";
 
 const MIN_RESPONSE_MS = 3_000;
+const MAX_REPLY_QUOTE_LENGTH = 200;
 
 const BLOCKED_RESPONSE =
   "I'm sorry, I can't share that information with your access level. " +
@@ -90,6 +91,18 @@ export function formatConversationLog(
     .join("\n");
 }
 
+function truncateReplyQuote(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_REPLY_QUOTE_LENGTH) {
+    return normalized;
+  }
+  return `${normalized.slice(0, MAX_REPLY_QUOTE_LENGTH - 3)}...`;
+}
+
+function prependReplyContext(messageBody: string, quotedBody: string): string {
+  return `[Replying to: "${truncateReplyQuote(quotedBody)}"] ${messageBody}`;
+}
+
 export const handleMessage = internalAction({
   args: {
     senderPhone: v.string(),
@@ -97,10 +110,11 @@ export const handleMessage = internalAction({
     chatId: v.string(),
     service: v.string(),
     sourceMessageId: v.optional(v.string()),
+    replyToMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<HandlerResult> => {
     const now = Date.now();
-    const { senderPhone, messageBody, chatId, service } = args;
+    const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
 
     // Step 1: Resolve member by phone
     const member = await ctx.runMutation(internal.mutations.getMemberByPhone, {
@@ -232,8 +246,21 @@ export const handleMessage = internalAction({
     });
     await ctx.runMutation(internal.mutations.logAudit, contextLoadEvent);
 
+    // Step 7b: Load quoted reply context when available
+    let messageForClaude = messageBody;
+    if (replyToMessageId) {
+      const repliedToMessage = await ctx.runMutation(
+        internal.mutations.getMessageByLinqId,
+        { linqMessageId: replyToMessageId },
+      );
+      const quotedBody = repliedToMessage?.body ?? "";
+      if (quotedBody.trim()) {
+        messageForClaude = prependReplyContext(messageBody, quotedBody);
+      }
+    }
+
     // Step 8: Route intent
-    const routeResult = route(messageBody);
+    const routeResult = route(messageForClaude);
 
     // Step 9: Build system prompt
     const systemBlocks = buildSystemBlocks({
@@ -255,7 +282,7 @@ export const handleMessage = internalAction({
       service,
       toolsActive: false,
     });
-    const messages = buildMessages(messageBody, conversationLog);
+    const messages = buildMessages(messageForClaude, conversationLog);
 
     // Step 10: Call AI
     const apiKey = process.env.ANTHROPIC_API_KEY;
