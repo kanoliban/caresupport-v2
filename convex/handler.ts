@@ -334,6 +334,18 @@ export const handleMessage = internalAction({
         familyId,
         updates: classified.autoApply,
       });
+      await ctx.runMutation(internal.mutations.logAudit, {
+        familyId,
+        event: "context_updated",
+        phone: senderPhone,
+        accessLevel,
+        role: member.role,
+        details: {
+          triggerMessage: messageBody.slice(0, 120),
+          sectionsLoaded: classified.autoApply.map((u: { section: string }) => u.section),
+        },
+        timestamp: now,
+      });
     }
 
     if (classified.needsApproval.length > 0) {

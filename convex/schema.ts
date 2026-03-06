@@ -77,6 +77,7 @@ const lessonCategory = v.union(
 
 const auditEvent = v.union(
   v.literal("context_load"),
+  v.literal("context_updated"),
   v.literal("response_sent"),
   v.literal("response_blocked"),
   v.literal("outreach_sent"),
