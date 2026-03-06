@@ -1,5 +1,10 @@
-export const FAMILY_ID = "moreno-test";
+import type { Id } from "../../_generated/dataModel";
+
 export const FAMILY_NAME = "Moreno";
+
+export function testFamilyId(s = "moreno-test"): Id<"families"> {
+  return s as unknown as Id<"families">;
+}
 
 export const PHONES = {
   ROB: "+1-555-0101",
@@ -12,7 +17,7 @@ export const TEST_MEMBERS = [
   {
     phone: PHONES.ROB,
     name: "Rob",
-    role: "primary_caregiver" as const,
+    role: "care_recipient" as const,
     accessLevel: "full" as const,
     relationship: "care_recipient",
   },
@@ -26,7 +31,7 @@ export const TEST_MEMBERS = [
   {
     phone: PHONES.SARAH,
     name: "Sarah",
-    role: "community_supporter" as const,
+    role: "professional_caregiver" as const,
     accessLevel: "schedule+meds" as const,
     relationship: "professional_caregiver",
   },
@@ -34,10 +39,18 @@ export const TEST_MEMBERS = [
     phone: PHONES.LINDA,
     name: "Linda",
     role: "community_supporter" as const,
-    accessLevel: "schedule" as const,
+    accessLevel: "limited" as const,
     relationship: "community_supporter",
   },
 ];
+
+export const TEST_FAMILY_ARGS = {
+  name: FAMILY_NAME,
+  status: "active" as const,
+  timezone: "America/Los_Angeles",
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+};
 
 export const FAMILY_MD = `# Moreno Care Network
 

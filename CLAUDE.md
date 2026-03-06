@@ -29,10 +29,11 @@ iMessage arrives via Linq webhook
 
 1. Safety enforcement is mechanical (code in `convex/lib/enforcement/`), not just prompt-level
 2. All state mutations go through Convex mutations — no direct file edits
-3. Three access levels: `full`, `standard`, `view_only` — enforced per-membership
+3. Five access levels: `full`, `schedule+meds`, `schedule`, `provider`, `limited` — enforced per-membership
 4. Medication changes always require coordinator approval (hardcoded safety rule)
 5. Medical info is 1:1 only — never shared in group chats
 6. Agent writes to `context` fields on families and members — no markdown blob round-trips
+7. Every DB query on family-scoped data must filter by `familyId` — phone-only lookups are for member resolution only
 
 ## Schema Overview
 
@@ -51,3 +52,7 @@ iMessage arrives via Linq webhook
 ## Transitional State
 
 The Convex schema (schema.ts) is v2 — structured tables for medications, schedules, and agent-written context fields. However, handler.ts and promptContent.ts still use v1 field names in the agent's structured output (familyFileUpdates, memberUpdates). The migration to v2 output format (familyContextUpdate, memberContextUpdate with typed table operations) is a separate task. Match the working code, not the design aspirations.
+
+## Multi-Agent Setup
+
+See `AGENTS.md` for shared state between Claude (architecture/reasoning) and Codex (execution/deployment). Codex handoff context is in `docs/codex-handoff.md`.

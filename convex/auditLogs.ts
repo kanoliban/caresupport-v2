@@ -35,7 +35,7 @@ const detailsValidator = v.object({
 });
 
 export const listByFamily = query({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("auditLogs")
@@ -46,7 +46,7 @@ export const listByFamily = query({
 
 export const listByFamilyWindow = query({
   args: {
-    familyId: v.string(),
+    familyId: v.id("families"),
     from: v.number(),
     to: v.number(),
   },
@@ -65,12 +65,12 @@ export const listByFamilyWindow = query({
 
 export const create = mutation({
   args: {
-    familyId: v.string(),
+    familyId: v.optional(v.id("families")),
     event: eventValidator,
-    phone: v.string(),
+    phone: v.optional(v.string()),
     accessLevel: v.optional(v.string()),
     role: v.optional(v.string()),
-    details: detailsValidator,
+    details: v.optional(detailsValidator),
     timestamp: v.number(),
   },
   handler: async (ctx, args) => {

@@ -2,7 +2,7 @@
 
 import { internalAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -142,21 +142,14 @@ export const handleMessage = internalAction({
     }
 
     // Step 3: Log inbound message
-    await ctx.runMutation(internal.mutations.logConversation, {
+    await ctx.runMutation(internal.mutations.logMessage, {
       familyId,
-      phone: senderPhone,
+      senderPhone,
       direction: "inbound",
       memberName,
       body: messageBody,
       timestamp: now,
-      sourceMessageId: args.sourceMessageId,
-    });
-    await ctx.runMutation(internal.mutations.logTimeline, {
-      familyId,
-      timestamp: now,
-      direction: "inbound",
-      memberName,
-      body: messageBody,
+      linqMessageId: args.sourceMessageId,
     });
 
     // Step 4: Check if this is an approval response (early return)
@@ -184,14 +177,15 @@ export const handleMessage = internalAction({
     // Step 5: Load context
     const [familyCtx, recentConvos, lessons] = await Promise.all([
       ctx.runMutation(internal.mutations.getFamilyContext, { familyId }),
-      ctx.runMutation(internal.mutations.getRecentConversations, {
+      ctx.runMutation(internal.mutations.getRecentMessages, {
+        familyId,
         phone: senderPhone,
         limit: 50,
       }),
       ctx.runMutation(internal.mutations.getFamilyLessons, { familyId }),
     ]);
 
-    const rawFamilyContext = familyCtx?.contextMarkdown ?? "[No family context]";
+    const rawFamilyContext = familyCtx?.context ?? "[No family context]";
     const conversationLog = formatConversationLog(
       recentConvos.reverse().map((c) => ({
         direction: c.direction,
@@ -317,7 +311,7 @@ export const handleMessage = internalAction({
     const classified = classifyUpdates(updates);
 
     if (classified.autoApply.length > 0) {
-      await ctx.runMutation(internal.familyContext.applyContextUpdates, {
+      await ctx.runMutation(internal.mutations.applyContextUpdates, {
         familyId,
         updates: classified.autoApply,
       });
@@ -427,26 +421,19 @@ function env(): { linqApiToken: string; linqPhoneNumber: string } {
 
 async function logOutbound(
   ctx: ActionCtx,
-  familyId: string,
+  familyId: Id<"families">,
   phone: string,
   memberName: string,
   body: string,
   timestamp: number,
 ): Promise<void> {
-  await ctx.runMutation(internal.mutations.logConversation, {
+  await ctx.runMutation(internal.mutations.logMessage, {
     familyId,
-    phone,
+    senderPhone: phone,
     direction: "outbound" as const,
     memberName,
     body,
     timestamp,
-  });
-  await ctx.runMutation(internal.mutations.logTimeline, {
-    familyId,
-    timestamp,
-    direction: "outbound" as const,
-    memberName,
-    body,
   });
 }
 

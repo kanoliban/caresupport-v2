@@ -1,5 +1,6 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api.js";
+import type { Id } from "../convex/_generated/dataModel.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -7,16 +8,29 @@ const WORKSPACE = path.resolve(
   import.meta.dirname,
   "../fork/workspace",
 );
-const FAMILY_ID = "kano";
-const FAMILY_DIR = path.join(WORKSPACE, "families", FAMILY_ID);
+const FAMILY_DIR_NAME = "kano";
+const FAMILY_DIR = path.join(WORKSPACE, "families", FAMILY_DIR_NAME);
 
 function getConvexUrl(): string {
+  if (process.env.CONVEX_URL) return process.env.CONVEX_URL;
   const envPath = path.resolve(import.meta.dirname, "../.env.local");
   const envContent = fs.readFileSync(envPath, "utf-8");
   const match = envContent.match(/^CONVEX_URL=(.+)$/m);
   if (!match) throw new Error("CONVEX_URL not found in .env.local");
   return match[1].trim();
 }
+
+const ROLE_MAP: Record<string, "care_recipient" | "family_caregiver" | "professional_caregiver" | "community_supporter"> = {
+  primary_caregiver: "family_caregiver",
+  care_recipient: "care_recipient",
+  family_caregiver: "family_caregiver",
+  professional_caregiver: "professional_caregiver",
+  community_supporter: "community_supporter",
+  provider: "professional_caregiver",
+};
+
+const VALID_ACCESS_LEVELS = new Set(["full", "schedule+meds", "schedule", "provider", "limited"]);
+type AccessLevel = "full" | "schedule+meds" | "schedule" | "provider" | "limited";
 
 // --- Parsers ---
 
@@ -100,28 +114,34 @@ export function parseLessonLine(
 
 // --- Seed functions ---
 
-async function seedFamily(client: ConvexHttpClient) {
+async function seedFamily(client: ConvexHttpClient): Promise<{ familyId: Id<"families">; routing: Record<string, unknown> }> {
   const routingPath = path.join(FAMILY_DIR, "routing.json");
   const routing = JSON.parse(fs.readFileSync(routingPath, "utf-8"));
   const now = Date.now();
 
-  await client.mutation(api.families.create, {
-    familyId: routing.family_id,
-    familyName: routing.family_id.charAt(0).toUpperCase() + routing.family_id.slice(1),
+  const familyMdPath = path.join(FAMILY_DIR, "family.md");
+  const context = fs.existsSync(familyMdPath)
+    ? fs.readFileSync(familyMdPath, "utf-8")
+    : undefined;
+
+  const familyId = await client.mutation(api.families.create, {
+    name: routing.family_id.charAt(0).toUpperCase() + routing.family_id.slice(1),
     careRecipient: routing.care_recipient,
-    status: routing.status as "active" | "paused" | "archived",
+    status: routing.status === "active" ? "active" as const : "onboarding" as const,
     timezone: "America/Chicago",
-    notes: routing.notes || undefined,
     createdAt: new Date(routing.created).getTime(),
     updatedAt: now,
+    familyId: routing.family_id,
+    context,
   });
 
-  console.log(`  Family: ${routing.family_id}`);
-  return routing;
+  console.log(`  Family: ${routing.family_id} (id: ${familyId})`);
+  return { familyId, routing };
 }
 
 async function seedMembers(
   client: ConvexHttpClient,
+  familyId: Id<"families">,
   routing: Record<string, unknown>,
 ) {
   const members = routing.members as Record<
@@ -138,31 +158,46 @@ async function seedMembers(
 
   let count = 0;
   for (const [phone, member] of Object.entries(members)) {
+    const originalRole = member.role;
+    const role = ROLE_MAP[originalRole] ?? "community_supporter";
+    const accessLevel: AccessLevel = VALID_ACCESS_LEVELS.has(member.access_level)
+      ? (member.access_level as AccessLevel)
+      : "limited";
+
     await client.mutation(api.members.create, {
-      familyId: FAMILY_ID,
+      familyId,
       phone,
       name: member.name,
-      role: member.role as
-        | "primary_caregiver"
-        | "family_caregiver"
-        | "community_supporter"
-        | "provider",
-      accessLevel: member.access_level as
-        | "full"
-        | "schedule+meds"
-        | "schedule"
-        | "provider"
-        | "limited",
+      role,
+      accessLevel,
+      isCoordinator: originalRole === "primary_caregiver",
+      isEmergencyContact: role === "family_caregiver",
       active: member.active,
       chatId: member.chat_id,
       relationship: member.relationship,
     });
     count++;
   }
+
+  // Add care recipient as a member (may not have a phone)
+  const careRecipientName = routing.care_recipient as string | undefined;
+  if (careRecipientName) {
+    await client.mutation(api.members.create, {
+      familyId,
+      name: careRecipientName,
+      role: "care_recipient",
+      accessLevel: "full",
+      isCoordinator: false,
+      isEmergencyContact: false,
+      active: true,
+    });
+    count++;
+  }
+
   console.log(`  Members: ${count}`);
 }
 
-async function seedMedications(client: ConvexHttpClient) {
+async function seedMedications(client: ConvexHttpClient, familyId: Id<"families">) {
   const content = fs.readFileSync(
     path.join(FAMILY_DIR, "medications.md"),
     "utf-8",
@@ -172,35 +207,36 @@ async function seedMedications(client: ConvexHttpClient) {
   for (const row of rows) {
     const [name, dose, schedule, prescriber, pharmacy, lastConfirmed, status, refillDue] = row;
     await client.mutation(api.medications.create, {
-      familyId: FAMILY_ID,
+      familyId,
       name,
       dose,
       schedule,
       prescriber: prescriber === "—" ? undefined : prescriber,
       pharmacy: pharmacy === "—" ? undefined : pharmacy,
-      lastConfirmed: lastConfirmed === "—" ? undefined : lastConfirmed,
+      lastConfirmed: lastConfirmed && lastConfirmed !== "—"
+        ? new Date(lastConfirmed).getTime()
+        : undefined,
       refillDue: refillDue === "—" ? undefined : refillDue,
-      status: status as "active" | "held" | "tapering" | "discontinued",
+      status: (status as "active" | "held" | "tapering" | "discontinued") ?? "active",
     });
     count++;
   }
   console.log(`  Medications: ${count}`);
 }
 
-async function seedScheduleItems(client: ConvexHttpClient) {
+async function seedScheduleItems(client: ConvexHttpClient, familyId: Id<"families">) {
   const content = fs.readFileSync(
     path.join(FAMILY_DIR, "schedule.md"),
     "utf-8",
   );
   let count = 0;
 
-  // Rides
   const rideRows = parseMarkdownTableRows(content, "### Rides");
   for (const row of rideRows) {
     const [day, amDriver, pmDriver, notes] = row;
     if (amDriver && amDriver !== "—") {
       await client.mutation(api.scheduleItems.create, {
-        familyId: FAMILY_ID,
+        familyId,
         type: "ride",
         title: "AM ride to work",
         day,
@@ -213,7 +249,7 @@ async function seedScheduleItems(client: ConvexHttpClient) {
     }
     if (pmDriver && pmDriver !== "—") {
       await client.mutation(api.scheduleItems.create, {
-        familyId: FAMILY_ID,
+        familyId,
         type: "ride",
         title: "PM ride from work",
         day,
@@ -226,12 +262,11 @@ async function seedScheduleItems(client: ConvexHttpClient) {
     }
   }
 
-  // Care Tasks
   const taskRows = parseMarkdownTableRows(content, "### Care Tasks");
   for (const row of taskRows) {
     const [day, time, task, assigned, notes] = row;
     await client.mutation(api.scheduleItems.create, {
-      familyId: FAMILY_ID,
+      familyId,
       type: "careTask",
       title: task,
       day,
@@ -243,12 +278,11 @@ async function seedScheduleItems(client: ConvexHttpClient) {
     count++;
   }
 
-  // Appointments
   const apptRows = parseMarkdownTableRows(content, "### Appointments");
   for (const row of apptRows) {
     const [date, time, type, provider, location, transport, notes] = row;
     await client.mutation(api.scheduleItems.create, {
-      familyId: FAMILY_ID,
+      familyId,
       type: "appointment",
       title: type,
       day: date,
@@ -265,8 +299,12 @@ async function seedScheduleItems(client: ConvexHttpClient) {
   console.log(`  Schedule items: ${count}`);
 }
 
-async function seedConversations(client: ConvexHttpClient) {
+async function seedMessages(client: ConvexHttpClient, familyId: Id<"families">) {
   const convDir = path.join(WORKSPACE, "conversations");
+  if (!fs.existsSync(convDir)) {
+    console.log("  Messages: 0 (no directory)");
+    return;
+  }
   const phoneDirs = fs
     .readdirSync(convDir)
     .filter((d) => d.startsWith("+"));
@@ -287,9 +325,9 @@ async function seedConversations(client: ConvexHttpClient) {
         if (!line.trim()) continue;
         const parsed = parseConversationLogLine(line);
         if (!parsed) continue;
-        await client.mutation(api.conversations.create, {
-          familyId: FAMILY_ID,
-          phone,
+        await client.mutation(api.messages.create, {
+          familyId,
+          senderPhone: phone,
           direction: parsed.direction,
           body: parsed.body,
           timestamp: parsed.timestamp,
@@ -298,47 +336,18 @@ async function seedConversations(client: ConvexHttpClient) {
       }
     }
   }
-  console.log(`  Conversations: ${count}`);
+  console.log(`  Messages: ${count}`);
 }
 
-async function seedTimelineEvents(client: ConvexHttpClient) {
-  const timelineDir = path.join(FAMILY_DIR, "timeline");
-  if (!fs.existsSync(timelineDir)) {
-    console.log("  Timeline: 0 (no directory)");
-    return;
-  }
-  const logFiles = fs
-    .readdirSync(timelineDir)
-    .filter((f) => f.endsWith(".log"));
-  let count = 0;
-
-  for (const logFile of logFiles) {
-    const content = fs.readFileSync(
-      path.join(timelineDir, logFile),
-      "utf-8",
-    );
-    for (const line of content.split("\n")) {
-      if (!line.trim()) continue;
-      const parsed = parseTimelineLogLine(line);
-      if (!parsed) continue;
-      await client.mutation(api.timelineEvents.create, {
-        familyId: FAMILY_ID,
-        timestamp: parsed.timestamp,
-        direction: parsed.direction,
-        memberName: parsed.memberName,
-        body: parsed.body,
-      });
-      count++;
-    }
-  }
-  console.log(`  Timeline events: ${count}`);
-}
-
-async function seedLessons(client: ConvexHttpClient) {
+async function seedLessons(client: ConvexHttpClient, familyId: Id<"families">) {
   const lessonsPath = path.resolve(
     import.meta.dirname,
     "../runtime/learning/lessons.md",
   );
+  if (!fs.existsSync(lessonsPath)) {
+    console.log("  Lessons: 0 (no file)");
+    return;
+  }
   const content = fs.readFileSync(lessonsPath, "utf-8");
   let count = 0;
 
@@ -346,7 +355,7 @@ async function seedLessons(client: ConvexHttpClient) {
     const parsed = parseLessonLine(line);
     if (!parsed) continue;
     await client.mutation(api.lessons.create, {
-      familyId: FAMILY_ID,
+      familyId,
       scope: "family",
       category: "behavioral",
       text: parsed.text,
@@ -357,7 +366,7 @@ async function seedLessons(client: ConvexHttpClient) {
   console.log(`  Lessons: ${count}`);
 }
 
-async function seedApprovals(client: ConvexHttpClient) {
+async function seedApprovals(client: ConvexHttpClient, familyId: Id<"families">) {
   const approvalsPath = path.join(FAMILY_DIR, "pending_approvals.json");
   if (!fs.existsSync(approvalsPath)) {
     console.log("  Approvals: 0 (no file)");
@@ -369,7 +378,7 @@ async function seedApprovals(client: ConvexHttpClient) {
 
   for (const approval of pending) {
     await client.mutation(api.approvals.create, {
-      familyId: FAMILY_ID,
+      familyId,
       status: approval.status as "pending" | "approved" | "rejected" | "expired",
       requesterPhone: approval.requester_phone,
       requesterName: approval.requester_name,
@@ -400,34 +409,16 @@ async function main() {
   const client = new ConvexHttpClient(url);
 
   console.log(`Seeding Convex at ${url}...`);
-  console.log(`Family: ${FAMILY_ID}`);
+  console.log(`Family: ${FAMILY_DIR_NAME}`);
   console.log(`Source: ${WORKSPACE}\n`);
 
-  // Check if family already exists
-  const existing = await client.query(api.families.getByFamilyId, {
-    familyId: FAMILY_ID,
-  });
-  if (existing) {
-    console.log(
-      `Family "${FAMILY_ID}" already exists. Use --clean to re-seed.`,
-    );
-    if (!process.argv.includes("--clean")) {
-      process.exit(0);
-    }
-    console.log("--clean flag detected, proceeding with seed (existing data preserved)...\n");
-  }
-
-  const routing = await seedFamily(client);
-  await seedMembers(client, routing);
-  await seedMedications(client);
-  await seedScheduleItems(client);
-  await seedConversations(client);
-  await seedTimelineEvents(client);
-  await seedLessons(client);
-  await seedApprovals(client);
-
-  await client.mutation(api.familyContext.seedContext, { familyId: FAMILY_ID });
-  console.log("  Family context: materialized");
+  const { familyId, routing } = await seedFamily(client);
+  await seedMembers(client, familyId, routing);
+  await seedMedications(client, familyId);
+  await seedScheduleItems(client, familyId);
+  await seedMessages(client, familyId);
+  await seedLessons(client, familyId);
+  await seedApprovals(client, familyId);
 
   console.log("\nSeed complete.");
 }

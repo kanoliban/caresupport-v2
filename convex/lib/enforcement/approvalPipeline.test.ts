@@ -9,7 +9,7 @@ import {
   formatConfirmationSms,
 } from "./approvalPipeline";
 import type { ApprovalUpdate } from "./types";
-import { PHONES, FAMILY_ID } from "./fixtures";
+import { PHONES, TEST_FAMILY_ARGS } from "./fixtures";
 
 const modules = import.meta.glob("../../**/*.ts");
 
@@ -147,10 +147,11 @@ describe("formatConfirmationSms", () => {
 describe("approval lifecycle via Convex", () => {
   it("create + retrieve pending approval", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const now = Date.now();
     const id = await t.mutation(api.approvals.create, {
-      familyId: FAMILY_ID,
+      familyId,
       status: "pending",
       requesterPhone: PHONES.SARAH,
       requesterName: "Sarah",
@@ -161,9 +162,7 @@ describe("approval lifecycle via Convex", () => {
       expiresAt: now + 24 * 60 * 60 * 1000,
     });
 
-    const pending = await t.query(api.approvals.listPendingByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const pending = await t.query(api.approvals.listPendingByFamily, { familyId });
     expect(pending).toHaveLength(1);
     expect(pending[0]._id).toBe(id);
     expect(pending[0].status).toBe("pending");
@@ -172,10 +171,11 @@ describe("approval lifecycle via Convex", () => {
 
   it("resolve approved changes status", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const now = Date.now();
     const id = await t.mutation(api.approvals.create, {
-      familyId: FAMILY_ID,
+      familyId,
       status: "pending",
       requesterPhone: PHONES.SARAH,
       requesterName: "Sarah",
@@ -193,24 +193,21 @@ describe("approval lifecycle via Convex", () => {
     });
     expect(result.action).toBe("approved");
 
-    const pending = await t.query(api.approvals.listPendingByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const pending = await t.query(api.approvals.listPendingByFamily, { familyId });
     expect(pending).toHaveLength(0);
 
-    const all = await t.query(api.approvals.listByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const all = await t.query(api.approvals.listByFamily, { familyId });
     expect(all[0].status).toBe("approved");
     expect(all[0].resolvedBy).toBe(PHONES.ROB);
   });
 
   it("resolve rejected preserves data", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const now = Date.now();
     const id = await t.mutation(api.approvals.create, {
-      familyId: FAMILY_ID,
+      familyId,
       status: "pending",
       requesterPhone: PHONES.SARAH,
       requesterName: "Sarah",
@@ -228,19 +225,18 @@ describe("approval lifecycle via Convex", () => {
     });
     expect(result.action).toBe("rejected");
 
-    const all = await t.query(api.approvals.listByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const all = await t.query(api.approvals.listByFamily, { familyId });
     expect(all[0].status).toBe("rejected");
     expect(all[0].description).toBe("Add new member");
   });
 
   it("unauthorized phone blocked", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const now = Date.now();
     const id = await t.mutation(api.approvals.create, {
-      familyId: FAMILY_ID,
+      familyId,
       status: "pending",
       requesterPhone: PHONES.SARAH,
       requesterName: "Sarah",
@@ -258,19 +254,18 @@ describe("approval lifecycle via Convex", () => {
     });
     expect(result.action).toBe("unauthorized");
 
-    const pending = await t.query(api.approvals.listPendingByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const pending = await t.query(api.approvals.listPendingByFamily, { familyId });
     expect(pending).toHaveLength(1);
     expect(pending[0].status).toBe("pending");
   });
 
   it("expired approval cannot resolve", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const now = Date.now();
     const id = await t.mutation(api.approvals.create, {
-      familyId: FAMILY_ID,
+      familyId,
       status: "pending",
       requesterPhone: PHONES.SARAH,
       requesterName: "Sarah",
@@ -291,10 +286,11 @@ describe("approval lifecycle via Convex", () => {
 
   it("already-resolved cannot re-resolve", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const now = Date.now();
     const id = await t.mutation(api.approvals.create, {
-      familyId: FAMILY_ID,
+      familyId,
       status: "pending",
       requesterPhone: PHONES.SARAH,
       requesterName: "Sarah",

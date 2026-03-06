@@ -1,8 +1,9 @@
 import type { MutationCtx } from "../../_generated/server";
+import type { Id } from "../../_generated/dataModel";
 import type { AuditEventType } from "./types";
 
 export interface AuditEventArgs {
-  familyId: string;
+  familyId?: Id<"families">;
   event: AuditEventType;
   phone: string;
   accessLevel?: string;
@@ -20,12 +21,15 @@ export interface AuditEventArgs {
     sentTo?: { phone: string; name: string };
     purpose?: string;
     phiDisclosed?: boolean;
+    sourceMessageId?: string;
+    failureReason?: string;
+    deliveryStatus?: string;
   };
   timestamp: number;
 }
 
 export function buildContextLoadEvent(params: {
-  familyId: string;
+  familyId: Id<"families">;
   accessorPhone: string;
   accessorRole: string;
   accessLevel: string;
@@ -47,7 +51,7 @@ export function buildContextLoadEvent(params: {
 }
 
 export function buildResponseSentEvent(params: {
-  familyId: string;
+  familyId: Id<"families">;
   recipientPhone: string;
   recipientRole: string;
   accessLevel: string;
@@ -69,7 +73,7 @@ export function buildResponseSentEvent(params: {
 }
 
 export function buildResponseBlockedEvent(params: {
-  familyId: string;
+  familyId: Id<"families">;
   recipientPhone: string;
   accessLevel: string;
   leakedCategories: string[];
@@ -91,7 +95,7 @@ export function buildResponseBlockedEvent(params: {
 }
 
 export function buildOutreachSentEvent(params: {
-  familyId: string;
+  familyId: Id<"families">;
   initiatedBy: string;
   sentToPhone: string;
   sentToName: string;
@@ -114,7 +118,7 @@ export function buildUnknownNumberEvent(params: {
   phone: string;
 }): AuditEventArgs {
   return {
-    familyId: "unknown",
+    familyId: undefined,
     event: "unknown_number",
     phone: params.phone,
     details: {

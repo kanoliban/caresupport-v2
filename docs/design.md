@@ -40,12 +40,14 @@ Each family has a primary coordinator who onboards through CareSupport, then inv
 
 ## Decisions Made
 
-### Permissions: Three levels
-- **Full** — see everything, make changes, invite people (coordinator gets this by default)
-- **Standard** — see schedules, medications, tasks. Can claim or complete tasks assigned to them. Cannot change the schedule, add medications, or invite people.
-- **View-only** — can read updates and ask CareSupport questions, but can't make changes
+### Permissions: Five levels
+- **Full** — see everything, make changes, invite people, approve changes (coordinator gets this by default)
+- **Schedule+Meds** — see members, care recipient, schedules, medications, appointments, availability, active issues. Cannot approve changes.
+- **Schedule** — see members, schedules, availability, active issues. No medical info.
+- **Provider** — see care recipient, medications, appointments, members. Clinical view for healthcare providers.
+- **Limited** — see member names only. No care details, no medical info.
 
-The coordinator assigns a level when inviting someone. Can change it later via text.
+The coordinator assigns a level when inviting someone. Can change it later via text. Access levels are stored directly in the database — no mapping layer.
 
 ### Multi-family: Deferred
 One person belongs to one family for now. A professional caregiver working for multiple families is a future product roadmap item.

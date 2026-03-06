@@ -9,25 +9,26 @@ import {
   buildOutreachSentEvent,
   buildUnknownNumberEvent,
 } from "./phiAudit";
-import { PHONES, FAMILY_ID } from "./fixtures";
+import { PHONES, testFamilyId, TEST_FAMILY_ARGS } from "./fixtures";
 
 const modules = import.meta.glob("../../**/*.ts");
 
 describe("buildContextLoadEvent", () => {
   it("includes all HIPAA-required fields", () => {
+    const fid = testFamilyId();
     const event = buildContextLoadEvent({
-      familyId: FAMILY_ID,
+      familyId: fid,
       accessorPhone: PHONES.ROB,
-      accessorRole: "primary_caregiver",
+      accessorRole: "care_recipient",
       accessLevel: "full",
       sectionsLoaded: ["members", "medications", "schedule"],
       triggerMessage: "What meds am I on?",
     });
 
-    expect(event.familyId).toBe(FAMILY_ID);
+    expect(event.familyId).toBe(fid);
     expect(event.event).toBe("context_load");
     expect(event.phone).toBe(PHONES.ROB);
-    expect(event.role).toBe("primary_caregiver");
+    expect(event.role).toBe("care_recipient");
     expect(event.accessLevel).toBe("full");
     expect(event.details.sectionsLoaded).toEqual([
       "members",
@@ -41,9 +42,9 @@ describe("buildContextLoadEvent", () => {
   it("truncates trigger message to 200 chars", () => {
     const longMessage = "a".repeat(300);
     const event = buildContextLoadEvent({
-      familyId: FAMILY_ID,
+      familyId: testFamilyId(),
       accessorPhone: PHONES.ROB,
-      accessorRole: "primary_caregiver",
+      accessorRole: "care_recipient",
       accessLevel: "full",
       sectionsLoaded: [],
       triggerMessage: longMessage,
@@ -55,10 +56,10 @@ describe("buildContextLoadEvent", () => {
 describe("buildResponseSentEvent", () => {
   it("records leakage check result", () => {
     const event = buildResponseSentEvent({
-      familyId: FAMILY_ID,
+      familyId: testFamilyId(),
       recipientPhone: PHONES.SARAH,
-      recipientRole: "community_supporter",
-      accessLevel: "schedule+meds",
+      recipientRole: "professional_caregiver",
+      accessLevel: "standard",
       responseLength: 142,
       leakageCheckPassed: true,
     });
@@ -73,9 +74,9 @@ describe("buildResponseSentEvent", () => {
 describe("buildResponseBlockedEvent", () => {
   it("sets severity to HIGH with leaked terms", () => {
     const event = buildResponseBlockedEvent({
-      familyId: FAMILY_ID,
+      familyId: testFamilyId(),
       recipientPhone: PHONES.LINDA,
-      accessLevel: "schedule",
+      accessLevel: "view_only",
       leakedCategories: ["medications"],
       leakedTerms: ["lisinopril", "10mg"],
     });
@@ -89,10 +90,10 @@ describe("buildResponseBlockedEvent", () => {
 });
 
 describe("buildUnknownNumberEvent", () => {
-  it("sets phiDisclosed to false and familyId to unknown", () => {
+  it("sets phiDisclosed to false and familyId to undefined", () => {
     const event = buildUnknownNumberEvent({ phone: "+1-555-9999" });
     expect(event.event).toBe("unknown_number");
-    expect(event.familyId).toBe("unknown");
+    expect(event.familyId).toBeUndefined();
     expect(event.phone).toBe("+1-555-9999");
     expect(event.details.phiDisclosed).toBe(false);
   });
@@ -101,7 +102,7 @@ describe("buildUnknownNumberEvent", () => {
 describe("buildOutreachSentEvent", () => {
   it("captures initiator and recipient", () => {
     const event = buildOutreachSentEvent({
-      familyId: FAMILY_ID,
+      familyId: testFamilyId(),
       initiatedBy: PHONES.ROB,
       sentToPhone: PHONES.SARAH,
       sentToName: "Sarah",
@@ -121,19 +122,20 @@ describe("buildOutreachSentEvent", () => {
 describe("audit log DB writes", () => {
   it("context_load + response_sent produces two records", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const loadEvent = buildContextLoadEvent({
-      familyId: FAMILY_ID,
+      familyId,
       accessorPhone: PHONES.ROB,
-      accessorRole: "primary_caregiver",
+      accessorRole: "care_recipient",
       accessLevel: "full",
       sectionsLoaded: ["members", "medications"],
       triggerMessage: "What meds am I on?",
     });
     const sentEvent = buildResponseSentEvent({
-      familyId: FAMILY_ID,
+      familyId,
       recipientPhone: PHONES.ROB,
-      recipientRole: "primary_caregiver",
+      recipientRole: "care_recipient",
       accessLevel: "full",
       responseLength: 85,
       leakageCheckPassed: true,
@@ -142,9 +144,7 @@ describe("audit log DB writes", () => {
     await t.mutation(api.auditLogs.create, loadEvent);
     await t.mutation(api.auditLogs.create, sentEvent);
 
-    const logs = await t.query(api.auditLogs.listByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const logs = await t.query(api.auditLogs.listByFamily, { familyId });
     expect(logs).toHaveLength(2);
     expect(logs.map((l) => l.event)).toContain("context_load");
     expect(logs.map((l) => l.event)).toContain("response_sent");
@@ -152,43 +152,41 @@ describe("audit log DB writes", () => {
 
   it("all events have valid timestamps and familyId", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const event = buildContextLoadEvent({
-      familyId: FAMILY_ID,
+      familyId,
       accessorPhone: PHONES.ROB,
-      accessorRole: "primary_caregiver",
+      accessorRole: "care_recipient",
       accessLevel: "full",
       sectionsLoaded: ["members"],
       triggerMessage: "hi",
     });
     await t.mutation(api.auditLogs.create, event);
 
-    const logs = await t.query(api.auditLogs.listByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const logs = await t.query(api.auditLogs.listByFamily, { familyId });
     expect(logs[0].timestamp).toBeGreaterThan(0);
-    expect(logs[0].familyId).toBe(FAMILY_ID);
+    expect(logs[0].familyId).toBe(familyId);
   });
 
   it("blocked event retrievable with full details", async () => {
     const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
 
     const blocked = buildResponseBlockedEvent({
-      familyId: FAMILY_ID,
+      familyId,
       recipientPhone: PHONES.LINDA,
-      accessLevel: "schedule",
+      accessLevel: "view_only",
       leakedCategories: ["medications", "conditions"],
       leakedTerms: ["lisinopril", "diabetes"],
     });
     await t.mutation(api.auditLogs.create, blocked);
 
-    const logs = await t.query(api.auditLogs.listByFamily, {
-      familyId: FAMILY_ID,
-    });
+    const logs = await t.query(api.auditLogs.listByFamily, { familyId });
     expect(logs).toHaveLength(1);
     expect(logs[0].event).toBe("response_blocked");
-    expect(logs[0].details.severity).toBe("HIGH");
-    expect(logs[0].details.leakedTerms).toContain("lisinopril");
-    expect(logs[0].details.leakedTerms).toContain("diabetes");
+    expect(logs[0].details?.severity).toBe("HIGH");
+    expect(logs[0].details?.leakedTerms).toContain("lisinopril");
+    expect(logs[0].details?.leakedTerms).toContain("diabetes");
   });
 });

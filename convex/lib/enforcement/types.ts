@@ -10,7 +10,9 @@ export type AuditEventType =
   | "response_sent"
   | "response_blocked"
   | "outreach_sent"
-  | "unknown_number";
+  | "unknown_number"
+  | "message_failed"
+  | "message_status_update";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 
