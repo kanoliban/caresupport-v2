@@ -27,8 +27,7 @@ import {
   buildOutreachSentEvent,
   EXPIRY_HOURS,
 } from "./lib/enforcement";
-import { mapAccessLevel } from "./lib/enforcement";
-import type { AccessLevel, SchemaAccessLevel } from "./lib/enforcement";
+import type { AccessLevel } from "./lib/enforcement";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
   sendMessage,
@@ -119,7 +118,7 @@ export const handleMessage = internalAction({
     }
 
     const familyId = member.familyId;
-    const accessLevel = mapAccessLevel(member.accessLevel as SchemaAccessLevel);
+    const accessLevel = member.accessLevel as AccessLevel;
     const memberName = member.name;
 
     // Step 2: Update chatId if not set

@@ -43,7 +43,7 @@ const ACCESS_MATRIX: Record<AccessLevel, AccessConfig> = {
     canApproveChanges: false,
   },
   limited: {
-    sections: ["members", "care_recipient"],
+    sections: ["members"],
     canApproveChanges: false,
   },
 };

@@ -10,8 +10,10 @@ const roleValidator = v.union(
 
 const accessLevelValidator = v.union(
   v.literal("full"),
-  v.literal("standard"),
-  v.literal("view_only"),
+  v.literal("schedule+meds"),
+  v.literal("schedule"),
+  v.literal("provider"),
+  v.literal("limited"),
 );
 
 export const listByFamily = query({
@@ -49,7 +51,7 @@ export const getByFamilyAndPhone = query({
 export const create = mutation({
   args: {
     familyId: v.id("families"),
-    phone: v.string(),
+    phone: v.optional(v.string()),
     name: v.string(),
     role: roleValidator,
     accessLevel: accessLevelValidator,

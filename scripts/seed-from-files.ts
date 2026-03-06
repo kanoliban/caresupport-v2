@@ -21,7 +21,7 @@ function getConvexUrl(): string {
 }
 
 const ROLE_MAP: Record<string, "care_recipient" | "family_caregiver" | "professional_caregiver" | "community_supporter"> = {
-  primary_caregiver: "care_recipient",
+  primary_caregiver: "family_caregiver",
   care_recipient: "care_recipient",
   family_caregiver: "family_caregiver",
   professional_caregiver: "professional_caregiver",
@@ -29,15 +29,8 @@ const ROLE_MAP: Record<string, "care_recipient" | "family_caregiver" | "professi
   provider: "professional_caregiver",
 };
 
-const ACCESS_MAP: Record<string, "full" | "standard" | "view_only"> = {
-  full: "full",
-  "schedule+meds": "standard",
-  schedule: "standard",
-  standard: "standard",
-  provider: "standard",
-  limited: "view_only",
-  view_only: "view_only",
-};
+const VALID_ACCESS_LEVELS = new Set(["full", "schedule+meds", "schedule", "provider", "limited"]);
+type AccessLevel = "full" | "schedule+meds" | "schedule" | "provider" | "limited";
 
 // --- Parsers ---
 
@@ -126,6 +119,11 @@ async function seedFamily(client: ConvexHttpClient): Promise<{ familyId: Id<"fam
   const routing = JSON.parse(fs.readFileSync(routingPath, "utf-8"));
   const now = Date.now();
 
+  const familyMdPath = path.join(FAMILY_DIR, "family.md");
+  const context = fs.existsSync(familyMdPath)
+    ? fs.readFileSync(familyMdPath, "utf-8")
+    : undefined;
+
   const familyId = await client.mutation(api.families.create, {
     name: routing.family_id.charAt(0).toUpperCase() + routing.family_id.slice(1),
     careRecipient: routing.care_recipient,
@@ -134,6 +132,7 @@ async function seedFamily(client: ConvexHttpClient): Promise<{ familyId: Id<"fam
     createdAt: new Date(routing.created).getTime(),
     updatedAt: now,
     familyId: routing.family_id,
+    context,
   });
 
   console.log(`  Family: ${routing.family_id} (id: ${familyId})`);
@@ -159,8 +158,11 @@ async function seedMembers(
 
   let count = 0;
   for (const [phone, member] of Object.entries(members)) {
-    const role = ROLE_MAP[member.role] ?? "community_supporter";
-    const accessLevel = ACCESS_MAP[member.access_level] ?? "view_only";
+    const originalRole = member.role;
+    const role = ROLE_MAP[originalRole] ?? "community_supporter";
+    const accessLevel: AccessLevel = VALID_ACCESS_LEVELS.has(member.access_level)
+      ? (member.access_level as AccessLevel)
+      : "limited";
 
     await client.mutation(api.members.create, {
       familyId,
@@ -168,7 +170,7 @@ async function seedMembers(
       name: member.name,
       role,
       accessLevel,
-      isCoordinator: role === "care_recipient",
+      isCoordinator: originalRole === "primary_caregiver",
       isEmergencyContact: role === "family_caregiver",
       active: member.active,
       chatId: member.chat_id,
@@ -176,6 +178,22 @@ async function seedMembers(
     });
     count++;
   }
+
+  // Add care recipient as a member (may not have a phone)
+  const careRecipientName = routing.care_recipient as string | undefined;
+  if (careRecipientName) {
+    await client.mutation(api.members.create, {
+      familyId,
+      name: careRecipientName,
+      role: "care_recipient",
+      accessLevel: "full",
+      isCoordinator: false,
+      isEmergencyContact: false,
+      active: true,
+    });
+    count++;
+  }
+
   console.log(`  Members: ${count}`);
 }
 

@@ -220,11 +220,24 @@ export const applyContextUpdates = internalMutation({
 
     let context = family.context ?? "";
     for (const upd of args.updates) {
-      if (upd.operation === "add") {
-        context += `\n\n## ${upd.section}\n${upd.content}`;
+      if (upd.operation === "append") {
+        const sectionHeader = `## ${upd.section}`;
+        const idx = context.indexOf(sectionHeader);
+        if (idx >= 0) {
+          const nextSection = context.indexOf("\n## ", idx + 1);
+          const insertAt = nextSection >= 0 ? nextSection : context.length;
+          context = context.slice(0, insertAt) + "\n" + upd.content + context.slice(insertAt);
+        }
+      } else if (upd.operation === "prepend") {
+        const sectionHeader = `## ${upd.section}`;
+        const idx = context.indexOf(sectionHeader);
+        if (idx >= 0) {
+          const afterHeader = context.indexOf("\n", idx) + 1;
+          context = context.slice(0, afterHeader) + upd.content + "\n" + context.slice(afterHeader);
+        }
       } else if (upd.operation === "replace" && upd.oldContent) {
         context = context.replace(upd.oldContent, upd.content);
-      } else if (upd.operation === "remove" && upd.oldContent) {
+      } else if (upd.operation === "resolve_issue" && upd.oldContent) {
         context = context.replace(upd.oldContent, "");
       }
     }

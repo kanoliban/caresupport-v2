@@ -17,8 +17,10 @@ const memberRole = v.union(
 
 const accessLevel = v.union(
   v.literal("full"),
-  v.literal("standard"),
-  v.literal("view_only"),
+  v.literal("schedule+meds"),
+  v.literal("schedule"),
+  v.literal("provider"),
+  v.literal("limited"),
 );
 
 const medicationStatus = v.union(
@@ -122,7 +124,7 @@ export default defineSchema({
 
   members: defineTable({
     familyId: v.id("families"),
-    phone: v.string(),
+    phone: v.optional(v.string()),
     name: v.string(),
     role: memberRole,
     accessLevel: accessLevel,

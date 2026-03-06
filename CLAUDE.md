@@ -29,7 +29,7 @@ iMessage arrives via Linq webhook
 
 1. Safety enforcement is mechanical (code in `convex/lib/enforcement/`), not just prompt-level
 2. All state mutations go through Convex mutations — no direct file edits
-3. Three access levels: `full`, `standard`, `view_only` — enforced per-membership
+3. Five access levels: `full`, `schedule+meds`, `schedule`, `provider`, `limited` — enforced per-membership
 4. Medication changes always require coordinator approval (hardcoded safety rule)
 5. Medical info is 1:1 only — never shared in group chats
 6. Agent writes to `context` fields on families and members — no markdown blob round-trips

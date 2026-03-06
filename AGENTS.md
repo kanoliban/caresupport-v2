@@ -8,7 +8,7 @@ Repo: `kanoliban/caresupport-v2`
 
 ## Architecture Decisions (locked)
 
-- **Access tiers**: 3 DB values (`full`, `standard`, `view_only`) → `mapAccessLevel()` → 5-tier enforcement
+- **Access tiers**: 5 DB values (`full`, `schedule+meds`, `schedule`, `provider`, `limited`) — stored directly, no mapping layer
 - **Tables**: `messages` (not conversations), no `timelineEvents`, `familyId` optional on audit logs
 - **Roles**: `care_recipient`, `family_caregiver`, `professional_caregiver`, `community_supporter`
 - **Enforcement**: Safety is mechanical (code in `convex/lib/enforcement/`), not prompt-level

@@ -12,7 +12,7 @@ The v1 code referenced field names, roles, and table structures that no longer e
 
 ### Three Design Decisions
 
-1. **Access tier bridging**: Schema stores 3 DB values (`full`, `standard`, `view_only`). `mapAccessLevel()` maps these to the 5-tier enforcement system at runtime. No schema change needed.
+1. **Access tiers**: Schema stores 5 values directly (`full`, `schedule+meds`, `schedule`, `provider`, `limited`). No mapping layer — enforcement reads DB values as-is.
 2. **`messages` not `conversations`**: Renamed table and all references. `logConversation` → `logMessage`.
 3. **`familyId` optional on audit**: `buildUnknownNumberEvent` can't resolve a family, so `familyId` is `Id<"families"> | undefined` in audit types.
 
@@ -21,10 +21,10 @@ The v1 code referenced field names, roles, and table structures that no longer e
 This isn't abstract infrastructure. Every table, role, and access level exists because of three real families:
 
 - **Family A — Kano** (5 people): Small, tight-knit. Liban (coordinator) manages care for his mother Degitu. Everyone knows each other. 1:1 messaging is primary.
-- **Family B — Rob** (15 people): Rob is both care recipient AND coordinator. 9 professional caregivers need schedules and care tasks. Family members need updates. Access tiers exist because of this family — professionals get `standard` (no medical history), family gets `full`.
+- **Family B — Rob** (15 people): Rob is both care recipient AND coordinator. 9 professional caregivers need schedules and care tasks. Family members need updates. Access tiers exist because of this family — professionals get `schedule+meds` (no medical history), family gets `full`.
 - **Family C — Amanti** (9 people): Amanti coordinates for his mother. 6 siblings are remote. Group chat is critical for keeping distributed family aligned. The `community_supporter` role exists for extended networks like this.
 
-**Why this matters for your assessment**: When reviewing the schema changes, ask whether each role, access level, and table structure makes sense for these three families. The `mapAccessLevel()` bridge (3 DB values → 5 enforcement tiers) exists because Rob's professional caregivers need different access than his family members, but the DB shouldn't store enforcement complexity.
+**Why this matters for your assessment**: When reviewing the schema changes, ask whether each role, access level, and table structure makes sense for these three families. The 5 access tiers exist because Rob's professional caregivers need different access than his family members — stored directly in the DB, no mapping layer.
 
 Required reading for full context: `docs/design.md`, `SOUL.md`
 

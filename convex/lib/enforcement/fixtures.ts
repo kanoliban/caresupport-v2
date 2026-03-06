@@ -32,14 +32,14 @@ export const TEST_MEMBERS = [
     phone: PHONES.SARAH,
     name: "Sarah",
     role: "professional_caregiver" as const,
-    accessLevel: "standard" as const,
+    accessLevel: "schedule+meds" as const,
     relationship: "professional_caregiver",
   },
   {
     phone: PHONES.LINDA,
     name: "Linda",
     role: "community_supporter" as const,
-    accessLevel: "view_only" as const,
+    accessLevel: "limited" as const,
     relationship: "community_supporter",
   },
 ];
