@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
   splitIntoBubbles,
   verifyWebhookSignature,
@@ -51,15 +51,15 @@ describe("splitIntoBubbles", () => {
     expect(bubbles).toEqual([text]);
   });
 
-  it("caps at 5 bubbles, merging remainder into last", () => {
+  it("caps at 3 bubbles, merging remainder into last", () => {
     const text = Array(8)
       .fill(0)
       .map((_, i) => `Paragraph ${i + 1}.`)
       .join("\n\n");
     const bubbles = splitIntoBubbles(text);
-    expect(bubbles.length).toBe(5);
-    expect(bubbles[4]).toContain("Paragraph 5");
-    expect(bubbles[4]).toContain("Paragraph 8");
+    expect(bubbles.length).toBe(3);
+    expect(bubbles[2]).toContain("Paragraph 3");
+    expect(bubbles[2]).toContain("Paragraph 8");
   });
 
   it("returns original text when no split points found", () => {
@@ -295,9 +295,15 @@ describe("sendMessageSequence", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends multiple bubbles sequentially", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sends multiple bubbles sequentially with dynamic pacing", async () => {
     // #given
+    vi.useFakeTimers();
     const calls: string[] = [];
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string, opts: { method: string }) => {
@@ -317,17 +323,29 @@ describe("sendMessageSequence", () => {
     );
 
     // #when
-    const results = await sendMessageSequence(
+    const resultsPromise = sendMessageSequence(
       "chat-1",
-      ["Hello", "World"],
+      ["Hello", "World", "x".repeat(1_000)],
       "tok",
-      0,
     );
+    await vi.runAllTimersAsync();
+    const results = await resultsPromise;
 
     // #then
-    expect(results).toHaveLength(2);
+    expect(results).toHaveLength(3);
     expect(results.every((r) => r.success)).toBe(true);
     expect(calls.some((c) => c.includes("/typing"))).toBe(true);
+    expect(timeoutSpy).toHaveBeenCalledTimes(2);
+    expect(timeoutSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Function),
+      1_220,
+    );
+    expect(timeoutSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Function),
+      3_000,
+    );
   });
 });
 

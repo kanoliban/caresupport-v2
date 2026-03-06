@@ -1,6 +1,9 @@
 const LINQ_BASE_URL = "https://api.linqapp.com/api/partner/v3";
-const MAX_BUBBLES = 5;
+const MAX_BUBBLES = 3;
 const REPLAY_WINDOW_SECONDS = 300;
+const BASE_INTER_BUBBLE_DELAY_MS = 1_200;
+const PER_CHARACTER_DELAY_MS = 4;
+const MAX_INTER_BUBBLE_DELAY_MS = 3_000;
 
 interface LinqSendResult {
   success: boolean;
@@ -174,13 +177,19 @@ export function splitIntoBubbles(
   return bubbles.length > 0 ? bubbles : [trimmed];
 }
 
+function getInterBubbleDelayMs(nextBubble: string): number {
+  return Math.min(
+    BASE_INTER_BUBBLE_DELAY_MS + nextBubble.length * PER_CHARACTER_DELAY_MS,
+    MAX_INTER_BUBBLE_DELAY_MS,
+  );
+}
+
 // ─── Sequential message sending ──────────────────────────────────────────
 
 export async function sendMessageSequence(
   chatId: string,
   bubbles: string[],
   apiToken: string,
-  delayMs = 800,
 ): Promise<LinqSendResult[]> {
   const results: LinqSendResult[] = [];
   for (let i = 0; i < bubbles.length; i++) {
@@ -190,7 +199,9 @@ export async function sendMessageSequence(
       } catch {
         // typing indicator is best-effort
       }
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      await new Promise((resolve) =>
+        setTimeout(resolve, getInterBubbleDelayMs(bubbles[i])),
+      );
     }
     try {
       const result = await sendMessage(chatId, bubbles[i], apiToken);

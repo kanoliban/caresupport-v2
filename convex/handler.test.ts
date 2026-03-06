@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCategory, formatConversationLog } from "./handler";
+import { parseCategory, formatConversationLog, stripMarkdown } from "./handler";
 
 // ─── parseCategory ──────────────────────────────────────────────────────
 
@@ -128,5 +128,43 @@ describe("formatConversationLog", () => {
     const result = formatConversationLog(records);
     // #then
     expect(result).toMatch(/\[2025-12-25 23:59:59 UTC\]/);
+  });
+});
+
+// ─── stripMarkdown ──────────────────────────────────────────────────────
+
+describe("stripMarkdown", () => {
+  it("removes markdown formatting markers without stripping content", () => {
+    // #given
+    const text = [
+      "## Schedule update",
+      "- **Morning meds:** Give __ibuprofen__ after breakfast.",
+      "1. *Call* the clinic if the pain gets worse.",
+      "2. Reply with questions.",
+    ].join("\n");
+
+    // #when
+    const result = stripMarkdown(text);
+
+    // #then
+    expect(result).toBe(
+      [
+        "Schedule update",
+        "Morning meds: Give ibuprofen after breakfast.",
+        "Call the clinic if the pain gets worse.",
+        "Reply with questions.",
+      ].join("\n"),
+    );
+  });
+
+  it("leaves unmatched or literal asterisks intact", () => {
+    // #given
+    const text = "The copied note ends with can't* and should stay that way.";
+
+    // #when
+    const result = stripMarkdown(text);
+
+    // #then
+    expect(result).toBe(text);
   });
 });

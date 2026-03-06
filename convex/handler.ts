@@ -46,6 +46,8 @@ import {
 } from "./lib/promptContent";
 
 const MIN_RESPONSE_MS = 3_000;
+const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
+const MAX_RESPONSE_MS = 6_000;
 const MAX_REPLY_QUOTE_LENGTH = 200;
 
 const BLOCKED_RESPONSE =
@@ -91,6 +93,23 @@ export function formatConversationLog(
     .join("\n");
 }
 
+export function stripMarkdown(text: string): string {
+  const withoutLinePrefixes = text
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}#{1,6}\s+/, "")
+        .replace(/^\s*-\s+/, "")
+        .replace(/^\s*\d+\.\s+/, ""),
+    )
+    .join("\n");
+
+  return withoutLinePrefixes
+    .replace(/(^|[\s([{"'])\*\*(?=\S)(.+?\S)\*\*(?=$|[\s)\]}.,!?;:'"])/g, "$1$2")
+    .replace(/(^|[\s([{"'])__(?=\S)(.+?\S)__(?=$|[\s)\]}.,!?;:'"])/g, "$1$2")
+    .replace(/(^|[\s([{"'])\*(?=\S)(.+?\S)\*(?=$|[\s)\]}.,!?;:'"])/g, "$1$2");
+}
+
 function truncateReplyQuote(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= MAX_REPLY_QUOTE_LENGTH) {
@@ -101,6 +120,14 @@ function truncateReplyQuote(text: string): string {
 
 function prependReplyContext(messageBody: string, quotedBody: string): string {
   return `[Replying to: "${truncateReplyQuote(quotedBody)}"] ${messageBody}`;
+}
+
+function getInitialResponseDelayMs(bubbleCount: number): number {
+  const normalizedBubbleCount = Math.max(bubbleCount, 1);
+  return Math.min(
+    MIN_RESPONSE_MS + (normalizedBubbleCount - 1) * EXTRA_RESPONSE_MS_PER_BUBBLE,
+    MAX_RESPONSE_MS,
+  );
 }
 
 export const handleMessage = internalAction({
@@ -312,7 +339,7 @@ export const handleMessage = internalAction({
       return { success: false, response: fallbackMsg, error: errMsg };
     }
 
-    const smsResponse = parsed.smsResponse;
+    const smsResponse = stripMarkdown(parsed.smsResponse);
 
     // Step 11: Post-check outbound for leakage
     const leakage = checkOutboundMessage(smsResponse, accessLevel);
@@ -411,12 +438,8 @@ export const handleMessage = internalAction({
     }
 
     // Step 15: Pace response + log outbound + send
-    const elapsed = Date.now() - pacingStart;
-    if (elapsed < MIN_RESPONSE_MS) {
-      await new Promise((r) => setTimeout(r, MIN_RESPONSE_MS - elapsed));
-    }
     await logOutbound(ctx, familyId, senderPhone, memberName, smsResponse, now);
-    await sendResponse(chatId, smsResponse, env());
+    await sendResponse(chatId, smsResponse, env(), pacingStart);
 
     // Step 16: Process outreach
     const envVars = env();
@@ -512,6 +535,7 @@ async function sendResponse(
   chatId: string,
   text: string,
   envVars: { linqApiToken: string },
+  pacingStart = Date.now(),
 ): Promise<void> {
   if (!envVars.linqApiToken) {
     console.error("[sendResponse] No LINQ_API_TOKEN — skipping send");
@@ -521,9 +545,16 @@ async function sendResponse(
     console.error("[sendResponse] No chatId — cannot send");
     return;
   }
-  console.log(`[sendResponse] Sending to chatId=${chatId}, text length=${text.length}`);
   const bubbles = splitIntoBubbles(text);
-  const results = await sendMessageSequence(chatId, bubbles, envVars.linqApiToken, 800);
+  const initialDelayMs = getInitialResponseDelayMs(bubbles.length);
+  const elapsed = Date.now() - pacingStart;
+  if (elapsed < initialDelayMs) {
+    await new Promise((resolve) => setTimeout(resolve, initialDelayMs - elapsed));
+  }
+  console.log(
+    `[sendResponse] Sending to chatId=${chatId}, text length=${text.length}, bubbles=${bubbles.length}`,
+  );
+  const results = await sendMessageSequence(chatId, bubbles, envVars.linqApiToken);
   for (const r of results) {
     if (!r.success) {
       console.error("[sendResponse] Send failed:", JSON.stringify(r.error));
