@@ -16,6 +16,10 @@
 - `npx convex deploy --typecheck=disable` is required here because Convex CLI typechecks vitest files and trips on `import.meta.glob` even when repo `tsc` passes.
 - Clearing prod with `npx convex import --table <table> --replace --prod -y /tmp/convex-empty.json` works cleanly for throwaway seed data, including legacy v1 tables.
 - A signed POST to `https://<deployment>.convex.site/webhook/linq` is a practical smoke-test path when a physical phone is not in hand.
+- For audit-only handler fixes, reuse existing `auditDetails` fields such as `recipientPhone` and `failureReason` instead of expanding the schema.
+- For runtime enum validation, add the guard next to the shared type definition and default handlers to the most restrictive behavior instead of casting.
+- Linq iMessage reply threading can stay schema-free: resolve `reply_to.message_id` through `messages.by_linq_message_id` and prepend a short quoted-body prefix for Claude context.
+- SMS UX constraints need mechanical enforcement in the handler/Linq path: sanitize markdown after `extractJson`, cap bubbles in `splitIntoBubbles`, and pace sends from actual bubble counts instead of trusting prompt text.
 
 ## Patterns That Don't Work
 - `npm test` is not hermetic here; `tests/seed.test.ts` can hit a real Convex deployment because importing `scripts/seed-from-files.ts` runs `main()`.
@@ -24,3 +28,4 @@
 ## Domain Notes
 - Response-quality limits are architectural right now: the handler does not yet load structured table data such as `scheduleItems` and `medications` into the prompt.
 - Family-scoped data must be queried with `familyId`; phone-only lookups are only for member resolution and specific Linq callback paths called out in repo docs.
+- Approval routing should resolve approvers from family coordinators (`members.by_family` + `isCoordinator`), not from the requester phone.
