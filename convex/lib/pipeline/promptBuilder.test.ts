@@ -124,8 +124,9 @@ describe("extractFamilySections", () => {
 describe("channelGuidance", () => {
   it("returns SMS guidance text for 'SMS'", () => {
     const result = channelGuidance("SMS");
-    expect(result).toContain("CHANNEL: SMS");
+    expect(result).toContain("CHANNEL: iMessage/SMS");
     expect(result).toContain("320 characters");
+    expect(result).toContain("Plain text only");
   });
 
   it("returns empty string for non-SMS services", () => {

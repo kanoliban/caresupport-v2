@@ -55,37 +55,25 @@ const updateValidator = v.object({
   oldContent: v.string(),
 });
 
-export const logConversation = internalMutation({
+export const logMessage = internalMutation({
   args: {
-    familyId: v.string(),
-    phone: v.string(),
+    familyId: v.id("families"),
+    senderPhone: v.optional(v.string()),
     direction: directionValidator,
     memberName: v.optional(v.string()),
     body: v.string(),
     timestamp: v.number(),
-    sourceMessageId: v.optional(v.string()),
+    linqMessageId: v.optional(v.string()),
+    chatId: v.optional(v.id("chats")),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("conversations", args);
-  },
-});
-
-export const logTimeline = internalMutation({
-  args: {
-    familyId: v.string(),
-    timestamp: v.number(),
-    direction: directionValidator,
-    memberName: v.string(),
-    body: v.string(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("timelineEvents", args);
+    return await ctx.db.insert("messages", args);
   },
 });
 
 export const logAudit = internalMutation({
   args: {
-    familyId: v.string(),
+    familyId: v.optional(v.id("families")),
     event: eventValidator,
     phone: v.string(),
     accessLevel: v.optional(v.string()),
@@ -100,7 +88,7 @@ export const logAudit = internalMutation({
 
 export const persistLesson = internalMutation({
   args: {
-    familyId: v.optional(v.string()),
+    familyId: v.optional(v.id("families")),
     scope: scopeValidator,
     category: categoryValidator,
     text: v.string(),
@@ -113,7 +101,7 @@ export const persistLesson = internalMutation({
 
 export const createApproval = internalMutation({
   args: {
-    familyId: v.string(),
+    familyId: v.id("families"),
     status: statusValidator,
     requesterPhone: v.string(),
     requesterName: v.string(),
@@ -149,28 +137,27 @@ export const getMemberByPhone = internalMutation({
 });
 
 export const getFamilyContext = internalMutation({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
-    return await ctx.db
-      .query("familyContext")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-      .first();
+    const family = await ctx.db.get(args.familyId);
+    if (!family) return null;
+    return { context: family.context ?? "[No family context]" };
   },
 });
 
-export const getRecentConversations = internalMutation({
+export const getRecentMessages = internalMutation({
   args: { phone: v.string(), limit: v.number() },
   handler: async (ctx, args) => {
     return await ctx.db
-      .query("conversations")
-      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .query("messages")
+      .withIndex("by_sender_phone", (q) => q.eq("senderPhone", args.phone))
       .order("desc")
       .take(args.limit);
   },
 });
 
 export const getFamilyLessons = internalMutation({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("lessons")
@@ -180,7 +167,7 @@ export const getFamilyLessons = internalMutation({
 });
 
 export const getPendingApprovals = internalMutation({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("approvals")
@@ -191,13 +178,13 @@ export const getPendingApprovals = internalMutation({
   },
 });
 
-export const getConversationBySourceMessageId = internalMutation({
-  args: { sourceMessageId: v.string() },
+export const getMessageByLinqId = internalMutation({
+  args: { linqMessageId: v.string() },
   handler: async (ctx, args) => {
     return await ctx.db
-      .query("conversations")
-      .withIndex("by_source_message_id", (q) =>
-        q.eq("sourceMessageId", args.sourceMessageId),
+      .query("messages")
+      .withIndex("by_linq_message_id", (q) =>
+        q.eq("linqMessageId", args.linqMessageId),
       )
       .first();
   },
@@ -205,7 +192,7 @@ export const getConversationBySourceMessageId = internalMutation({
 
 export const updateMessageStatus = internalMutation({
   args: {
-    conversationId: v.id("conversations"),
+    messageId: v.id("messages"),
     deliveryStatus: v.union(
       v.literal("sent"),
       v.literal("delivered"),
@@ -217,7 +204,30 @@ export const updateMessageStatus = internalMutation({
     failureReason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { conversationId, ...patch } = args;
-    await ctx.db.patch(conversationId, patch);
+    const { messageId, ...patch } = args;
+    await ctx.db.patch(messageId, patch);
+  },
+});
+
+export const applyContextUpdates = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    updates: v.array(updateValidator),
+  },
+  handler: async (ctx, args) => {
+    const family = await ctx.db.get(args.familyId);
+    if (!family) return;
+
+    let context = family.context ?? "";
+    for (const upd of args.updates) {
+      if (upd.operation === "add") {
+        context += `\n\n## ${upd.section}\n${upd.content}`;
+      } else if (upd.operation === "replace" && upd.oldContent) {
+        context = context.replace(upd.oldContent, upd.content);
+      } else if (upd.operation === "remove" && upd.oldContent) {
+        context = context.replace(upd.oldContent, "");
+      }
+    }
+    await ctx.db.patch(args.familyId, { context: context.trim() });
   },
 });

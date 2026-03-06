@@ -16,7 +16,7 @@ const updateValidator = v.object({
 });
 
 export const listPendingByFamily = query({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("approvals")
@@ -28,7 +28,7 @@ export const listPendingByFamily = query({
 });
 
 export const listByFamily = query({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("approvals")
@@ -41,7 +41,7 @@ export const listByFamily = query({
 
 export const create = mutation({
   args: {
-    familyId: v.string(),
+    familyId: v.id("families"),
     status: statusValidator,
     requesterPhone: v.string(),
     requesterName: v.string(),
@@ -87,7 +87,7 @@ export const resolve = mutation({
 });
 
 export const expireStale = mutation({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     const pending = await ctx.db
       .query("approvals")

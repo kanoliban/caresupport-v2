@@ -76,9 +76,10 @@ export function extractFamilySections(familyText: string, sections: Set<string>)
 export function channelGuidance(service: string): string {
   if (service.toUpperCase() === "SMS") {
     return (
-      '── CHANNEL: SMS ──\n' +
-      'No read receipts or typing indicators. Keep messages under 320 characters\n' +
-      '(2 SMS segments) when possible. Use "Reply YES to confirm" for confirmations.'
+      '── CHANNEL: iMessage/SMS ──\n' +
+      'You are texting via iMessage. They see read receipts and typing indicators.\n' +
+      'Keep each message bubble under 320 characters when possible.\n' +
+      'Plain text only — no markdown, no bold, no headers.'
     );
   }
   return "";

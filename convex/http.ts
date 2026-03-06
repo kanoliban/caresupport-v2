@@ -83,13 +83,13 @@ http.route({
 
       if (sourceMessageId) {
         const conversation = await ctx.runMutation(
-          internal.mutations.getConversationBySourceMessageId,
-          { sourceMessageId },
+          internal.mutations.getMessageByLinqId,
+          { linqMessageId: sourceMessageId },
         );
 
         if (conversation) {
           await ctx.runMutation(internal.mutations.updateMessageStatus, {
-            conversationId: conversation._id,
+            messageId: conversation._id,
             deliveryStatus: "failed",
             failureReason,
           });
@@ -97,7 +97,7 @@ http.route({
           await ctx.runMutation(internal.mutations.logAudit, {
             familyId: conversation.familyId,
             event: "message_failed",
-            phone: conversation.phone,
+            phone: conversation.senderPhone ?? "",
             details: { sourceMessageId, failureReason },
             timestamp: now,
           });
@@ -107,7 +107,6 @@ http.route({
       }
 
       await ctx.runMutation(internal.mutations.logAudit, {
-        familyId: "unknown",
         event: "message_failed",
         phone: "",
         details: {
@@ -124,13 +123,13 @@ http.route({
       const sourceMessageId = extractMessageId(eventData);
       if (sourceMessageId) {
         const conversation = await ctx.runMutation(
-          internal.mutations.getConversationBySourceMessageId,
-          { sourceMessageId },
+          internal.mutations.getMessageByLinqId,
+          { linqMessageId: sourceMessageId },
         );
 
         if (conversation) {
           await ctx.runMutation(internal.mutations.updateMessageStatus, {
-            conversationId: conversation._id,
+            messageId: conversation._id,
             deliveryStatus: "delivered",
             deliveredAt: Date.now(),
           });
@@ -144,13 +143,13 @@ http.route({
       const sourceMessageId = extractMessageId(eventData);
       if (sourceMessageId) {
         const conversation = await ctx.runMutation(
-          internal.mutations.getConversationBySourceMessageId,
-          { sourceMessageId },
+          internal.mutations.getMessageByLinqId,
+          { linqMessageId: sourceMessageId },
         );
 
         if (conversation) {
           await ctx.runMutation(internal.mutations.updateMessageStatus, {
-            conversationId: conversation._id,
+            messageId: conversation._id,
             deliveryStatus: "read",
             readAt: Date.now(),
           });

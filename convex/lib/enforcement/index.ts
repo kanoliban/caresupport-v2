@@ -27,8 +27,11 @@ export {
 } from "./approvalPipeline";
 export type { ApprovalResponse } from "./approvalPipeline";
 
+export { mapAccessLevel } from "./types";
+
 export type {
   AccessLevel,
+  SchemaAccessLevel,
   AuditEventType,
   ApprovalStatus,
   Section,

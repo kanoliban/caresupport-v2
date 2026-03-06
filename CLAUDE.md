@@ -51,3 +51,7 @@ iMessage arrives via Linq webhook
 ## Transitional State
 
 The Convex schema (schema.ts) is v2 — structured tables for medications, schedules, and agent-written context fields. However, handler.ts and promptContent.ts still use v1 field names in the agent's structured output (familyFileUpdates, memberUpdates). The migration to v2 output format (familyContextUpdate, memberContextUpdate with typed table operations) is a separate task. Match the working code, not the design aspirations.
+
+## Multi-Agent Setup
+
+See `AGENTS.md` for shared state between Claude (architecture/reasoning) and Codex (execution/deployment). Codex handoff context is in `docs/codex-handoff.md`.

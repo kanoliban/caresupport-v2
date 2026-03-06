@@ -9,7 +9,7 @@ const statusValidator = v.union(
 );
 
 export const listByFamily = query({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("medications")
@@ -19,11 +19,11 @@ export const listByFamily = query({
 });
 
 export const listActiveByFamily = query({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("medications")
-      .withIndex("by_family_active", (q) =>
+      .withIndex("by_family_status", (q) =>
         q.eq("familyId", args.familyId).eq("status", "active"),
       )
       .collect();
@@ -32,13 +32,13 @@ export const listActiveByFamily = query({
 
 export const create = mutation({
   args: {
-    familyId: v.string(),
+    familyId: v.id("families"),
     name: v.string(),
     dose: v.string(),
     schedule: v.string(),
     prescriber: v.optional(v.string()),
     pharmacy: v.optional(v.string()),
-    lastConfirmed: v.optional(v.string()),
+    lastConfirmed: v.optional(v.number()),
     refillDue: v.optional(v.string()),
     status: statusValidator,
   },
@@ -55,7 +55,7 @@ export const update = mutation({
     schedule: v.optional(v.string()),
     prescriber: v.optional(v.string()),
     pharmacy: v.optional(v.string()),
-    lastConfirmed: v.optional(v.string()),
+    lastConfirmed: v.optional(v.number()),
     refillDue: v.optional(v.string()),
     status: v.optional(statusValidator),
   },

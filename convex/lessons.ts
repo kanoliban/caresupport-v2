@@ -19,7 +19,7 @@ export const listGlobal = query({
 });
 
 export const listByFamily = query({
-  args: { familyId: v.string() },
+  args: { familyId: v.id("families") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("lessons")
@@ -30,7 +30,7 @@ export const listByFamily = query({
 
 export const create = mutation({
   args: {
-    familyId: v.optional(v.string()),
+    familyId: v.optional(v.id("families")),
     scope: scopeValidator,
     category: categoryValidator,
     text: v.string(),

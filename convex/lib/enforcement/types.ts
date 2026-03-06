@@ -5,12 +5,27 @@ export type AccessLevel =
   | "provider"
   | "limited";
 
+export type SchemaAccessLevel = "full" | "standard" | "view_only";
+
+export function mapAccessLevel(stored: SchemaAccessLevel): AccessLevel {
+  switch (stored) {
+    case "full":
+      return "full";
+    case "standard":
+      return "schedule+meds";
+    case "view_only":
+      return "limited";
+  }
+}
+
 export type AuditEventType =
   | "context_load"
   | "response_sent"
   | "response_blocked"
   | "outreach_sent"
-  | "unknown_number";
+  | "unknown_number"
+  | "message_failed"
+  | "message_status_update";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 
