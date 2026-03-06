@@ -10,6 +10,8 @@ import {
   extractMessageId,
   extractReplyTo,
   extractFailureReason,
+  extractReactionData,
+  extractParticipantData,
 } from "./lib/linqClient";
 
 const http = httpRouter();
@@ -157,6 +159,94 @@ http.route({
             readAt: Date.now(),
           });
         }
+      }
+
+      return jsonResponse({ handled: true, event: eventType });
+    }
+
+    if (eventType === "reaction.added") {
+      const reaction = extractReactionData(eventData);
+      if (reaction && reaction.reactorPhone) {
+        const reactedMessage = await ctx.runMutation(
+          internal.mutations.getMessageByLinqId,
+          { linqMessageId: reaction.messageId },
+        );
+
+        await ctx.runMutation(internal.mutations.logAudit, {
+          event: "reaction_received",
+          phone: reaction.reactorPhone,
+          familyId: reactedMessage?.familyId,
+          details: {
+            sourceMessageId: reaction.messageId,
+            reactionType: reaction.reactionType,
+          },
+          timestamp: Date.now(),
+        });
+
+        const quotedBody = reactedMessage?.body ?? "";
+        const syntheticBody = quotedBody
+          ? `[Reacted ${reaction.reactionType} to: "${quotedBody.slice(0, 450)}"]`
+          : `[Reacted ${reaction.reactionType} to a previous message]`;
+        const chatId = reaction.chatId;
+
+        await ctx.scheduler.runAfter(0, internal.handler.handleMessage, {
+          senderPhone: reaction.reactorPhone,
+          messageBody: syntheticBody,
+          chatId,
+          service: "iMessage",
+          sourceMessageId: undefined,
+        });
+      }
+
+      return jsonResponse({ handled: true, event: eventType });
+    }
+
+    if (eventType === "reaction.removed") {
+      const reaction = extractReactionData(eventData);
+      if (reaction) {
+        await ctx.runMutation(internal.mutations.logAudit, {
+          event: "reaction_received",
+          phone: reaction.reactorPhone || "",
+          details: {
+            sourceMessageId: reaction.messageId,
+            reactionType: `removed:${reaction.reactionType}`,
+          },
+          timestamp: Date.now(),
+        });
+      }
+
+      return jsonResponse({ handled: true, event: eventType });
+    }
+
+    if (eventType === "participant.added") {
+      const participant = extractParticipantData(eventData);
+      if (participant) {
+        await ctx.runMutation(internal.mutations.logAudit, {
+          event: "participant_changed",
+          phone: participant.participantPhone || "",
+          details: {
+            participantAction: "added",
+            participantPhone: participant.participantPhone,
+          },
+          timestamp: Date.now(),
+        });
+      }
+
+      return jsonResponse({ handled: true, event: eventType });
+    }
+
+    if (eventType === "participant.removed") {
+      const participant = extractParticipantData(eventData);
+      if (participant) {
+        await ctx.runMutation(internal.mutations.logAudit, {
+          event: "participant_changed",
+          phone: participant.participantPhone || "",
+          details: {
+            participantAction: "removed",
+            participantPhone: participant.participantPhone,
+          },
+          timestamp: Date.now(),
+        });
       }
 
       return jsonResponse({ handled: true, event: eventType });
