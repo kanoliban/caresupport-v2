@@ -26,6 +26,7 @@ import {
   buildUnknownNumberEvent,
   buildOutreachSentEvent,
   EXPIRY_HOURS,
+  isAccessLevel,
 } from "./lib/enforcement";
 import type { AccessLevel } from "./lib/enforcement";
 import { callAnthropic } from "./lib/anthropicClient";
@@ -118,8 +119,26 @@ export const handleMessage = internalAction({
     }
 
     const familyId = member.familyId;
-    const accessLevel = member.accessLevel as AccessLevel;
+    const rawAccessLevel = member.accessLevel;
+    const hasValidAccessLevel = isAccessLevel(rawAccessLevel);
+    const accessLevel: AccessLevel = hasValidAccessLevel ? rawAccessLevel : "limited";
     const memberName = member.name;
+
+    if (!hasValidAccessLevel) {
+      await ctx.runMutation(internal.mutations.logAudit, {
+        familyId,
+        event: "response_blocked",
+        phone: senderPhone,
+        accessLevel: String(rawAccessLevel),
+        role: member.role,
+        details: {
+          severity: "HIGH",
+          recipientPhone: senderPhone,
+          failureReason: `Invalid member access level: ${String(rawAccessLevel)}`,
+        },
+        timestamp: now,
+      });
+    }
 
     // Step 2: Update chatId if not set
     if (!member.chatId && chatId) {
@@ -318,19 +337,18 @@ export const handleMessage = internalAction({
     }
 
     if (classified.needsApproval.length > 0) {
-      const approverMembers = await ctx.runMutation(
-        internal.mutations.getMemberByPhone,
-        { phone: senderPhone },
+      const approverPhones = await ctx.runMutation(
+        internal.mutations.getCoordinators,
+        { familyId },
       );
-      // Find all full-access members for approval
-      // For now, use the requester's phone as a placeholder
+
       for (const { update: upd, reason } of classified.needsApproval) {
         await ctx.runMutation(internal.mutations.createApproval, {
           familyId,
           status: "pending",
           requesterPhone: senderPhone,
           requesterName: memberName,
-          approverPhones: [senderPhone],
+          approverPhones,
           description: `${reason}: ${upd.content.slice(0, 120)}`,
           update: upd,
           createdAt: now,
@@ -378,6 +396,20 @@ export const handleMessage = internalAction({
           internal.mutations.getMemberByPhone,
           { phone: entry.phone },
         );
+
+        if (!targetMember) {
+          await ctx.runMutation(internal.mutations.logAudit, {
+            familyId,
+            event: "message_failed",
+            phone: entry.phone,
+            details: {
+              recipientPhone: entry.phone,
+              failureReason: "outreach target not found",
+            },
+            timestamp: Date.now(),
+          });
+          continue;
+        }
 
         if (targetMember?.chatId) {
           await sendMessage(targetMember.chatId, entry.message, envVars.linqApiToken);

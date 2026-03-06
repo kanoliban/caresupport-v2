@@ -136,6 +136,20 @@ export const getMemberByPhone = internalMutation({
   },
 });
 
+export const getCoordinators = internalMutation({
+  args: { familyId: v.id("families") },
+  handler: async (ctx, args) => {
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .collect();
+
+    return members.flatMap((member) =>
+      member.isCoordinator && member.phone ? [member.phone] : [],
+    );
+  },
+});
+
 export const getFamilyContext = internalMutation({
   args: { familyId: v.id("families") },
   handler: async (ctx, args) => {

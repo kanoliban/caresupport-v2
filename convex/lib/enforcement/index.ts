@@ -36,3 +36,4 @@ export type {
   ApprovalUpdate,
   ClassifiedUpdates,
 } from "./types";
+export { ACCESS_LEVELS, isAccessLevel } from "./types";
