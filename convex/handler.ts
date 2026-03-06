@@ -451,7 +451,7 @@ export const handleMessage = internalAction({
             name: routing.name,
             role: routing.role || "family_caregiver",
             relationship: routing.relationship || undefined,
-            accessLevel: routing.accessLevel || "schedule",
+            accessLevel: routing.accessLevel || "schedule+meds",
           });
           await ctx.runMutation(internal.mutations.logAudit, {
             familyId,

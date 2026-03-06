@@ -116,7 +116,7 @@ export const createMember = internalMutation({
       : "family_caregiver";
     const accessLevel = args.accessLevel && VALID_ACCESS_LEVELS.has(args.accessLevel)
       ? (args.accessLevel as "full" | "schedule+meds" | "schedule" | "provider" | "limited")
-      : "schedule";
+      : "schedule+meds";
 
     return await ctx.db.insert("members", {
       familyId: args.familyId,
