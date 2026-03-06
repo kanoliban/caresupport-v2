@@ -30,3 +30,30 @@ Read the last 2-3 entries before starting work.
 - `VISION.md` is stale (last updated Feb 19). Open questions that are now answered elsewhere haven't been backfilled.
 - `RELIABILITY.md` predates the Convex migration — may need a rewrite.
 - Claude SDK choices (extended thinking, prompt caching, structured output via `extractJson`) are implemented but not documented in prose. Only exists in `convex/lib/anthropicClient.ts`.
+
+---
+
+## 2026-03-06 — Codex
+
+### What I did
+- Added and pushed family-isolation fix commit `2dd701e` on `feat/v1-v2-schema-alignment`.
+- Re-verified `npx tsc --noEmit` and `npm test` after that patch.
+- Cleared legacy prod seed data via Convex CLI by replacing each existing table with an empty JSON array.
+- Deployed prod successfully with `npx convex deploy --typecheck=disable`.
+- Seeded prod successfully against `https://keen-raccoon-606.convex.cloud`.
+- Ran a smoke test by posting a signed `message.received` webhook to the prod HTTP action for Liban's seeded chat.
+
+### State I'm leaving
+- PR #27 includes the family-isolation fix and is pushed.
+- Prod Convex deployment `keen-raccoon-606` is on the current branch code.
+- Prod has fresh Kano pilot seed data loaded.
+- Smoke test produced an accepted webhook, inbound/outbound `messages` rows, `context_load` and `response_sent` audit rows, and successful Convex function executions with no runtime errors.
+
+### What the next agent should know
+- Convex prod deploy needed `--typecheck=disable` because Convex CLI still typechecks vitest files and trips on `import.meta.glob` even when repo `tsc` is clean.
+- The fastest safe prod reset path was CLI-based: import `[]` with `--replace` for each existing table, including legacy v1 tables.
+- Smoke test was webhook-simulated, not a physical phone interaction. It exercised the live prod handler and Linq send path.
+
+### Concerns
+- The smoke-test response quality is expected for the current architecture: the handler does not yet load structured table data (`scheduleItems`, `medications`) into the prompt, so the answer quality is limited until that future feature lands.
+- `tests/seed.test.ts` still imports the seed script in a way that can write to a real Convex deployment during `npm test`.
