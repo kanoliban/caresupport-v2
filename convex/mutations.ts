@@ -15,6 +15,8 @@ const eventValidator = v.union(
   v.literal("unknown_number"),
   v.literal("message_failed"),
   v.literal("message_status_update"),
+  v.literal("reaction_received"),
+  v.literal("participant_changed"),
 );
 
 const detailsValidator = v.object({
@@ -33,6 +35,9 @@ const detailsValidator = v.object({
   sourceMessageId: v.optional(v.string()),
   failureReason: v.optional(v.string()),
   deliveryStatus: v.optional(v.string()),
+  reactionType: v.optional(v.string()),
+  participantAction: v.optional(v.string()),
+  participantPhone: v.optional(v.string()),
 });
 
 const scopeValidator = v.union(v.literal("global"), v.literal("family"));
@@ -203,6 +208,32 @@ export const getMessageByLinqId = internalMutation({
       .withIndex("by_linq_message_id", (q) =>
         q.eq("linqMessageId", args.linqMessageId),
       )
+      .first();
+  },
+});
+
+export const updateMessageLinqId = internalMutation({
+  args: {
+    messageId: v.id("messages"),
+    linqMessageId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.messageId, { linqMessageId: args.linqMessageId });
+  },
+});
+
+export const getLatestOutboundMessage = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    phone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_family_sender_phone", (q) =>
+        q.eq("familyId", args.familyId).eq("senderPhone", args.phone),
+      )
+      .order("desc")
       .first();
   },
 });

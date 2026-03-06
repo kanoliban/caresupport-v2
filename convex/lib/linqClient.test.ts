@@ -9,9 +9,19 @@ import {
   extractMessageId,
   extractReplyTo,
   extractFailureReason,
+  extractReactionData,
+  extractParticipantData,
   sendMessage,
   createChat,
   startTyping,
+  stopTyping,
+  sendMediaMessage,
+  sendVoiceMemo,
+  sendReaction,
+  shareContactCard,
+  addParticipant,
+  removeParticipant,
+  updateChat,
   sendMessageSequence,
 } from "./linqClient";
 import { createHmac } from "crypto";
@@ -435,5 +445,424 @@ describe("extractFailureReason", () => {
 
   it("ignores non-string error values", () => {
     expect(extractFailureReason({ error: { code: 500 } })).toBe("unknown");
+  });
+});
+
+// ─── extractReactionData ────────────────────────────────────────────────
+
+describe("extractReactionData", () => {
+  it("extracts full reaction event data", () => {
+    const result = extractReactionData({
+      chat_id: "chat-1",
+      message_id: "msg-1",
+      from_handle: { handle: "+16515551234" },
+      reaction_type: "love",
+      custom_emoji: null,
+      part_index: 0,
+    });
+    expect(result).toEqual({
+      chatId: "chat-1",
+      messageId: "msg-1",
+      reactorPhone: "+16515551234",
+      reactionType: "love",
+      customEmoji: null,
+      partIndex: 0,
+    });
+  });
+
+  it("returns null when chat_id or message_id missing", () => {
+    expect(extractReactionData({ chat_id: "chat-1" })).toBeNull();
+    expect(extractReactionData({ message_id: "msg-1" })).toBeNull();
+    expect(extractReactionData({})).toBeNull();
+  });
+
+  it("handles custom emoji", () => {
+    const result = extractReactionData({
+      chat_id: "chat-1",
+      message_id: "msg-1",
+      from_handle: { handle: "+16515551234" },
+      reaction_type: "custom",
+      custom_emoji: "🚀",
+    });
+    expect(result?.customEmoji).toBe("🚀");
+  });
+});
+
+// ─── extractParticipantData ─────────────────────────────────────────────
+
+describe("extractParticipantData", () => {
+  it("extracts participant from participant.handle", () => {
+    const result = extractParticipantData({
+      chat_id: "chat-1",
+      participant: { handle: "+16515559999" },
+    });
+    expect(result).toEqual({
+      chatId: "chat-1",
+      participantPhone: "+16515559999",
+    });
+  });
+
+  it("falls back to top-level handle", () => {
+    const result = extractParticipantData({
+      chat_id: "chat-1",
+      handle: "+16515558888",
+    });
+    expect(result).toEqual({
+      chatId: "chat-1",
+      participantPhone: "+16515558888",
+    });
+  });
+
+  it("returns null when chat_id missing", () => {
+    expect(extractParticipantData({ handle: "+16515551234" })).toBeNull();
+  });
+});
+
+// ─── stopTyping ─────────────────────────────────────────────────────────
+
+describe("stopTyping", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns success when API returns 204", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 204, text: () => Promise.resolve("") }),
+    );
+
+    // #when
+    const result = await stopTyping("chat-1", "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      expect.stringContaining("/chats/chat-1/typing"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+// ─── sendMessage with effect ────────────────────────────────────────────
+
+describe("sendMessage with effect", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends message with screen effect", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () =>
+          Promise.resolve(JSON.stringify({ message: { id: "msg-e", service: "iMessage" } })),
+      }),
+    );
+
+    // #when
+    await sendMessage("chat-1", "Congrats!", "tok", { type: "screen", name: "confetti" });
+
+    // #then
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.message.effect).toEqual({ screen_effect: "confetti" });
+  });
+
+  it("sends message with bubble effect", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () =>
+          Promise.resolve(JSON.stringify({ message: { id: "msg-e", service: "iMessage" } })),
+      }),
+    );
+
+    // #when
+    await sendMessage("chat-1", "shhh", "tok", { type: "bubble", name: "gentle" });
+
+    // #then
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.message.effect).toEqual({ bubble_effect: "gentle" });
+  });
+
+  it("sends message without effect when null", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () =>
+          Promise.resolve(JSON.stringify({ message: { id: "msg-e", service: "iMessage" } })),
+      }),
+    );
+
+    // #when
+    await sendMessage("chat-1", "Hello", "tok", null);
+
+    // #then
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.message.effect).toBeUndefined();
+  });
+});
+
+// ─── sendMediaMessage ───────────────────────────────────────────────────
+
+describe("sendMediaMessage", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends text + media parts", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 202,
+        text: () =>
+          Promise.resolve(JSON.stringify({ message: { id: "msg-m", service: "iMessage" } })),
+      }),
+    );
+
+    // #when
+    const result = await sendMediaMessage("chat-1", "Here's the schedule", "https://cdn.example.com/sched.pdf", "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.message.parts).toHaveLength(2);
+    expect(callBody.message.parts[0]).toEqual({ type: "text", value: "Here's the schedule" });
+    expect(callBody.message.parts[1]).toEqual({ type: "media", url: "https://cdn.example.com/sched.pdf" });
+  });
+
+  it("sends media-only when text is empty", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 202,
+        text: () =>
+          Promise.resolve(JSON.stringify({ message: { id: "msg-m2", service: "iMessage" } })),
+      }),
+    );
+
+    // #when
+    await sendMediaMessage("chat-1", "", "https://cdn.example.com/photo.jpg", "tok");
+
+    // #then
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.message.parts).toHaveLength(1);
+    expect(callBody.message.parts[0].type).toBe("media");
+  });
+});
+
+// ─── sendVoiceMemo ──────────────────────────────────────────────────────
+
+describe("sendVoiceMemo", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends voice memo and returns success", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 202,
+        text: () => Promise.resolve("{}"),
+      }),
+    );
+
+    // #when
+    const result = await sendVoiceMemo("chat-1", "https://cdn.example.com/memo.m4a", "+16515550000", "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.from).toBe("+16515550000");
+    expect(callBody.voice_memo_url).toBe("https://cdn.example.com/memo.m4a");
+  });
+});
+
+// ─── sendReaction ───────────────────────────────────────────────────────
+
+describe("sendReaction", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends reaction and returns success", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ reaction: {} })),
+      }),
+    );
+
+    // #when
+    const result = await sendReaction("msg-1", "add", "love", "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      expect.stringContaining("/messages/msg-1/reactions"),
+      expect.objectContaining({ method: "POST" }),
+    );
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.operation).toBe("add");
+    expect(callBody.type).toBe("love");
+    expect(callBody.part_index).toBe(0);
+  });
+
+  it("includes custom_emoji for custom type", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve("{}"),
+      }),
+    );
+
+    // #when
+    await sendReaction("msg-1", "add", "custom", "tok", 0, "🚀");
+
+    // #then
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.custom_emoji).toBe("🚀");
+  });
+});
+
+// ─── shareContactCard ───────────────────────────────────────────────────
+
+describe("shareContactCard", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns success on 204", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 204, text: () => Promise.resolve("") }),
+    );
+
+    // #when
+    const result = await shareContactCard("chat-1", "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+  });
+});
+
+// ─── addParticipant ─────────────────────────────────────────────────────
+
+describe("addParticipant", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns success on 202", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 202, text: () => Promise.resolve("") }),
+    );
+
+    // #when
+    const result = await addParticipant("chat-1", "+16515551234", "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.handle).toBe("+16515551234");
+  });
+});
+
+// ─── removeParticipant ──────────────────────────────────────────────────
+
+describe("removeParticipant", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns success on 202", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 202, text: () => Promise.resolve("") }),
+    );
+
+    // #when
+    const result = await removeParticipant("chat-1", "+16515551234", "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      expect.stringContaining("/chats/chat-1/participants"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+// ─── updateChat ─────────────────────────────────────────────────────────
+
+describe("updateChat", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("updates display name", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ id: "chat-1" })),
+      }),
+    );
+
+    // #when
+    const result = await updateChat("chat-1", { displayName: "Kano Care Team" }, "tok");
+
+    // #then
+    expect(result.success).toBe(true);
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.display_name).toBe("Kano Care Team");
+    expect(callBody.group_chat_icon).toBeUndefined();
+  });
+
+  it("updates both display name and icon", async () => {
+    // #given
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ id: "chat-1" })),
+      }),
+    );
+
+    // #when
+    await updateChat("chat-1", { displayName: "Team", groupChatIcon: "https://img.png" }, "tok");
+
+    // #then
+    const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(callBody.display_name).toBe("Team");
+    expect(callBody.group_chat_icon).toBe("https://img.png");
   });
 });

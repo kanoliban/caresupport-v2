@@ -37,7 +37,10 @@ import {
   createChat,
   markAsRead,
   startTyping,
+  sendReaction,
+  shareContactCard,
 } from "./lib/linqClient";
+import type { MessageEffect } from "./lib/linqClient";
 import {
   SOUL_CONTENT,
   ROUTING_CONTENT,
@@ -438,8 +441,35 @@ export const handleMessage = internalAction({
     }
 
     // Step 15: Pace response + log outbound + send
-    await logOutbound(ctx, familyId, senderPhone, memberName, smsResponse, now);
-    await sendResponse(chatId, smsResponse, env(), pacingStart);
+    const effectForSend: MessageEffect | null =
+      parsed.effect
+        ? { type: parsed.effect.type, name: parsed.effect.name }
+        : null;
+    const outboundMessageId = await logOutbound(ctx, familyId, senderPhone, memberName, smsResponse, now);
+    const linqMessageIds = await sendResponse(chatId, smsResponse, env(), pacingStart, effectForSend);
+    if (linqMessageIds.length > 0) {
+      await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+        messageId: outboundMessageId,
+        linqMessageId: linqMessageIds[0],
+      });
+    }
+
+    // Step 15b: Send reactions
+    const envVarsForReaction = env();
+    for (const reaction of parsed.reactions) {
+      if (reaction.targetMessage === "last_inbound" && args.sourceMessageId) {
+        try {
+          await sendReaction(
+            args.sourceMessageId,
+            "add",
+            reaction.type,
+            envVarsForReaction.linqApiToken,
+          );
+        } catch {
+          // reactions are best-effort
+        }
+      }
+    }
 
     // Step 16: Process outreach
     const envVars = env();
@@ -487,6 +517,11 @@ export const handleMessage = internalAction({
               memberId: targetMember._id,
               chatId: result.chatId,
             });
+            try {
+              await shareContactCard(result.chatId, envVars.linqApiToken);
+            } catch {
+              // contact card sharing is best-effort
+            }
           }
         }
       } catch {
@@ -520,8 +555,8 @@ async function logOutbound(
   memberName: string,
   body: string,
   timestamp: number,
-): Promise<void> {
-  await ctx.runMutation(internal.mutations.logMessage, {
+): Promise<Id<"messages">> {
+  return await ctx.runMutation(internal.mutations.logMessage, {
     familyId,
     senderPhone: phone,
     direction: "outbound" as const,
@@ -536,14 +571,15 @@ async function sendResponse(
   text: string,
   envVars: { linqApiToken: string },
   pacingStart = Date.now(),
-): Promise<void> {
+  effect: MessageEffect | null = null,
+): Promise<string[]> {
   if (!envVars.linqApiToken) {
     console.error("[sendResponse] No LINQ_API_TOKEN — skipping send");
-    return;
+    return [];
   }
   if (!chatId) {
     console.error("[sendResponse] No chatId — cannot send");
-    return;
+    return [];
   }
   const bubbles = splitIntoBubbles(text);
   const initialDelayMs = getInitialResponseDelayMs(bubbles.length);
@@ -554,10 +590,32 @@ async function sendResponse(
   console.log(
     `[sendResponse] Sending to chatId=${chatId}, text length=${text.length}, bubbles=${bubbles.length}`,
   );
-  const results = await sendMessageSequence(chatId, bubbles, envVars.linqApiToken);
-  for (const r of results) {
-    if (!r.success) {
-      console.error("[sendResponse] Send failed:", JSON.stringify(r.error));
+  const allResults: { success: boolean; messageId?: string; error?: unknown }[] = [];
+  if (effect && bubbles.length > 0) {
+    const firstResult = await sendMessage(chatId, bubbles[0], envVars.linqApiToken, effect);
+    allResults.push(firstResult);
+    if (!firstResult.success) {
+      console.error("[sendResponse] Send failed:", JSON.stringify(firstResult.error));
+    }
+    if (bubbles.length > 1) {
+      const remaining = await sendMessageSequence(chatId, bubbles.slice(1), envVars.linqApiToken);
+      for (const r of remaining) {
+        allResults.push(r);
+        if (!r.success) {
+          console.error("[sendResponse] Send failed:", JSON.stringify(r.error));
+        }
+      }
+    }
+  } else {
+    const results = await sendMessageSequence(chatId, bubbles, envVars.linqApiToken);
+    for (const r of results) {
+      allResults.push(r);
+      if (!r.success) {
+        console.error("[sendResponse] Send failed:", JSON.stringify(r.error));
+      }
     }
   }
+  return allResults
+    .filter((r) => r.success && r.messageId)
+    .map((r) => r.messageId as string);
 }

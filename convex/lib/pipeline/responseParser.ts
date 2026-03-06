@@ -6,6 +6,8 @@ const EMPTY_ARRAYS: Omit<AgentResponse, "smsResponse" | "internalNotes"> = {
   selfCorrections: [],
   memberUpdates: [],
   routingUpdates: [],
+  reactions: [],
+  effect: null,
 };
 
 const SNAKE_TO_CAMEL: Record<string, keyof AgentResponse> = {
@@ -18,6 +20,7 @@ const SNAKE_TO_CAMEL: Record<string, keyof AgentResponse> = {
   routing_updates: "routingUpdates",
   old_content: "oldContent" as keyof AgentResponse,
   access_level: "accessLevel" as keyof AgentResponse,
+  target_message: "targetMessage" as keyof AgentResponse,
 };
 
 export function normalizeResponse(parsed: Record<string, unknown>): AgentResponse {
@@ -35,6 +38,8 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
     selfCorrections: Array.isArray(result.selfCorrections) ? result.selfCorrections : [],
     memberUpdates: Array.isArray(result.memberUpdates) ? result.memberUpdates : [],
     routingUpdates: Array.isArray(result.routingUpdates) ? result.routingUpdates : [],
+    reactions: Array.isArray(result.reactions) ? result.reactions : [],
+    effect: result.effect && typeof result.effect === "object" ? result.effect as AgentResponse["effect"] : null,
   };
 }
 

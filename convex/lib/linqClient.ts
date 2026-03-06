@@ -48,16 +48,38 @@ async function linqRequest(
   return { status: res.status, data };
 }
 
+export interface MessageEffect {
+  type: "screen" | "bubble";
+  name: string;
+}
+
+export type ReactionType =
+  | "love"
+  | "like"
+  | "dislike"
+  | "laugh"
+  | "emphasize"
+  | "question"
+  | "custom";
+
 // ─── Chat operations ─────────────────────────────────────────────────────
 
 export async function sendMessage(
   chatId: string,
   text: string,
   apiToken: string,
+  effect?: MessageEffect | null,
 ): Promise<LinqSendResult> {
-  const body = {
-    message: { parts: [{ type: "text", value: text }] },
+  const message: Record<string, unknown> = {
+    parts: [{ type: "text", value: text }],
   };
+  if (effect) {
+    message.effect =
+      effect.type === "screen"
+        ? { screen_effect: effect.name }
+        : { bubble_effect: effect.name };
+  }
+  const body = { message };
 
   const { status, data } = await linqRequest(
     "POST",
@@ -126,6 +148,148 @@ export async function startTyping(
     apiToken,
   );
   return { success: status === 204 };
+}
+
+export async function stopTyping(
+  chatId: string,
+  apiToken: string,
+): Promise<{ success: boolean }> {
+  const { status } = await linqRequest(
+    "DELETE",
+    `/chats/${chatId}/typing`,
+    apiToken,
+  );
+  return { success: status === 204 };
+}
+
+export async function sendMediaMessage(
+  chatId: string,
+  text: string,
+  mediaUrl: string,
+  apiToken: string,
+): Promise<LinqSendResult> {
+  const parts: Array<Record<string, unknown>> = [];
+  if (text) parts.push({ type: "text", value: text });
+  parts.push({ type: "media", url: mediaUrl });
+
+  const body = { message: { parts } };
+  const { status, data } = await linqRequest(
+    "POST",
+    `/chats/${chatId}/messages`,
+    apiToken,
+    body,
+  );
+
+  if (status >= 200 && status < 300) {
+    const msg = (data.message ?? data) as Record<string, unknown>;
+    return {
+      success: true,
+      messageId: msg.id as string | undefined,
+      service: (msg.service as string) ?? "unknown",
+    };
+  }
+  return { success: false, error: data };
+}
+
+export async function sendVoiceMemo(
+  chatId: string,
+  audioUrl: string,
+  fromPhone: string,
+  apiToken: string,
+): Promise<{ success: boolean; error?: unknown }> {
+  const body = { from: fromPhone, voice_memo_url: audioUrl };
+  const { status, data } = await linqRequest(
+    "POST",
+    `/chats/${chatId}/voicememo`,
+    apiToken,
+    body,
+  );
+  if (status >= 200 && status < 300) return { success: true };
+  return { success: false, error: data };
+}
+
+export async function sendReaction(
+  messageId: string,
+  operation: "add" | "remove",
+  type: ReactionType,
+  apiToken: string,
+  partIndex = 0,
+  customEmoji?: string,
+): Promise<{ success: boolean; error?: unknown }> {
+  const body: Record<string, unknown> = { operation, type, part_index: partIndex };
+  if (type === "custom" && customEmoji) body.custom_emoji = customEmoji;
+
+  const { status, data } = await linqRequest(
+    "POST",
+    `/messages/${messageId}/reactions`,
+    apiToken,
+    body,
+  );
+  if (status >= 200 && status < 300) return { success: true };
+  return { success: false, error: data };
+}
+
+export async function shareContactCard(
+  chatId: string,
+  apiToken: string,
+): Promise<{ success: boolean }> {
+  const { status } = await linqRequest(
+    "POST",
+    `/chats/${chatId}/share_contact_card`,
+    apiToken,
+  );
+  return { success: status === 204 };
+}
+
+export async function addParticipant(
+  chatId: string,
+  handle: string,
+  apiToken: string,
+): Promise<{ success: boolean; error?: unknown }> {
+  const body = { handle };
+  const { status, data } = await linqRequest(
+    "POST",
+    `/chats/${chatId}/participants`,
+    apiToken,
+    body,
+  );
+  if (status === 202 || (status >= 200 && status < 300)) return { success: true };
+  return { success: false, error: data };
+}
+
+export async function removeParticipant(
+  chatId: string,
+  handle: string,
+  apiToken: string,
+): Promise<{ success: boolean; error?: unknown }> {
+  const body = { handle };
+  const { status, data } = await linqRequest(
+    "DELETE",
+    `/chats/${chatId}/participants`,
+    apiToken,
+    body,
+  );
+  if (status === 202 || (status >= 200 && status < 300)) return { success: true };
+  return { success: false, error: data };
+}
+
+export async function updateChat(
+  chatId: string,
+  opts: { displayName?: string; groupChatIcon?: string },
+  apiToken: string,
+): Promise<{ success: boolean; error?: unknown }> {
+  const body: Record<string, unknown> = {};
+  if (opts.displayName !== undefined) body.display_name = opts.displayName;
+  if (opts.groupChatIcon !== undefined) body.group_chat_icon = opts.groupChatIcon;
+
+  const { status, data } = await linqRequest(
+    "PUT",
+    `/chats/${chatId}`,
+    apiToken,
+    body,
+  );
+  if (status >= 200 && status < 300) return { success: true };
+  return { success: false, error: data };
 }
 
 // ─── Bubble splitting ────────────────────────────────────────────────────
@@ -353,4 +517,56 @@ export function extractFailureReason(
   const msg = (eventData.message ?? {}) as Record<string, unknown>;
   if (typeof msg.error === "string") return msg.error;
   return "unknown";
+}
+
+export interface ReactionEventData {
+  chatId: string;
+  messageId: string;
+  reactorPhone: string;
+  reactionType: string;
+  customEmoji: string | null;
+  partIndex: number;
+}
+
+export function extractReactionData(
+  eventData: Record<string, unknown>,
+): ReactionEventData | null {
+  const chatId =
+    (eventData.chat_id as string) ?? "";
+  const messageId =
+    (eventData.message_id as string) ?? "";
+  if (!chatId || !messageId) return null;
+
+  const fromHandle = eventData.from_handle as Record<string, unknown> | undefined;
+  const reactorPhone = (fromHandle?.handle as string) ?? "";
+
+  return {
+    chatId,
+    messageId,
+    reactorPhone,
+    reactionType: (eventData.reaction_type as string) ?? "unknown",
+    customEmoji: (eventData.custom_emoji as string) ?? null,
+    partIndex: typeof eventData.part_index === "number" ? eventData.part_index : 0,
+  };
+}
+
+export interface ParticipantEventData {
+  chatId: string;
+  participantPhone: string;
+}
+
+export function extractParticipantData(
+  eventData: Record<string, unknown>,
+): ParticipantEventData | null {
+  const chatId =
+    (eventData.chat_id as string) ?? "";
+
+  const participant = eventData.participant as Record<string, unknown> | undefined;
+  const participantPhone =
+    (participant?.handle as string) ??
+    (eventData.handle as string) ??
+    "";
+
+  if (!chatId) return null;
+  return { chatId, participantPhone };
 }

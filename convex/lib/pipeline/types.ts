@@ -87,6 +87,16 @@ export interface HandlerResult {
   outreachSent?: number;
 }
 
+export interface ReactionRequest {
+  targetMessage: "last_inbound" | "last_outbound";
+  type: "love" | "like" | "dislike" | "laugh" | "emphasize" | "question";
+}
+
+export interface EffectRequest {
+  type: "screen" | "bubble";
+  name: string;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
@@ -95,4 +105,6 @@ export interface AgentResponse {
   selfCorrections: string[];
   memberUpdates: FileUpdate[];
   routingUpdates: RoutingUpdate[];
+  reactions: ReactionRequest[];
+  effect: EffectRequest | null;
 }

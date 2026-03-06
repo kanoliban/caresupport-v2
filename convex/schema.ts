@@ -84,6 +84,8 @@ const auditEvent = v.union(
   v.literal("unknown_number"),
   v.literal("message_failed"),
   v.literal("message_status_update"),
+  v.literal("reaction_received"),
+  v.literal("participant_changed"),
 );
 
 const auditDetails = v.object({
@@ -102,6 +104,9 @@ const auditDetails = v.object({
   sourceMessageId: v.optional(v.string()),
   failureReason: v.optional(v.string()),
   deliveryStatus: v.optional(v.string()),
+  reactionType: v.optional(v.string()),
+  participantAction: v.optional(v.string()),
+  participantPhone: v.optional(v.string()),
 });
 
 const approvalUpdate = v.object({
