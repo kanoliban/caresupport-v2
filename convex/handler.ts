@@ -29,6 +29,7 @@ import {
   isAccessLevel,
 } from "./lib/enforcement";
 import type { AccessLevel } from "./lib/enforcement";
+import { normalizePhone } from "./mutations";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
   sendMessage,
@@ -440,6 +441,34 @@ export const handleMessage = internalAction({
       }
     }
 
+    // Step 14b: Process routing updates (member registration)
+    for (const routing of parsed.routingUpdates) {
+      if (routing.action === "add" && routing.phone && routing.name) {
+        try {
+          await ctx.runMutation(internal.mutations.createMember, {
+            familyId,
+            phone: routing.phone,
+            name: routing.name,
+            role: routing.role || "family_caregiver",
+            relationship: routing.relationship || undefined,
+            accessLevel: routing.accessLevel || "schedule",
+          });
+          await ctx.runMutation(internal.mutations.logAudit, {
+            familyId,
+            event: "member_added",
+            phone: routing.phone,
+            details: {
+              recipientPhone: routing.phone,
+              initiatedBy: senderPhone,
+            },
+            timestamp: Date.now(),
+          });
+        } catch {
+          // member registration is best-effort — don't block the response
+        }
+      }
+    }
+
     // Step 15: Pace response + log outbound + send
     const effectForSend: MessageEffect | null =
       parsed.effect
@@ -473,12 +502,15 @@ export const handleMessage = internalAction({
 
     // Step 16: Process outreach
     const envVars = env();
+    const outreachResults: Array<{ name: string; success: boolean; message?: string }> = [];
     for (const entry of parsed.needsOutreach) {
       try {
+        const normalizedPhone = normalizePhone(entry.phone) ?? entry.phone;
+
         const outreachEvent = buildOutreachSentEvent({
           familyId,
           initiatedBy: senderPhone,
-          sentToPhone: entry.phone,
+          sentToPhone: normalizedPhone,
           sentToName: entry.name,
           purpose: entry.message.slice(0, 200),
         });
@@ -486,33 +518,40 @@ export const handleMessage = internalAction({
 
         const targetMember = await ctx.runMutation(
           internal.mutations.getMemberByPhone,
-          { phone: entry.phone },
+          { phone: normalizedPhone },
         );
 
         if (!targetMember) {
           await ctx.runMutation(internal.mutations.logAudit, {
             familyId,
             event: "message_failed",
-            phone: entry.phone,
+            phone: normalizedPhone,
             details: {
-              recipientPhone: entry.phone,
+              recipientPhone: normalizedPhone,
               failureReason: "outreach target not found",
             },
             timestamp: Date.now(),
           });
+          outreachResults.push({ name: entry.name, success: false, message: entry.message });
           continue;
         }
 
-        if (targetMember?.chatId) {
-          await sendMessage(targetMember.chatId, entry.message, envVars.linqApiToken);
+        let sendSuccess = false;
+        let linqMessageId: string | undefined;
+        if (targetMember.chatId) {
+          const sendResult = await sendMessage(targetMember.chatId, entry.message, envVars.linqApiToken);
+          sendSuccess = sendResult.success;
+          linqMessageId = sendResult.messageId;
         } else {
           const result = await createChat(
-            entry.phone,
+            normalizedPhone,
             entry.message,
             envVars.linqPhoneNumber,
             envVars.linqApiToken,
           );
-          if (result.success && result.chatId && targetMember) {
+          sendSuccess = result.success;
+          linqMessageId = result.messageId;
+          if (result.success && result.chatId) {
             await ctx.runMutation(internal.mutations.updateMemberChatId, {
               memberId: targetMember._id,
               chatId: result.chatId,
@@ -524,8 +563,68 @@ export const handleMessage = internalAction({
             }
           }
         }
+
+        if (sendSuccess) {
+          const msgId = await logOutbound(ctx, familyId, normalizedPhone, entry.name, entry.message, Date.now());
+          if (linqMessageId) {
+            await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+              messageId: msgId,
+              linqMessageId,
+            });
+          }
+        }
+
+        outreachResults.push({ name: entry.name, success: sendSuccess, message: entry.message });
       } catch {
-        // outreach is best-effort
+        outreachResults.push({ name: entry.name, success: false });
+      }
+    }
+
+    // Step 16b: Honest cc confirmation to coordinator
+    if (outreachResults.length > 0 && chatId && envVars.linqApiToken) {
+      const sent = outreachResults.filter((r) => r.success);
+      const failed = outreachResults.filter((r) => !r.success);
+      const lines: string[] = [];
+
+      for (const r of sent) {
+        const preview =
+          r.message && r.message.length > 80
+            ? r.message.slice(0, 80) + "..."
+            : (r.message ?? "");
+        lines.push(
+          `Just texted ${r.name}: "${preview}"\nI'll let you know when they respond.`,
+        );
+      }
+
+      for (const r of failed) {
+        lines.push(`Couldn't reach ${r.name} — want me to try again?`);
+      }
+
+      if (lines.length > 0) {
+        const confirmation = lines.join("\n\n");
+        try {
+          const ccMsgId = await logOutbound(
+            ctx,
+            familyId,
+            senderPhone,
+            memberName,
+            confirmation,
+            Date.now(),
+          );
+          const ccResult = await sendMessage(
+            chatId,
+            confirmation,
+            envVars.linqApiToken,
+          );
+          if (ccResult.messageId) {
+            await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+              messageId: ccMsgId,
+              linqMessageId: ccResult.messageId,
+            });
+          }
+        } catch {
+          // cc confirmation is best-effort
+        }
       }
     }
 

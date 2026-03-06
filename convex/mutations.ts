@@ -17,6 +17,7 @@ const eventValidator = v.union(
   v.literal("message_status_update"),
   v.literal("reaction_received"),
   v.literal("participant_changed"),
+  v.literal("member_added"),
 );
 
 const detailsValidator = v.object({
@@ -59,6 +60,76 @@ const updateValidator = v.object({
   operation: v.string(),
   content: v.string(),
   oldContent: v.string(),
+});
+
+const VALID_ROLES = new Set([
+  "care_recipient",
+  "family_caregiver",
+  "professional_caregiver",
+  "community_supporter",
+]);
+
+const VALID_ACCESS_LEVELS = new Set([
+  "full",
+  "schedule+meds",
+  "schedule",
+  "provider",
+  "limited",
+]);
+
+export function normalizePhone(raw: string): string | null {
+  if (!raw) return null;
+  const stripped = raw.replace(/[^\d+]/g, "");
+  const digits = stripped.replace(/\+/g, "");
+  if (digits.length < 7) return null;
+  if (stripped.startsWith("+")) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
+export const createMember = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    phone: v.string(),
+    name: v.string(),
+    role: v.string(),
+    relationship: v.optional(v.string()),
+    accessLevel: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const phone = normalizePhone(args.phone);
+    if (!phone) {
+      throw new Error(`Cannot normalize phone: ${args.phone}`);
+    }
+
+    const existing = await ctx.db
+      .query("members")
+      .withIndex("by_family_phone", (q) =>
+        q.eq("familyId", args.familyId).eq("phone", phone),
+      )
+      .first();
+    if (existing) return existing._id;
+
+    const role = VALID_ROLES.has(args.role)
+      ? (args.role as "care_recipient" | "family_caregiver" | "professional_caregiver" | "community_supporter")
+      : "family_caregiver";
+    const accessLevel = args.accessLevel && VALID_ACCESS_LEVELS.has(args.accessLevel)
+      ? (args.accessLevel as "full" | "schedule+meds" | "schedule" | "provider" | "limited")
+      : "schedule";
+
+    return await ctx.db.insert("members", {
+      familyId: args.familyId,
+      phone,
+      name: args.name,
+      role,
+      accessLevel,
+      isCoordinator: false,
+      isEmergencyContact: false,
+      active: true,
+      relationship: args.relationship,
+    });
+  },
 });
 
 export const logMessage = internalMutation({

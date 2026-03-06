@@ -86,6 +86,7 @@ const auditEvent = v.union(
   v.literal("message_status_update"),
   v.literal("reaction_received"),
   v.literal("participant_changed"),
+  v.literal("member_added"),
 );
 
 const auditDetails = v.object({
