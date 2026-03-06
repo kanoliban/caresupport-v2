@@ -167,6 +167,7 @@ export default defineSchema({
     .index("by_family", ["familyId"])
     .index("by_family_timestamp", ["familyId", "timestamp"])
     .index("by_linq_message_id", ["linqMessageId"])
+    .index("by_family_sender_phone", ["familyId", "senderPhone"])
     .index("by_sender_phone", ["senderPhone"]),
 
   medications: defineTable({

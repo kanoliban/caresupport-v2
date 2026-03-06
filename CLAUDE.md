@@ -33,6 +33,7 @@ iMessage arrives via Linq webhook
 4. Medication changes always require coordinator approval (hardcoded safety rule)
 5. Medical info is 1:1 only — never shared in group chats
 6. Agent writes to `context` fields on families and members — no markdown blob round-trips
+7. Every DB query on family-scoped data must filter by `familyId` — phone-only lookups are for member resolution only
 
 ## Schema Overview
 

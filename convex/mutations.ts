@@ -146,11 +146,13 @@ export const getFamilyContext = internalMutation({
 });
 
 export const getRecentMessages = internalMutation({
-  args: { phone: v.string(), limit: v.number() },
+  args: { familyId: v.id("families"), phone: v.string(), limit: v.number() },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("messages")
-      .withIndex("by_sender_phone", (q) => q.eq("senderPhone", args.phone))
+      .withIndex("by_family_sender_phone", (q) =>
+        q.eq("familyId", args.familyId).eq("senderPhone", args.phone),
+      )
       .order("desc")
       .take(args.limit);
   },

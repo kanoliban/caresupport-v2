@@ -13,6 +13,14 @@ Repo: `kanoliban/caresupport-v2`
 - **Roles**: `care_recipient`, `family_caregiver`, `professional_caregiver`, `community_supporter`
 - **Enforcement**: Safety is mechanical (code in `convex/lib/enforcement/`), not prompt-level
 
+## Family Isolation (non-negotiable)
+
+Every DB query on family-scoped data must filter by `familyId`.
+
+- `getMemberByPhone` is the exception: phone-only lookup is the resolution step
+- `getMessageByLinqId` stays keyed by Linq message ID for verified webhook callbacks
+- Everything else that reads family-scoped state must scope by `familyId`, even if a phone number is also present
+
 ## Who We Serve
 
 Three pilot families. Read `docs/design.md` (lines 9–28) for full detail.

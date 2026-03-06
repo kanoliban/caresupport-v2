@@ -178,6 +178,7 @@ export const handleMessage = internalAction({
     const [familyCtx, recentConvos, lessons] = await Promise.all([
       ctx.runMutation(internal.mutations.getFamilyContext, { familyId }),
       ctx.runMutation(internal.mutations.getRecentMessages, {
+        familyId,
         phone: senderPhone,
         limit: 50,
       }),
