@@ -142,7 +142,7 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     blocks.push({ type: "text", text: parts.join("\n\n"), cacheBreakpoint: false });
   }
 
-  // Block 3: Response format + channel guidance
+  // Block 3: Response format + channel guidance (end of static prefix — cache here)
   const channel = channelGuidance(input.service);
   let block3Text = channel ? channel + "\n\n" + RESPONSE_FORMAT : RESPONSE_FORMAT;
   if (input.toolsActive) {
@@ -153,7 +153,7 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
       "For questions about schedule, medications, care team, or family notes, " +
       "call the relevant tool first, then use the returned data in your response.";
   }
-  blocks.push({ type: "text", text: block3Text, cacheBreakpoint: false });
+  blocks.push({ type: "text", text: block3Text, cacheBreakpoint: true });
 
   // Block 4: Lessons
   if (input.lessonsContent) {

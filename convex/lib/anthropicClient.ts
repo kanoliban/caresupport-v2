@@ -1,12 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { ThinkingConfigParam } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { SystemBlock } from "./pipeline/types";
 
-const THINKING_BUDGET = 10_000;
 const MAX_TOKENS = 16_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 
 const MODEL_FALLBACK_CHAIN = [
-  "claude-haiku-4-5-20251001",
+  "claude-haiku-4-5",
   "claude-sonnet-4-6",
   "claude-opus-4-6",
 ] as const;
@@ -42,6 +42,17 @@ function buildSystemParam(
   });
 }
 
+function thinkingConfig(model: string): ThinkingConfigParam | undefined {
+  if (model.includes("haiku")) return undefined;
+  return { type: "adaptive" };
+}
+
+function effortLevel(model: string): "medium" | "high" | undefined {
+  if (model.includes("haiku")) return undefined;
+  if (model.includes("opus")) return "high";
+  return "medium";
+}
+
 async function tryModel(
   client: Anthropic,
   model: string,
@@ -52,12 +63,16 @@ async function tryModel(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  const thinkingParam = thinkingConfig(model);
+  const effort = effortLevel(model);
+
   try {
     const response = await client.messages.create(
       {
         model,
         max_tokens: MAX_TOKENS,
-        thinking: { type: "enabled", budget_tokens: THINKING_BUDGET },
+        ...(thinkingParam && { thinking: thinkingParam }),
+        ...(effort && { output_config: { effort } }),
         system,
         messages,
       },

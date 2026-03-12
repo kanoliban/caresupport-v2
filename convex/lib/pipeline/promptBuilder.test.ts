@@ -136,11 +136,12 @@ describe("channelGuidance", () => {
 });
 
 describe("buildSystemBlocks", () => {
-  it("returns array with cache breakpoint on member block", () => {
+  it("caches static prefix (block 3) and member block", () => {
     const blocks = buildSystemBlocks(makeInput());
     const breakpoints = blocks.filter((b) => b.cacheBreakpoint);
-    expect(breakpoints).toHaveLength(1);
-    expect(breakpoints[0].text).toContain("YOU ARE TEXTING WITH: Rob");
+    expect(breakpoints).toHaveLength(2);
+    expect(breakpoints[0].text).toContain("RESPONSE FORMAT");
+    expect(breakpoints[1].text).toContain("YOU ARE TEXTING WITH: Rob");
   });
 
   it("includes SOUL content as first block", () => {
@@ -195,7 +196,7 @@ describe("buildSystemBlocks", () => {
 
   it("includes member context when provided", () => {
     const blocks = buildSystemBlocks(makeInput({ memberContext: "Prefers morning texts" }));
-    const memberBlock = blocks.find((b) => b.cacheBreakpoint);
+    const memberBlock = blocks.find((b) => b.text.includes("YOU ARE TEXTING WITH"));
     expect(memberBlock!.text).toContain("WHAT YOU KNOW ABOUT ROB");
     expect(memberBlock!.text).toContain("Prefers morning texts");
   });

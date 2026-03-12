@@ -24,7 +24,7 @@ function makeSuccessResponse(overrides?: {
   content.push({ type: "text" as const, text: overrides?.text ?? '{"sms_response":"Hi"}' });
   return {
     content,
-    model: overrides?.model ?? "claude-haiku-4-5-20251001",
+    model: overrides?.model ?? "claude-haiku-4-5",
     usage: { input_tokens: 100, output_tokens: 50 },
   };
 }
@@ -70,7 +70,7 @@ describe("callAnthropic", () => {
 
     // #then
     expect(result.text).toBe('{"sms_response":"Hi"}');
-    expect(result.model).toBe("claude-haiku-4-5-20251001");
+    expect(result.model).toBe("claude-haiku-4-5");
     expect(result.inputTokens).toBe(100);
     expect(result.outputTokens).toBe(50);
   });
@@ -162,18 +162,45 @@ describe("callAnthropic", () => {
     );
   });
 
-  it("includes extended thinking in request", async () => {
+  it("omits thinking for Haiku", async () => {
+    // #given — default model is Haiku
+    await callWithMock(
+      (...args: unknown[]) => {
+        const body = args[0] as Record<string, unknown>;
+        expect(body.thinking).toBeUndefined();
+        expect(body.output_config).toBeUndefined();
+        return Promise.resolve(makeSuccessResponse());
+      },
+    );
+  });
+
+  it("sends adaptive thinking and effort for Sonnet", async () => {
     // #given
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
-        expect(body.thinking).toEqual({
-          type: "enabled",
-          budget_tokens: 10_000,
-        });
-        expect(body.max_tokens).toBe(16_000);
-        return Promise.resolve(makeSuccessResponse());
+        expect(body.thinking).toEqual({ type: "adaptive" });
+        expect(body.output_config).toEqual({ effort: "medium" });
+        return Promise.resolve(
+          makeSuccessResponse({ model: "claude-sonnet-4-6" }),
+        );
       },
+      "claude-sonnet-4-6",
+    );
+  });
+
+  it("sends adaptive thinking and high effort for Opus", async () => {
+    // #given
+    await callWithMock(
+      (...args: unknown[]) => {
+        const body = args[0] as Record<string, unknown>;
+        expect(body.thinking).toEqual({ type: "adaptive" });
+        expect(body.output_config).toEqual({ effort: "high" });
+        return Promise.resolve(
+          makeSuccessResponse({ model: "claude-opus-4-6" }),
+        );
+      },
+      "claude-opus-4-6",
     );
   });
 });

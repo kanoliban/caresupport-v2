@@ -1,7 +1,7 @@
 import type { Intent, RouteResult, RouteTier } from "./types";
 
 export const MODELS: Record<RouteTier, string> = {
-  fast: "claude-haiku-4-5-20251001",
+  fast: "claude-haiku-4-5",
   reason: "claude-sonnet-4-6",
   critical: "claude-opus-4-6",
 };
