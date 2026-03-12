@@ -30,21 +30,27 @@ function makeSuccessResponse(overrides?: {
 }
 
 describe("callAnthropic", () => {
-  let mockCreate: ReturnType<typeof vi.fn>;
+  let mockStream: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.resetModules();
-    mockCreate = vi.fn();
+    mockStream = vi.fn();
   });
 
   async function callWithMock(
-    createImpl: (...args: unknown[]) => unknown,
+    streamImpl: (...args: unknown[]) => unknown,
     model?: string,
   ) {
-    mockCreate.mockImplementation(createImpl);
+    mockStream.mockImplementation((...args: unknown[]) => {
+      const result = streamImpl(...args);
+      if (result && typeof result === "object" && "then" in result) {
+        return { finalMessage: () => result };
+      }
+      throw result;
+    });
     vi.doMock("@anthropic-ai/sdk", () => {
       class MockAnthropic {
-        messages = { create: mockCreate };
+        messages = { stream: mockStream };
         static APIError = class extends Error {
           status: number;
           constructor(status: number, message: string) {
@@ -144,7 +150,7 @@ describe("callAnthropic", () => {
         throw new Error("authentication failed");
       }),
     ).rejects.toThrow("authentication failed");
-    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockStream).toHaveBeenCalledTimes(1);
   });
 
   it("sends cache_control on breakpoint blocks", async () => {

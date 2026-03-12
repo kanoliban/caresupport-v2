@@ -1,9 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { ThinkingConfigParam } from "@anthropic-ai/sdk/resources/messages/messages";
+import type {
+  MessageParam,
+  TextBlockParam,
+  ThinkingConfigParam,
+} from "@anthropic-ai/sdk/resources/messages/messages";
 import type { SystemBlock } from "./pipeline/types";
 
 const MAX_TOKENS = 16_000;
-const DEFAULT_TIMEOUT_MS = 45_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 const MODEL_FALLBACK_CHAIN = [
   "claude-haiku-4-5",
@@ -13,7 +17,7 @@ const MODEL_FALLBACK_CHAIN = [
 
 export interface AnthropicInput {
   systemBlocks: SystemBlock[];
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: MessageParam[];
   model?: string;
   apiKey: string;
 }
@@ -26,15 +30,9 @@ export interface AnthropicResult {
   outputTokens: number;
 }
 
-function buildSystemParam(
-  blocks: SystemBlock[],
-): Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }> {
+function buildSystemParam(blocks: SystemBlock[]): TextBlockParam[] {
   return blocks.map((block) => {
-    const entry: {
-      type: "text";
-      text: string;
-      cache_control?: { type: "ephemeral" };
-    } = { type: "text", text: block.text };
+    const entry: TextBlockParam = { type: "text", text: block.text };
     if (block.cacheBreakpoint) {
       entry.cache_control = { type: "ephemeral" };
     }
@@ -56,8 +54,8 @@ function effortLevel(model: string): "medium" | "high" | undefined {
 async function tryModel(
   client: Anthropic,
   model: string,
-  system: ReturnType<typeof buildSystemParam>,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  system: TextBlockParam[],
+  messages: MessageParam[],
   timeoutMs: number,
 ): Promise<AnthropicResult> {
   const controller = new AbortController();
@@ -67,7 +65,7 @@ async function tryModel(
   const effort = effortLevel(model);
 
   try {
-    const response = await client.messages.create(
+    const stream = client.messages.stream(
       {
         model,
         max_tokens: MAX_TOKENS,
@@ -78,6 +76,8 @@ async function tryModel(
       },
       { signal: controller.signal },
     );
+
+    const response = await stream.finalMessage();
 
     let text = "";
     let thinking = "";
