@@ -87,6 +87,7 @@ const auditEvent = v.union(
   v.literal("reaction_received"),
   v.literal("participant_changed"),
   v.literal("member_added"),
+  v.literal("family_created"),
 );
 
 const auditDetails = v.object({

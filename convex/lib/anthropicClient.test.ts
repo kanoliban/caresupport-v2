@@ -168,25 +168,29 @@ describe("callAnthropic", () => {
     );
   });
 
-  it("omits thinking for Haiku", async () => {
+  it("omits thinking for Haiku, includes structured output schema", async () => {
     // #given — default model is Haiku
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
         expect(body.thinking).toBeUndefined();
-        expect(body.output_config).toBeUndefined();
+        const oc = body.output_config as Record<string, unknown>;
+        expect(oc.effort).toBeUndefined();
+        expect(oc.format).toHaveProperty("type", "json_schema");
         return Promise.resolve(makeSuccessResponse());
       },
     );
   });
 
-  it("sends adaptive thinking and effort for Sonnet", async () => {
+  it("sends adaptive thinking, effort, and schema for Sonnet", async () => {
     // #given
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
         expect(body.thinking).toEqual({ type: "adaptive" });
-        expect(body.output_config).toEqual({ effort: "medium" });
+        const oc = body.output_config as Record<string, unknown>;
+        expect(oc.effort).toBe("medium");
+        expect(oc.format).toHaveProperty("type", "json_schema");
         return Promise.resolve(
           makeSuccessResponse({ model: "claude-sonnet-4-6" }),
         );
@@ -195,13 +199,15 @@ describe("callAnthropic", () => {
     );
   });
 
-  it("sends adaptive thinking and high effort for Opus", async () => {
+  it("sends adaptive thinking, high effort, and schema for Opus", async () => {
     // #given
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
         expect(body.thinking).toEqual({ type: "adaptive" });
-        expect(body.output_config).toEqual({ effort: "high" });
+        const oc = body.output_config as Record<string, unknown>;
+        expect(oc.effort).toBe("high");
+        expect(oc.format).toHaveProperty("type", "json_schema");
         return Promise.resolve(
           makeSuccessResponse({ model: "claude-opus-4-6" }),
         );

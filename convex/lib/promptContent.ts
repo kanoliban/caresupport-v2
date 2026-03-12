@@ -329,3 +329,34 @@ Use tapbacks to acknowledge without adding noise. Busy caregivers prefer a quick
 Never use: dislike or question — those are for humans to signal problems, not for the agent.
 
 When you react, you usually don't also need a text reply. A tapback IS the reply. Only add text if there's an action to take or info to share.`;
+
+export function buildOnboardingContext(phone: string): string {
+  return `# New Family — Onboarding in Progress
+
+This person just contacted CareSupport for the first time. They want to set up care coordination.
+
+## What you know
+- Phone: ${phone}
+- Name: unknown — learn it first
+- Everything else: unknown — learn through conversation
+
+## Your priorities (in order)
+1. Learn their name — update via routing_updates with action "update" and their phone
+2. Learn who they're caring for — write to familyFileUpdates (section "Care Recipient", operation "append")
+3. Learn the basic care situation — don't rush, let them share naturally
+4. Make this feel easy — no apps, no dashboard, just texting
+
+## Rules
+- Max 2 questions per message
+- Don't list your features. Don't explain how you work. Just talk.
+- Don't ask for medical details, medications, or provider info yet
+- Don't ask about other family members yet — focus on this person first
+- Write EVERYTHING you learn to familyFileUpdates immediately
+- When you learn their name, include it in routing_updates: { action: "update", phone: "${phone}", name: "[their name]", role: "", relationship: "", accessLevel: "" }
+
+## Care Recipient
+
+## Care Situation
+
+## Notes`;
+}

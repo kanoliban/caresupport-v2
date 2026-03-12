@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type {
+  JSONOutputFormat,
   MessageParam,
+  OutputConfig,
   TextBlockParam,
   ThinkingConfigParam,
 } from "@anthropic-ai/sdk/resources/messages/messages";
@@ -8,6 +10,93 @@ import type { SystemBlock } from "./pipeline/types";
 
 const MAX_TOKENS = 16_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
+
+const FILE_UPDATE_SCHEMA = {
+  type: "object",
+  required: ["section", "operation", "content", "old_content"],
+  properties: {
+    section: { type: "string" },
+    operation: { type: "string" },
+    content: { type: "string" },
+    old_content: { type: "string" },
+  },
+} as const;
+
+const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
+  type: "json_schema",
+  schema: {
+    type: "object",
+    required: [
+      "sms_response",
+      "internal_notes",
+      "needs_outreach",
+      "family_file_updates",
+      "self_corrections",
+      "member_updates",
+      "routing_updates",
+      "reactions",
+      "effect",
+    ],
+    properties: {
+      sms_response: { type: "string" },
+      internal_notes: { type: "string" },
+      needs_outreach: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["phone", "name", "message"],
+          properties: {
+            phone: { type: "string" },
+            name: { type: "string" },
+            message: { type: "string" },
+          },
+        },
+      },
+      family_file_updates: { type: "array", items: FILE_UPDATE_SCHEMA },
+      self_corrections: { type: "array", items: { type: "string" } },
+      member_updates: { type: "array", items: FILE_UPDATE_SCHEMA },
+      routing_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["action", "phone", "name", "role", "relationship", "access_level"],
+          properties: {
+            action: { type: "string" },
+            phone: { type: "string" },
+            name: { type: "string" },
+            role: { type: "string" },
+            relationship: { type: "string" },
+            access_level: { type: "string" },
+          },
+        },
+      },
+      reactions: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["target_message", "type"],
+          properties: {
+            target_message: { type: "string", enum: ["last_inbound", "last_outbound"] },
+            type: { type: "string", enum: ["love", "like", "dislike", "laugh", "emphasize", "question"] },
+          },
+        },
+      },
+      effect: {
+        anyOf: [
+          {
+            type: "object",
+            required: ["type", "name"],
+            properties: {
+              type: { type: "string", enum: ["screen", "bubble"] },
+              name: { type: "string" },
+            },
+          },
+          { type: "null" },
+        ],
+      },
+    },
+  },
+};
 
 const MODEL_FALLBACK_CHAIN = [
   "claude-haiku-4-5",
@@ -63,6 +152,10 @@ async function tryModel(
 
   const thinkingParam = thinkingConfig(model);
   const effort = effortLevel(model);
+  const outputConfig: OutputConfig = {
+    ...(effort && { effort }),
+    format: AGENT_RESPONSE_FORMAT,
+  };
 
   try {
     const stream = client.messages.stream(
@@ -70,7 +163,7 @@ async function tryModel(
         model,
         max_tokens: MAX_TOKENS,
         ...(thinkingParam && { thinking: thinkingParam }),
-        ...(effort && { output_config: { effort } }),
+        output_config: outputConfig,
         system,
         messages,
       },

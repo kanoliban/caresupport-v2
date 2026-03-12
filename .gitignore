@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .env.local
+.envrc
 families/
 !fork/workspace/families/
 !fork/simulation/families/

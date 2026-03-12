@@ -148,19 +148,28 @@ export const handleMessage = internalAction({
     const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
 
     // Step 1: Resolve member by phone
-    const member = await ctx.runMutation(internal.mutations.getMemberByPhone, {
+    let member = await ctx.runMutation(internal.mutations.getMemberByPhone, {
       phone: senderPhone,
     }) as Doc<"members"> | null;
 
     if (!member) {
-      const auditEvent = buildUnknownNumberEvent({ phone: senderPhone });
-      await ctx.runMutation(internal.mutations.logAudit, auditEvent);
-      await sendResponse(chatId, UNKNOWN_NUMBER_RESPONSE, env());
-      return {
-        success: false,
-        response: UNKNOWN_NUMBER_RESPONSE,
-        error: `Unknown phone: ${senderPhone}`,
-      };
+      const result = await ctx.runMutation(
+        internal.mutations.createOnboardingFamily,
+        { phone: senderPhone, chatId },
+      );
+
+      member = await ctx.runMutation(
+        internal.mutations.getMemberById,
+        { id: result.memberId },
+      ) as Doc<"members">;
+
+      await ctx.runMutation(internal.mutations.logAudit, {
+        familyId: result.familyId,
+        event: "family_created" as const,
+        phone: senderPhone,
+        details: { initiatedBy: senderPhone, purpose: "self-service onboarding" },
+        timestamp: now,
+      });
     }
 
     const familyId = member.familyId;
@@ -467,6 +476,23 @@ export const handleMessage = internalAction({
           // member registration is best-effort — don't block the response
         }
       }
+
+      if (routing.action === "update" && routing.phone && routing.name) {
+        try {
+          const targetMember = await ctx.runMutation(
+            internal.mutations.getMemberByPhone,
+            { phone: routing.phone },
+          );
+          if (targetMember && targetMember.familyId === familyId) {
+            await ctx.runMutation(internal.mutations.updateMemberName, {
+              memberId: targetMember._id,
+              name: routing.name,
+            });
+          }
+        } catch {
+          // member update is best-effort — don't block the response
+        }
+      }
     }
 
     // Step 15: Pace response + log outbound + send
@@ -529,6 +555,21 @@ export const handleMessage = internalAction({
             details: {
               recipientPhone: normalizedPhone,
               failureReason: "outreach target not found",
+            },
+            timestamp: Date.now(),
+          });
+          outreachResults.push({ name: entry.name, success: false, message: entry.message });
+          continue;
+        }
+
+        if (targetMember.familyId !== familyId) {
+          await ctx.runMutation(internal.mutations.logAudit, {
+            familyId,
+            event: "message_failed",
+            phone: normalizedPhone,
+            details: {
+              recipientPhone: normalizedPhone,
+              failureReason: "recipient not in family",
             },
             timestamp: Date.now(),
           });

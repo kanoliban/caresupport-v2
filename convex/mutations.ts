@@ -1,5 +1,6 @@
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+import { buildOnboardingContext } from "./lib/promptContent";
 
 const directionValidator = v.union(
   v.literal("inbound"),
@@ -18,6 +19,7 @@ const eventValidator = v.union(
   v.literal("reaction_received"),
   v.literal("participant_changed"),
   v.literal("member_added"),
+  v.literal("family_created"),
 );
 
 const detailsValidator = v.object({
@@ -327,6 +329,69 @@ export const updateMessageStatus = internalMutation({
     await ctx.db.patch(messageId, patch);
   },
 });
+
+export const createOnboardingFamily = internalMutation({
+  args: {
+    phone: v.string(),
+    chatId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const phone = normalizePhone(args.phone);
+    if (!phone) {
+      throw new Error(`Cannot normalize phone: ${args.phone}`);
+    }
+
+    const existing = await ctx.db
+      .query("members")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .first();
+    if (existing) {
+      throw new Error(`Phone ${phone} already belongs to a family`);
+    }
+
+    const now = Date.now();
+    const familyId = await ctx.db.insert("families", {
+      name: "New Family",
+      status: "onboarding",
+      timezone: "America/Chicago",
+      context: buildOnboardingContext(phone),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const memberId = await ctx.db.insert("members", {
+      familyId,
+      phone,
+      name: "New Member",
+      role: "family_caregiver",
+      accessLevel: "full",
+      isCoordinator: true,
+      isEmergencyContact: false,
+      active: true,
+      chatId: args.chatId,
+    });
+
+    return { familyId, memberId };
+  },
+});
+
+export const updateMemberName = internalMutation({
+  args: {
+    memberId: v.id("members"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.memberId, { name: args.name });
+  },
+});
+
+export const getMemberById = internalMutation({
+  args: { id: v.id("members") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
 
 export const applyContextUpdates = internalMutation({
   args: {
