@@ -152,18 +152,13 @@ async function tryModel(
 
   const thinkingParam = thinkingConfig(model);
   const effort = effortLevel(model);
-  const outputConfig: OutputConfig = {
-    ...(effort && { effort }),
-    format: AGENT_RESPONSE_FORMAT,
-  };
-
   try {
     const stream = client.messages.stream(
       {
         model,
         max_tokens: MAX_TOKENS,
         ...(thinkingParam && { thinking: thinkingParam }),
-        output_config: outputConfig,
+        ...(effort && { output_config: { effort } }),
         system,
         messages,
       },
