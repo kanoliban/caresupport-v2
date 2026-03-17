@@ -52,6 +52,7 @@ export const INTENT_FAMILY_MODE: Record<string, FamilyContextMode> = {
   MEDICATION_CHANGE: "family_meds",
   ONBOARDING: "family_team",
   MULTI_MEMBER: "family_team",
+  UPGRADE: "family_team",
   GENERAL: "family_full",
 };
 
@@ -163,11 +164,13 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
   }
 
   // Block 5: Member identity + member context (CACHE BREAKPOINT)
+  const planLabel = input.planTier === "family" ? "Family ($14/mo)" : "Free";
   const memberLines = [
     `YOU ARE TEXTING WITH: ${input.member.name} (${input.member.role})`,
     `Their phone: ${input.member.phone}`,
     `Their access level: ${input.member.accessLevel}`,
     `Their relationship to care recipient: ${input.member.relationship}`,
+    `Current plan: ${planLabel}`,
     `Conversation history includes all family members' 1:1 chats (attributed by name). You're responding to ${input.member.name}.`,
   ];
   let memberBlock = memberLines.join("\n");

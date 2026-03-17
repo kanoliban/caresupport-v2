@@ -41,6 +41,11 @@ const ONBOARDING = new RegExp(
   "i",
 );
 
+const UPGRADE = new RegExp(
+  "\\b(upgrade|pricing|how much|cost|subscribe|billing|plan)\\b",
+  "i",
+);
+
 const MULTI_MEMBER = new RegExp(
   "\\b(tell|message|text|contact|reach out to|let .+ know|notify)\\b.*" +
     "\\b(and|also|both|everyone|all|the team)\\b",
@@ -57,6 +62,7 @@ const PATTERNS: Array<{
   { pattern: ESCALATION, tier: "critical", intent: "ESCALATION", reason: "escalation trigger detected" },
   { pattern: MEDICATION_CHANGE, tier: "reason", intent: "MEDICATION_CHANGE", reason: "medication change request" },
   { pattern: ONBOARDING, tier: "reason", intent: "ONBOARDING", reason: "new member onboarding" },
+  { pattern: UPGRADE, tier: "fast", intent: "UPGRADE", reason: "upgrade or billing inquiry" },
   { pattern: MULTI_MEMBER, tier: "reason", intent: "MULTI_MEMBER", reason: "multi-member coordination" },
 ];
 

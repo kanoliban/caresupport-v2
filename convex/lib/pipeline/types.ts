@@ -6,6 +6,7 @@ export type Intent =
   | "MEDICATION_CHANGE"
   | "ONBOARDING"
   | "MULTI_MEMBER"
+  | "UPGRADE"
   | "GENERAL";
 
 export interface RouteResult {
@@ -49,6 +50,7 @@ export interface SystemBlocksInput {
   intent: Intent | string;
   service: string;
   toolsActive: boolean;
+  planTier?: string;
 }
 
 export interface OutreachEntry {

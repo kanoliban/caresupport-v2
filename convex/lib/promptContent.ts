@@ -91,6 +91,7 @@ When you receive a message, classify it FIRST, then use only the context you nee
 | TASK_REQUEST | Relevant family file sections for that task | social | Unrelated sections |
 | CHECK_IN / OUTREACH | Family file: Care Team, Rides, Care Tasks | social | N/A |
 | GENERAL_QUESTION | Full family context + conversation history | social | N/A |
+| UPGRADE / BILLING | Full family context | upgrade, social | N/A |
 | META / CORRECTION | lessons (already loaded) | social | Family file |
 
 ## Guidance
@@ -149,6 +150,12 @@ When asked whether someone received a message or about a member's status:
 - Member has no inbound messages → they haven't responded yet
 - Report honestly. Example: "Ian was added and messaged, but hasn't responded yet."
 - Never claim a message was "received" unless deliveryStatus confirms it or the person responded.
+
+PLANS:
+- Free: You + your care recipient (2 members). Core features: scheduling, medications, outreach, lessons.
+- Family ($14/mo): Unlimited members. Same features, no member cap.
+- The family's current plan is shown in the member identity block above.
+- You do NOT generate upgrade URLs. The system handles that. To upgrade, the user just replies "upgrade" and the system sends them a checkout link.
 
 KNOWN LIMITATIONS (testing mode):
 - Conversation memory limited to recent messages
@@ -328,7 +335,26 @@ Use tapbacks to acknowledge without adding noise. Busy caregivers prefer a quick
 
 Never use: dislike or question — those are for humans to signal problems, not for the agent.
 
-When you react, you usually don't also need a text reply. A tapback IS the reply. Only add text if there's an action to take or info to share.`;
+When you react, you usually don't also need a text reply. A tapback IS the reply. Only add text if there's an action to take or info to share.
+
+---
+
+# Upgrade Skills [INTENT: UPGRADE, BILLING]
+
+## When someone asks about pricing or plans
+Explain clearly: Free plan is you and your care recipient. Family plan is $14/mo with unlimited members. Then say: "If you'd like to upgrade, just reply 'upgrade' and I'll send you a link."
+
+## When someone hits the member limit
+If you try to add a member and the current plan is Free, explain: "The free plan covers you and your care recipient. To add more people, you'd need CareSupport Family ($14/mo). Reply 'upgrade' if you'd like that."
+
+## When someone is already on Family plan
+"You're already on CareSupport Family — you can add as many people as you need."
+
+## Rules
+- Never pressure. Mention upgrade once per conversation. If they don't bite, move on.
+- You do NOT generate checkout URLs. The system intercepts "upgrade" and handles it.
+- Just tell them to reply "upgrade" — that's all you need to do.
+- Don't proactively pitch upgrades. Only mention plans when asked, or when a limit blocks their request.`;
 
 export function buildOnboardingContext(phone: string): string {
   return `# New Family — Onboarding in Progress

@@ -354,6 +354,10 @@ export const handleMessage = internalAction({
     // Step 8: Route intent
     const routeResult = route(messageForClaude);
 
+    // Step 8b: Load family for plan tier
+    const family = await ctx.runQuery(internal.queries.getFamily, { familyId });
+    const planTier = family?.planTier ?? "free";
+
     // Step 9: Build system prompt
     const systemBlocks = buildSystemBlocks({
       soulContent: SOUL_CONTENT,
@@ -373,6 +377,7 @@ export const handleMessage = internalAction({
       intent: routeResult.intent,
       service,
       toolsActive: false,
+      planTier,
     });
     const messages = buildMessages(messageForClaude, conversationLog);
 
@@ -540,7 +545,6 @@ export const handleMessage = internalAction({
           scope: "family",
           category,
           text: cleanText,
-          learnedAt: now,
         });
       }
     }
@@ -666,7 +670,6 @@ export const handleMessage = internalAction({
         await ctx.runMutation(internal.mutations.updateOutreachThread, {
           threadId: thread._id,
           status: "responded",
-          respondedAt: Date.now(),
         });
       }
     }
@@ -789,7 +792,6 @@ export const handleMessage = internalAction({
               initiatorChatId: chatId,
               targetPhone: normalizedPhone,
               targetName: resolvedName,
-              outboundMessageId: msgId,
               purpose: entry.message.slice(0, 200),
             });
           }
