@@ -28,7 +28,6 @@ export const create = mutation({
     context: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-    familyId: v.optional(v.string()),
     careRecipient: v.optional(v.string()),
   },
   handler: async (ctx, args) => {

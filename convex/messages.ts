@@ -25,7 +25,6 @@ export const create = mutation({
     timestamp: v.number(),
     linqMessageId: v.optional(v.string()),
     memberName: v.optional(v.string()),
-    chatId: v.optional(v.id("chats")),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("messages", args);

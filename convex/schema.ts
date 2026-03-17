@@ -135,7 +135,6 @@ export default defineSchema({
     context: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-    familyId: v.optional(v.string()),
     careRecipient: v.optional(v.string()),
     planTier: v.optional(planTier),
     stripeCustomerId: v.optional(v.string()),
@@ -159,18 +158,7 @@ export default defineSchema({
     .index("by_phone", ["phone"])
     .index("by_family_phone", ["familyId", "phone"]),
 
-  chats: defineTable({
-    familyId: v.id("families"),
-    linqChatId: v.string(),
-    isGroup: v.boolean(),
-    participants: v.array(v.string()),
-    createdAt: v.number(),
-  })
-    .index("by_linq_chat_id", ["linqChatId"])
-    .index("by_family", ["familyId"]),
-
   messages: defineTable({
-    chatId: v.optional(v.id("chats")),
     familyId: v.id("families"),
     senderPhone: v.optional(v.string()),
     direction: messageDirection,
@@ -183,7 +171,6 @@ export default defineSchema({
     failureReason: v.optional(v.string()),
     memberName: v.optional(v.string()),
   })
-    .index("by_chat", ["chatId"])
     .index("by_family", ["familyId"])
     .index("by_family_timestamp", ["familyId", "timestamp"])
     .index("by_linq_message_id", ["linqMessageId"])

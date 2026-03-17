@@ -154,6 +154,33 @@ export const deleteRow = internalMutation({
   },
 });
 
+export const stripLegacyFields = internalMutation({
+  args: { familyId: v.id("families") },
+  handler: async (ctx, args) => {
+    const family = await ctx.db.get(args.familyId);
+    if (!family) return;
+    const { _id, _creationTime, familyId: _legacySlug, ...clean } = family as any;
+    await ctx.db.replace(args.familyId, clean);
+  },
+});
+
+export const tableCounts = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const tables = [
+      "families", "members", "messages", "medications",
+      "scheduleItems", "approvals", "auditLogs", "lessons",
+      "careTeam", "outreachThreads",
+    ] as const;
+    const counts: Record<string, number> = {};
+    for (const t of tables) {
+      const rows = await ctx.db.query(t).collect();
+      counts[t] = rows.length;
+    }
+    return counts;
+  },
+});
+
 export const getSystemHealth = internalQuery({
   args: {},
   handler: async (ctx) => {

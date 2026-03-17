@@ -131,7 +131,6 @@ async function seedFamily(client: ConvexHttpClient): Promise<{ familyId: Id<"fam
     timezone: "America/Chicago",
     createdAt: new Date(routing.created).getTime(),
     updatedAt: now,
-    familyId: routing.family_id,
     context,
   });
 
