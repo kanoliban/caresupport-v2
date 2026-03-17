@@ -676,9 +676,11 @@ export const handleMessage = internalAction({
     const outreachResults: Array<{ name: string; success: boolean; message?: string }> = [];
     for (const entry of parsed.needsOutreach) {
       try {
-        // Resolve phone from memberId if provided (authoritative), fall back to phone field
-        let resolvedPhone = entry.phone ? (normalizePhone(entry.phone) ?? entry.phone) : "";
+        // Resolve phone: memberId (authoritative) → phone field → name lookup
+        let resolvedPhone = "";
         let resolvedName = entry.name;
+
+        // Strategy 1: resolve by memberId
         if (entry.memberId) {
           try {
             const targetById = await ctx.runMutation(
@@ -690,12 +692,32 @@ export const handleMessage = internalAction({
               resolvedName = targetById.name;
               console.log(`[CS] Resolved outreach memberId=${entry.memberId} → ${resolvedName} (${resolvedPhone})`);
             } else {
-              console.log(`[CS] memberId=${entry.memberId} not found or wrong family, falling back to phone`);
+              console.log(`[CS] memberId=${entry.memberId} not found or wrong family`);
             }
-          } catch {
-            console.log(`[CS] Failed to resolve memberId=${entry.memberId}, falling back to phone`);
+          } catch (err) {
+            console.log(`[CS] Failed to resolve memberId=${entry.memberId}: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
+
+        // Strategy 2: use phone field
+        if (!resolvedPhone && entry.phone) {
+          resolvedPhone = normalizePhone(entry.phone) ?? entry.phone;
+          console.log(`[CS] Fallback to phone field for ${resolvedName}: ${resolvedPhone}`);
+        }
+
+        // Strategy 3: lookup by name in family members
+        if (!resolvedPhone && entry.name) {
+          const memberByName = await ctx.runMutation(
+            internal.mutations.getMemberByName,
+            { familyId, name: entry.name },
+          ) as Doc<"members"> | null;
+          if (memberByName?.phone) {
+            resolvedPhone = memberByName.phone;
+            resolvedName = memberByName.name;
+            console.log(`[CS] Fallback to name lookup for ${entry.name} → ${resolvedPhone}`);
+          }
+        }
+
         const normalizedPhone = resolvedPhone;
 
         if (!normalizedPhone) {

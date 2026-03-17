@@ -483,6 +483,21 @@ export const getMemberById = internalMutation({
   },
 });
 
+export const getMemberByName = internalMutation({
+  args: { familyId: v.id("families"), name: v.string() },
+  handler: async (ctx, args) => {
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .filter((q) => q.eq(q.field("active"), true))
+      .collect();
+    const nameLower = args.name.toLowerCase();
+    return members.find((m) => m.name.toLowerCase() === nameLower)
+      ?? members.find((m) => m.name.toLowerCase().startsWith(nameLower.split(" ")[0]))
+      ?? null;
+  },
+});
+
 
 export const createOutreachThread = internalMutation({
   args: {
