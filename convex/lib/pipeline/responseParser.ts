@@ -18,6 +18,9 @@ const SNAKE_TO_CAMEL: Record<string, keyof AgentResponse> = {
   self_corrections: "selfCorrections",
   member_updates: "memberUpdates",
   routing_updates: "routingUpdates",
+  medication_updates: "medicationUpdates",
+  schedule_updates: "scheduleUpdates",
+  care_team_updates: "careTeamUpdates",
   old_content: "oldContent" as keyof AgentResponse,
   access_level: "accessLevel" as keyof AgentResponse,
   target_message: "targetMessage" as keyof AgentResponse,
@@ -40,6 +43,9 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
     routingUpdates: Array.isArray(result.routingUpdates) ? result.routingUpdates : [],
     reactions: Array.isArray(result.reactions) ? result.reactions : [],
     effect: result.effect && typeof result.effect === "object" ? result.effect as AgentResponse["effect"] : null,
+    medicationUpdates: Array.isArray(result.medicationUpdates) ? result.medicationUpdates : undefined,
+    scheduleUpdates: Array.isArray(result.scheduleUpdates) ? result.scheduleUpdates : undefined,
+    careTeamUpdates: Array.isArray(result.careTeamUpdates) ? result.careTeamUpdates : undefined,
   };
 }
 

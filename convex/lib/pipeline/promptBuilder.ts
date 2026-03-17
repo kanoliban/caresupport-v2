@@ -16,6 +16,7 @@ FIELD GUIDE:
 - sms_response: REQUIRED. The text message sent to the user via SMS/iMessage. This is what they see. It must ALWAYS contain your actual reply — never leave it empty. To send multiple message bubbles, separate paragraphs with a double newline (\\n\\n in JSON). Each \\n\\n-separated paragraph becomes its own iMessage bubble. Keep each paragraph under 450 chars. A single \\n does NOT create a new bubble. For short responses (greetings, confirmations), a single paragraph is fine.
 - internal_notes: Your reasoning (not shown to user).
 - needs_outreach: Array of objects with phone (E.164 format: +1 then 10 digits, no dashes — e.g. +16514109390), name, message for people to contact. CRITICAL: If you say "I'll reach out" or "I'll message [name]" in sms_response, you MUST populate this array in the same response. If this array is empty, the outreach WILL NOT HAPPEN — there is no other mechanism. Say "I'll message [name]" in sms_response — never "I'm texting them now."
+  PHONE LOOKUP RULE: Always look up phone numbers from the Care Team or Family Members table above. Never guess or infer a phone number from conversation context. The person you are texting WITH is NOT the person to send outreach TO — match names to phone numbers exactly from the tables. If you cannot find the person's phone number in the tables, ask for it instead of guessing.
 - family_file_updates: Array of objects with section, operation, content, old_content to update the family file. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
   ATTRIBUTION RULE: When updating based on something a member told you, prepend the content with "[Source: {member name}]". Example: If Liban says Degitu's surgery was Feb 24, write content as "[Source: Liban] Surgery date: Feb 24, 2026". For Recent Updates, format as: "- YYYY-MM-DD [via {name}]: description". If the update is your own inference (not directly stated by a member), use "[Source: CareSupport]".
 - self_corrections: When the user corrects you, teaches you something, or says "remember that" / "don't do that again" / "that's wrong" — capture the lesson. The system writes these to lessons.md immediately; you will see them in your context on the next message. Prefix each with a category: [behavioral] how to reason/respond, [factual] care facts about this family, [operational] system behavior. Empty array if no correction this message.
@@ -88,7 +89,7 @@ export function channelGuidance(service: string): string {
   return "";
 }
 
-const LOG_LINE_RE = /^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)\] \[(INBOUND|OUTBOUND)\] ([\s\S]+?)$/;
+const LOG_LINE_RE = /^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)\] \[(INBOUND|OUTBOUND)(?: (?:from|to) ([^\]]*))?\] ([\s\S]+?)$/;
 
 export function buildMessages(userMessage: string, conversationHistory: string): MessageTurn[] {
   const messages: MessageTurn[] = [];
@@ -107,14 +108,16 @@ export function buildMessages(userMessage: string, conversationHistory: string):
       const m = LOG_LINE_RE.exec(entry);
       if (!m) continue;
       const direction = m[2];
-      const text = m[3].trim();
+      const attribution = m[3] ?? "";
+      const text = m[4].trim();
       if (!text) continue;
       const role: "user" | "assistant" = direction === "INBOUND" ? "user" : "assistant";
+      const labeled = attribution ? `[${attribution}]: ${text}` : text;
 
       if (messages.length && messages[messages.length - 1].role === role) {
-        messages[messages.length - 1].content += "\n" + text;
+        messages[messages.length - 1].content += "\n" + labeled;
       } else {
-        messages.push({ role, content: text });
+        messages.push({ role, content: labeled });
       }
     }
   }
@@ -166,6 +169,7 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     `Their phone: ${input.member.phone}`,
     `Their access level: ${input.member.accessLevel}`,
     `Their relationship to care recipient: ${input.member.relationship}`,
+    `Conversation history includes all family members' 1:1 chats (attributed by name). You're responding to ${input.member.name}.`,
   ];
   let memberBlock = memberLines.join("\n");
   if (input.memberContext) {
@@ -188,7 +192,7 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     if (ctx.trim()) {
       blocks.push({
         type: "text",
-        text: `── FAMILY FILE (scoped to ${input.member.name}'s access level) ──\n${ctx}`,
+        text: `── FAMILY FILE (scoped to ${input.member.name}'s access level) ──\n${ctx}\n\n── CONVERSATION AWARENESS ──\nThe conversation log includes messages from all family members. Reference what others have said when relevant.`,
         cacheBreakpoint: false,
       });
     }

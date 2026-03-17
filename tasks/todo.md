@@ -1,41 +1,34 @@
-# Linq Full API Integration
+# CareSupport v2 — Architecture Overhaul
 
-## Corrections to Plan
-- `editMessage` (PATCH /v3/messages/{id}) does NOT exist in Linq API V3. Only DELETE exists. Dropping editMessage.
-- `sendMessage` effect support: extend existing function signature with optional effect param
-- New audit events needed in schema: `reaction_received`, `participant_changed`
+## Phase 1: Feedback Loop (Outreach → Response → Coordinator Notification)
 
-## Batch 1: Linq Client Functions (linqClient.ts + tests)
-- [x] 1a. `stopTyping(chatId, apiToken)` — DELETE /chats/{chatId}/typing
-- [x] 1b. Extend `sendMessage` with optional `effect` param (screen/bubble effect)
-- [x] 1c. `sendMediaMessage(chatId, text, mediaUrl, apiToken)` — multi-part message with media
-- [x] 1d. `sendVoiceMemo(chatId, audioUrl, fromPhone, apiToken)` — POST /chats/{chatId}/voicememo
-- [x] 1e. `sendReaction(messageId, operation, type, apiToken, partIndex?, customEmoji?)` — POST /messages/{id}/reactions
-- [x] 1f. `shareContactCard(chatId, apiToken)` — POST /chats/{chatId}/share_contact_card
-- [x] 1g. `addParticipant(chatId, handle, apiToken)` — POST /chats/{chatId}/participants
-- [x] 1h. `removeParticipant(chatId, handle, apiToken)` — DELETE /chats/{chatId}/participants
-- [x] 1i. `updateChat(chatId, opts, apiToken)` — PUT /chats/{chatId}
-- [x] 1j. New extraction helpers: `extractReactionData`, `extractParticipantData`
-- [x] 1k. Tests for all new functions (63 total, 30+ new)
+- [x] 1a. Add `outreachThreads` table to `schema.ts`
+- [x] 1b. Add mutations: `createOutreachThread`, `getPendingOutreachForSender`, `updateOutreachThread`
+- [x] 1c. Add scheduled function: `expireStaleThreads`
+- [x] 1d. Handler: after outreach send (Step 16), create outreach thread
+- [x] 1e. Handler: after member resolution (Step 1), check pending outreach threads for this sender
+- [x] 1f. Handler: after sending response (Step 15), if pending threads exist, notify coordinator and mark responded
+- [x] 1g. Type-check + test
 
-## Batch 2: Webhook Event Handlers (http.ts)
-- [x] 2a. Add `reaction_received` and `participant_changed` to auditEvent union in schema.ts + mutations.ts
-- [x] 2b. Handle `reaction.added` — route to handleMessage with synthetic body
-- [x] 2c. Handle `reaction.removed` — log only
-- [x] 2d. Handle `participant.added` — log audit
-- [x] 2e. Handle `participant.removed` — log audit
+## Phase 2: Family-Wide Conversation Awareness
 
-## Batch 3: Agent Contract Extension
-- [x] 3a. Add `ReactionRequest` and `EffectRequest` to types.ts + extend AgentResponse
-- [x] 3b. Update RESPONSE_FORMAT in promptBuilder.ts with reactions + effect field guide
-- [x] 3c. Update CAPABILITIES_CONTENT in promptContent.ts
-- [x] 3d. Update responseParser.ts normalizeResponse for new fields
-- [x] 3e. Handler integration: send reactions after response, pass effect to sendMessage
+- [x] 2a. Add `getFamilyRecentMessages` mutation (query by_family_timestamp)
+- [x] 2b. Update `formatConversationLog` to include member attribution
+- [x] 2c. Handler Step 5: replace per-sender getRecentMessages with family-wide query
+- [x] 2d. Add one-line prompt tweak about family-wide context
+- [x] 2e. Type-check + test
 
-## Batch 4: Onboarding & Group Chat
-- [x] 4a. Contact card sharing on first outreach (when createChat is called)
-- [x] 4b. Effect support in sendResponse for agent-requested effects
+## Phase 3: Observability
 
-## Verification
-- [x] `npx tsc --noEmit` — zero type errors
-- [x] `npm test` — 213/213 tests pass (11 test files)
+- [x] 3a. Create `convex/admin.ts` with listFamilies, getFamilyDetail, getOutreachThreads, getSystemHealth
+- [x] 3b. Add structured `[CS]` prefix logging + timing to handler.ts
+- [x] 3c. Type-check
+
+## Phase 4: Structured Data Migration (DEFERRED — needs observability first)
+
+- [x] 4a. Add `careTeam` table to schema
+- [x] 4b. Add structured output fields to agent response type
+- [x] 4c. Handler Step 13: process structured updates → typed table mutations
+- [x] 4d. promptBuilder: build context from typed tables
+- [x] 4e. Migration script: parse markdown → typed tables
+- [x] 4f. Type-check + test

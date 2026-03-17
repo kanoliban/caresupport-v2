@@ -77,6 +77,13 @@ const lessonCategory = v.union(
   v.literal("operational"),
 );
 
+const outreachStatus = v.union(
+  v.literal("pending"),
+  v.literal("responded"),
+  v.literal("expired"),
+  v.literal("closed"),
+);
+
 const auditEvent = v.union(
   v.literal("context_load"),
   v.literal("context_updated"),
@@ -230,6 +237,34 @@ export default defineSchema({
     resolvedAt: v.optional(v.number()),
     resolvedBy: v.optional(v.string()),
   }).index("by_family_status", ["familyId", "status"]),
+
+  careTeam: defineTable({
+    familyId: v.id("families"),
+    name: v.string(),
+    role: v.string(),
+    phone: v.optional(v.string()),
+    organization: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    active: v.boolean(),
+  })
+    .index("by_family", ["familyId"])
+    .index("by_family_active", ["familyId", "active"]),
+
+  outreachThreads: defineTable({
+    familyId: v.id("families"),
+    initiatorPhone: v.string(),
+    initiatorChatId: v.string(),
+    targetPhone: v.string(),
+    targetName: v.string(),
+    outboundMessageId: v.id("messages"),
+    purpose: v.string(),
+    status: outreachStatus,
+    createdAt: v.number(),
+    respondedAt: v.optional(v.number()),
+    expiresAt: v.number(),
+  })
+    .index("by_target_pending", ["targetPhone", "status"])
+    .index("by_family_status", ["familyId", "status"]),
 
   auditLogs: defineTable({
     familyId: v.optional(v.id("families")),

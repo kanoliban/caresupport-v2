@@ -97,6 +97,30 @@ export interface EffectRequest {
   name: string;
 }
 
+export interface MedicationUpdate {
+  action: "add" | "update" | "remove";
+  name: string;
+  dose?: string;
+  schedule?: string;
+  prescriber?: string;
+}
+
+export interface ScheduleUpdate {
+  action: "add" | "update" | "remove";
+  type: "shift" | "appointment" | "task" | "ride" | "careTask";
+  title: string;
+  date?: string;
+  time?: string;
+  assignedTo?: string;
+}
+
+export interface CareTeamUpdate {
+  action: "add" | "update" | "remove";
+  name: string;
+  role?: string;
+  phone?: string;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
@@ -107,4 +131,7 @@ export interface AgentResponse {
   routingUpdates: RoutingUpdate[];
   reactions: ReactionRequest[];
   effect: EffectRequest | null;
+  medicationUpdates?: MedicationUpdate[];
+  scheduleUpdates?: ScheduleUpdate[];
+  careTeamUpdates?: CareTeamUpdate[];
 }

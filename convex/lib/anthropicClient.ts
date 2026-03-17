@@ -100,6 +100,51 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
           { type: "null" },
         ],
       },
+      medication_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["action", "name"],
+          additionalProperties: false,
+          properties: {
+            action: { type: "string", enum: ["add", "update", "remove"] },
+            name: { type: "string" },
+            dose: { type: "string" },
+            schedule: { type: "string" },
+            prescriber: { type: "string" },
+          },
+        },
+      },
+      schedule_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["action", "type", "title"],
+          additionalProperties: false,
+          properties: {
+            action: { type: "string", enum: ["add", "update", "remove"] },
+            type: { type: "string", enum: ["shift", "appointment", "task", "ride", "careTask"] },
+            title: { type: "string" },
+            date: { type: "string" },
+            time: { type: "string" },
+            assigned_to: { type: "string" },
+          },
+        },
+      },
+      care_team_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["action", "name"],
+          additionalProperties: false,
+          properties: {
+            action: { type: "string", enum: ["add", "update", "remove"] },
+            name: { type: "string" },
+            role: { type: "string" },
+            phone: { type: "string" },
+          },
+        },
+      },
     },
   },
 };

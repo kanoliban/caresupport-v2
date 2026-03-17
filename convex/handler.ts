@@ -84,6 +84,7 @@ export function formatConversationLog(
     body: string;
     timestamp: number;
     memberName?: string;
+    senderPhone?: string;
   }>,
 ): string {
   if (records.length === 0) return "[No conversation history]";
@@ -91,8 +92,10 @@ export function formatConversationLog(
     .map((r) => {
       const date = new Date(r.timestamp);
       const ts = date.toISOString().replace("T", " ").replace(/\.\d{3}Z/, " UTC");
-      const dir = r.direction.toUpperCase();
-      return `[${ts}] [${dir}] ${r.body}`;
+      const attribution = r.direction === "inbound"
+        ? `INBOUND from ${r.memberName ?? r.senderPhone ?? "unknown"}`
+        : `OUTBOUND to ${r.memberName ?? r.senderPhone ?? "unknown"}`;
+      return `[${ts}] [${attribution}] ${r.body}`;
     })
     .join("\n");
 }
@@ -144,8 +147,10 @@ export const handleMessage = internalAction({
     replyToMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<HandlerResult> => {
-    const now = Date.now();
+    const handlerStart = Date.now();
+    const now = handlerStart;
     const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
+    console.log(`[CS] Handler start — sender=${senderPhone} len=${messageBody.length}`);
 
     // Step 1: Resolve member by phone
     let member = await ctx.runMutation(internal.mutations.getMemberByPhone, {
@@ -173,6 +178,13 @@ export const handleMessage = internalAction({
     }
 
     const familyId = member.familyId;
+
+    // Step 1c: Check for pending outreach threads where this sender is the target
+    const pendingThreads = await ctx.runMutation(
+      internal.mutations.getPendingOutreachForSender,
+      { targetPhone: senderPhone },
+    ) as Doc<"outreachThreads">[];
+
     const rawAccessLevel = member.accessLevel;
     const hasValidAccessLevel = isAccessLevel(rawAccessLevel);
     const accessLevel: AccessLevel = hasValidAccessLevel ? rawAccessLevel : "limited";
@@ -225,6 +237,42 @@ export const handleMessage = internalAction({
       linqMessageId: args.sourceMessageId,
     });
 
+    // Step 3b: Check for upgrade intent (early return — before AI call)
+    const trimmed = messageBody.trim();
+    const upgradeIntent =
+      /^(upgrade|subscribe|go premium|family plan)$/i.test(trimmed) ||
+      /^(i want to |i'd like to |let's |ready to )?(upgrade|subscribe|go premium|get family plan)/i.test(trimmed);
+    if (upgradeIntent) {
+      const family = await ctx.runQuery(internal.queries.getFamily, { familyId });
+      const tier = family?.planTier ?? "free";
+      if (tier === "free") {
+        const priceId = process.env.FAMILY_MONTHLY_PRICE_ID;
+        if (!priceId) {
+          const errMsg = "Upgrade isn't available just yet — we're still setting things up. Try again soon!";
+          await logOutbound(ctx, familyId, senderPhone, memberName, errMsg, now);
+          await sendResponse(chatId, errMsg, env());
+          return { success: false, response: errMsg, error: "FAMILY_MONTHLY_PRICE_ID not configured" };
+        }
+        const session = await ctx.runAction(internal.stripe.createFamilyCheckout, {
+          familyId,
+          priceId,
+        });
+        if (session.url) {
+          const upgradeMsg =
+            `Here's your upgrade link for CareSupport Family ($14/mo):\n\n${session.url}\n\n` +
+            `Once you're set, you can add anyone to your care network.`;
+          await logOutbound(ctx, familyId, senderPhone, memberName, upgradeMsg, now);
+          await sendResponse(chatId, upgradeMsg, env());
+          return { success: true, response: upgradeMsg };
+        }
+      } else {
+        const alreadyMsg = "You're already on CareSupport Family — go ahead and add anyone you need!";
+        await logOutbound(ctx, familyId, senderPhone, memberName, alreadyMsg, now);
+        await sendResponse(chatId, alreadyMsg, env());
+        return { success: true, response: alreadyMsg };
+      }
+    }
+
     // Step 4: Check if this is an approval response (early return)
     const approvalCheck = detectApprovalResponse(messageBody);
     if (approvalCheck.decision !== null) {
@@ -247,24 +295,28 @@ export const handleMessage = internalAction({
       }
     }
 
-    // Step 5: Load context
-    const [familyCtx, recentConvos, lessons] = await Promise.all([
+    // Step 5: Load context (family-wide conversation awareness)
+    const [familyCtx, recentConvos, lessons, structuredCtx] = await Promise.all([
       ctx.runMutation(internal.mutations.getFamilyContext, { familyId }),
-      ctx.runMutation(internal.mutations.getRecentMessages, {
+      ctx.runMutation(internal.mutations.getFamilyRecentMessages, {
         familyId,
-        phone: senderPhone,
-        limit: 50,
+        limit: 80,
       }),
       ctx.runMutation(internal.mutations.getFamilyLessons, { familyId }),
+      ctx.runMutation(internal.mutations.getFamilyStructuredContext, { familyId }),
     ]);
 
-    const rawFamilyContext = familyCtx?.context ?? "[No family context]";
+    const rawNotes = familyCtx?.context ?? "";
+    const rawFamilyContext = structuredCtx
+      ? `${structuredCtx}\n\n## Notes\n${rawNotes}`
+      : rawNotes || "[No family context]";
     const conversationLog = formatConversationLog(
       recentConvos.reverse().map((c) => ({
         direction: c.direction,
         body: c.body,
         timestamp: c.timestamp,
         memberName: c.memberName ?? undefined,
+        senderPhone: c.senderPhone ?? undefined,
       })),
     );
     const lessonsText = lessons
@@ -332,17 +384,19 @@ export const handleMessage = internalAction({
 
     let parsed: AgentResponse;
     try {
+      const aiStart = Date.now();
       const aiResult = await callAnthropic({
         systemBlocks,
         messages,
         model: routeResult.model,
         apiKey,
       });
+      console.log(`[CS] AI call — model=${routeResult.model} ms=${Date.now() - aiStart}`);
 
       parsed = extractJson(aiResult.text);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      console.error("[handleMessage] AI call failed:", errMsg);
+      console.error("[CS] AI call failed:", errMsg);
       if (err instanceof Error && err.stack) {
         console.error("[handleMessage] Stack:", err.stack.slice(0, 500));
       }
@@ -436,6 +490,47 @@ export const handleMessage = internalAction({
       }
     }
 
+    // Step 13b: Process structured table updates (if present)
+    if (parsed.medicationUpdates?.length) {
+      for (const med of parsed.medicationUpdates) {
+        await ctx.runMutation(internal.mutations.upsertMedication, {
+          familyId,
+          action: med.action,
+          name: med.name,
+          dose: med.dose,
+          schedule: med.schedule,
+          prescriber: med.prescriber,
+        });
+      }
+    }
+
+    if (parsed.scheduleUpdates?.length) {
+      for (const sched of parsed.scheduleUpdates) {
+        const raw = sched as unknown as Record<string, string>;
+        await ctx.runMutation(internal.mutations.upsertScheduleItem, {
+          familyId,
+          action: sched.action,
+          type: sched.type,
+          title: sched.title,
+          date: sched.date,
+          time: sched.time,
+          assignedTo: sched.assignedTo ?? raw["assigned_to"],
+        });
+      }
+    }
+
+    if (parsed.careTeamUpdates?.length) {
+      for (const ct of parsed.careTeamUpdates) {
+        await ctx.runMutation(internal.mutations.upsertCareTeamMember, {
+          familyId,
+          action: ct.action,
+          name: ct.name,
+          role: ct.role,
+          phone: ct.phone,
+        });
+      }
+    }
+
     // Step 14: Persist lessons
     for (const correction of parsed.selfCorrections) {
       const { category, cleanText } = parseCategory(correction);
@@ -472,8 +567,15 @@ export const handleMessage = internalAction({
             },
             timestamp: Date.now(),
           });
-        } catch {
-          // member registration is best-effort — don't block the response
+        } catch (err: unknown) {
+          if (err instanceof Error && err.message === "PLAN_LIMIT_REACHED") {
+            const upgradeMsg =
+              `I'd love to add ${routing.name}, but the free plan is just you and your care recipient (1:1:1). ` +
+              `Upgrade to CareSupport Family ($14/mo) for unlimited members — ` +
+              `just reply "upgrade" and I'll send you a link.`;
+            await logOutbound(ctx, familyId, senderPhone, memberName, upgradeMsg, Date.now());
+            await sendResponse(chatId, upgradeMsg, env());
+          }
         }
       }
 
@@ -523,6 +625,49 @@ export const handleMessage = internalAction({
         } catch {
           // reactions are best-effort
         }
+      }
+    }
+
+    // Step 15c: Notify coordinators about outreach responses
+    if (pendingThreads.length > 0) {
+      const envVarsForNotify = env();
+      for (const thread of pendingThreads) {
+        if (thread.initiatorChatId && envVarsForNotify.linqApiToken) {
+          const summary = `${memberName} responded: "${messageBody.length > 200 ? messageBody.slice(0, 200) + "..." : messageBody}"`;
+          try {
+            const initiatorMember = await ctx.runMutation(
+              internal.mutations.getMemberByPhone,
+              { phone: thread.initiatorPhone },
+            ) as Doc<"members"> | null;
+            const initiatorName = initiatorMember?.name ?? "Coordinator";
+            const notifyMsgId = await logOutbound(
+              ctx,
+              thread.familyId,
+              thread.initiatorPhone,
+              initiatorName,
+              summary,
+              Date.now(),
+            );
+            const notifyResult = await sendMessage(
+              thread.initiatorChatId,
+              summary,
+              envVarsForNotify.linqApiToken,
+            );
+            if (notifyResult.messageId) {
+              await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+                messageId: notifyMsgId,
+                linqMessageId: notifyResult.messageId,
+              });
+            }
+          } catch {
+            // coordinator notification is best-effort
+          }
+        }
+        await ctx.runMutation(internal.mutations.updateOutreachThread, {
+          threadId: thread._id,
+          status: "responded",
+          respondedAt: Date.now(),
+        });
       }
     }
 
@@ -613,6 +758,19 @@ export const handleMessage = internalAction({
               linqMessageId,
             });
           }
+
+          // Step 16b: Create outreach thread for feedback loop
+          if (chatId) {
+            await ctx.runMutation(internal.mutations.createOutreachThread, {
+              familyId,
+              initiatorPhone: senderPhone,
+              initiatorChatId: chatId,
+              targetPhone: normalizedPhone,
+              targetName: entry.name,
+              outboundMessageId: msgId,
+              purpose: entry.message.slice(0, 200),
+            });
+          }
         }
 
         outreachResults.push({ name: entry.name, success: sendSuccess, message: entry.message });
@@ -669,6 +827,7 @@ export const handleMessage = internalAction({
       }
     }
 
+    console.log(`[CS] Handler done — ms=${Date.now() - handlerStart} intent=${routeResult.intent} outreach=${parsed.needsOutreach.length}`);
     return {
       success: true,
       response: smsResponse,

@@ -51,7 +51,7 @@ iMessage arrives via Linq webhook
 
 ## Transitional State
 
-The Convex schema (schema.ts) is v2 — structured tables for medications, schedules, and agent-written context fields. However, handler.ts and promptContent.ts still use v1 field names in the agent's structured output (familyFileUpdates, memberUpdates). The migration to v2 output format (familyContextUpdate, memberContextUpdate with typed table operations) is a separate task. Match the working code, not the design aspirations.
+The agent now outputs both v1 fields (familyFileUpdates for freeform notes) and v2 structured fields (medicationUpdates, scheduleUpdates, careTeamUpdates). Both are processed — structured updates go to typed tables, freeform updates still go to families.context. The context prompt is built from typed tables first, with families.context appended as "Notes". Existing markdown in families.context will be migrated to typed tables via a one-time script (not yet written).
 
 ## Multi-Agent Setup
 

@@ -253,6 +253,69 @@ export const getFamilyContext = internalMutation({
   },
 });
 
+export const getFamilyStructuredContext = internalMutation({
+  args: { familyId: v.id("families") },
+  handler: async (ctx, args) => {
+    const [medications, scheduleItems, careTeam, members] = await Promise.all([
+      ctx.db
+        .query("medications")
+        .withIndex("by_family_status", (q) =>
+          q.eq("familyId", args.familyId).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("scheduleItems")
+        .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+        .filter((q) => q.neq(q.field("status"), "cancelled"))
+        .collect(),
+      ctx.db
+        .query("careTeam")
+        .withIndex("by_family_active", (q) =>
+          q.eq("familyId", args.familyId).eq("active", true),
+        )
+        .collect(),
+      ctx.db
+        .query("members")
+        .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+        .filter((q) => q.eq(q.field("active"), true))
+        .collect(),
+    ]);
+
+    const sections: string[] = [];
+
+    if (medications.length > 0) {
+      const medLines = medications.map(
+        (m) => `- ${m.name} ${m.dose} — ${m.schedule}${m.prescriber ? ` (${m.prescriber})` : ""}`,
+      );
+      sections.push(`## Medications\n${medLines.join("\n")}`);
+    }
+
+    if (scheduleItems.length > 0) {
+      const schedLines = scheduleItems.map(
+        (s) =>
+          `- [${s.type}] ${s.title}${s.date ? ` on ${s.date}` : ""}${s.time ? ` at ${s.time}` : ""}${s.assignedTo ? ` (${s.assignedTo})` : ""}`,
+      );
+      sections.push(`## Schedule\n${schedLines.join("\n")}`);
+    }
+
+    if (careTeam.length > 0) {
+      const teamLines = careTeam.map(
+        (c) => `- ${c.name} — ${c.role}${c.phone ? ` (${c.phone})` : ""}`,
+      );
+      sections.push(`## Care Team\n${teamLines.join("\n")}`);
+    }
+
+    if (members.length > 0) {
+      const memberLines = members.map(
+        (m) => `- ${m.name} (${m.role})${m.phone ? ` — ${m.phone}` : ""}`,
+      );
+      sections.push(`## Family Members\n${memberLines.join("\n")}`);
+    }
+
+    return sections.join("\n\n");
+  },
+});
+
 export const getRecentMessages = internalMutation({
   args: { familyId: v.id("families"), phone: v.string(), limit: v.number() },
   handler: async (ctx, args) => {
@@ -260,6 +323,19 @@ export const getRecentMessages = internalMutation({
       .query("messages")
       .withIndex("by_family_sender_phone", (q) =>
         q.eq("familyId", args.familyId).eq("senderPhone", args.phone),
+      )
+      .order("desc")
+      .take(args.limit);
+  },
+});
+
+export const getFamilyRecentMessages = internalMutation({
+  args: { familyId: v.id("families"), limit: v.number() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_family_timestamp", (q) =>
+        q.eq("familyId", args.familyId),
       )
       .order("desc")
       .take(args.limit);
@@ -408,6 +484,68 @@ export const getMemberById = internalMutation({
 });
 
 
+export const createOutreachThread = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    initiatorPhone: v.string(),
+    initiatorChatId: v.string(),
+    targetPhone: v.string(),
+    targetName: v.string(),
+    outboundMessageId: v.id("messages"),
+    purpose: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    return await ctx.db.insert("outreachThreads", {
+      ...args,
+      status: "pending",
+      createdAt: now,
+      expiresAt: now + 24 * 60 * 60 * 1000,
+    });
+  },
+});
+
+export const getPendingOutreachForSender = internalMutation({
+  args: { targetPhone: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("outreachThreads")
+      .withIndex("by_target_pending", (q) =>
+        q.eq("targetPhone", args.targetPhone).eq("status", "pending"),
+      )
+      .collect();
+  },
+});
+
+export const updateOutreachThread = internalMutation({
+  args: {
+    threadId: v.id("outreachThreads"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("responded"),
+      v.literal("expired"),
+      v.literal("closed"),
+    ),
+    respondedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { threadId, ...patch } = args;
+    await ctx.db.patch(threadId, patch);
+  },
+});
+
+export const getExpiredOutreachThreads = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const pending = await ctx.db
+      .query("outreachThreads")
+      .filter((q) => q.eq(q.field("status"), "pending"))
+      .collect();
+    return pending.filter((t) => t.expiresAt <= now);
+  },
+});
+
 export const applyContextUpdates = internalMutation({
   args: {
     familyId: v.id("families"),
@@ -441,5 +579,130 @@ export const applyContextUpdates = internalMutation({
       }
     }
     await ctx.db.patch(args.familyId, { context: context.trim() });
+  },
+});
+
+export const upsertMedication = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    action: v.union(v.literal("add"), v.literal("update"), v.literal("remove")),
+    name: v.string(),
+    dose: v.optional(v.string()),
+    schedule: v.optional(v.string()),
+    prescriber: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("medications")
+      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .filter((q) => q.eq(q.field("name"), args.name))
+      .first();
+
+    if (args.action === "remove" && existing) {
+      await ctx.db.patch(existing._id, { status: "discontinued" });
+      return;
+    }
+
+    if (existing) {
+      const patch: Record<string, string> = {};
+      if (args.dose) patch.dose = args.dose;
+      if (args.schedule) patch.schedule = args.schedule;
+      if (args.prescriber) patch.prescriber = args.prescriber;
+      await ctx.db.patch(existing._id, patch);
+    } else if (args.action === "add") {
+      await ctx.db.insert("medications", {
+        familyId: args.familyId,
+        name: args.name,
+        dose: args.dose ?? "",
+        schedule: args.schedule ?? "",
+        prescriber: args.prescriber,
+        status: "active",
+      });
+    }
+  },
+});
+
+export const upsertScheduleItem = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    action: v.union(v.literal("add"), v.literal("update"), v.literal("remove")),
+    type: v.union(
+      v.literal("shift"),
+      v.literal("appointment"),
+      v.literal("task"),
+      v.literal("ride"),
+      v.literal("careTask"),
+    ),
+    title: v.string(),
+    date: v.optional(v.string()),
+    time: v.optional(v.string()),
+    assignedTo: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("scheduleItems")
+      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .filter((q) => q.eq(q.field("title"), args.title))
+      .first();
+
+    if (args.action === "remove" && existing) {
+      await ctx.db.patch(existing._id, { status: "cancelled" });
+      return;
+    }
+
+    if (existing) {
+      const patch: Record<string, string> = {};
+      if (args.date) patch.date = args.date;
+      if (args.time) patch.time = args.time;
+      if (args.assignedTo) patch.assignedTo = args.assignedTo;
+      await ctx.db.patch(existing._id, patch);
+    } else if (args.action === "add") {
+      await ctx.db.insert("scheduleItems", {
+        familyId: args.familyId,
+        type: args.type,
+        title: args.title,
+        date: args.date,
+        time: args.time,
+        assignedTo: args.assignedTo,
+        status: "scheduled",
+      });
+    }
+  },
+});
+
+export const upsertCareTeamMember = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    action: v.union(v.literal("add"), v.literal("update"), v.literal("remove")),
+    name: v.string(),
+    role: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("careTeam")
+      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .filter((q) => q.eq(q.field("name"), args.name))
+      .first();
+
+    if (args.action === "remove" && existing) {
+      await ctx.db.patch(existing._id, { active: false });
+      return;
+    }
+
+    if (existing) {
+      const patch: Record<string, string> = {};
+      if (args.role) patch.role = args.role;
+      if (args.phone) patch.phone = args.phone;
+      await ctx.db.patch(existing._id, patch);
+    } else if (args.action === "add") {
+      await ctx.db.insert("careTeam", {
+        familyId: args.familyId,
+        name: args.name,
+        role: args.role ?? "other",
+        phone: args.phone,
+        active: true,
+      });
+    }
   },
 });

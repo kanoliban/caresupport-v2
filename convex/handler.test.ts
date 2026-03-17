@@ -73,35 +73,38 @@ describe("formatConversationLog", () => {
     expect(result).toBe("[No conversation history]");
   });
 
-  it("formats single inbound record", () => {
+  it("formats single inbound record with member attribution", () => {
     // #given
     const records = [
       {
         direction: "inbound" as const,
         body: "Hello there",
         timestamp: new Date("2025-03-01T14:30:00Z").getTime(),
+        memberName: "Liban",
       },
     ];
     // #when
     const result = formatConversationLog(records);
     // #then
-    expect(result).toContain("[INBOUND]");
+    expect(result).toContain("[INBOUND from Liban]");
     expect(result).toContain("Hello there");
     expect(result).toContain("2025-03-01 14:30:00 UTC");
   });
 
-  it("formats multiple records in order", () => {
+  it("formats multiple records with attribution in order", () => {
     // #given
     const records = [
       {
         direction: "inbound" as const,
         body: "First message",
         timestamp: new Date("2025-03-01T10:00:00Z").getTime(),
+        memberName: "Liban",
       },
       {
         direction: "outbound" as const,
         body: "Response here",
         timestamp: new Date("2025-03-01T10:01:00Z").getTime(),
+        memberName: "Solan",
       },
     ];
     // #when
@@ -109,10 +112,26 @@ describe("formatConversationLog", () => {
     // #then
     const lines = result.split("\n");
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain("[INBOUND]");
+    expect(lines[0]).toContain("[INBOUND from Liban]");
     expect(lines[0]).toContain("First message");
-    expect(lines[1]).toContain("[OUTBOUND]");
+    expect(lines[1]).toContain("[OUTBOUND to Solan]");
     expect(lines[1]).toContain("Response here");
+  });
+
+  it("falls back to phone when memberName missing", () => {
+    // #given
+    const records = [
+      {
+        direction: "inbound" as const,
+        body: "Hello",
+        timestamp: Date.now(),
+        senderPhone: "+16514109390",
+      },
+    ];
+    // #when
+    const result = formatConversationLog(records);
+    // #then
+    expect(result).toContain("[INBOUND from +16514109390]");
   });
 
   it("formats timestamp as ISO-style UTC", () => {
