@@ -307,9 +307,9 @@ export const getFamilyStructuredContext = internalMutation({
 
     if (members.length > 0) {
       const memberLines = members.map(
-        (m) => `- [${m._id}] ${m.name} (${m.role})${m.phone ? ` — ${m.phone}` : ""}`,
+        (m) => `- ${m.name} (${m.role})${m.phone ? ` — ${m.phone}` : ""}`,
       );
-      sections.push(`## Family Members Directory\nUse the ID in brackets for needs_outreach.member_id.\n${memberLines.join("\n")}`);
+      sections.push(`## Family Members\n${memberLines.join("\n")}`);
     }
 
     return sections.join("\n\n");

@@ -53,7 +53,7 @@ describe("extractJson", () => {
     const input = JSON.stringify({
       sms_response: "Done",
       internal_notes: "Updated",
-      needs_outreach: [{ phone: "+16515551234", name: "Sarah", message: "Shift update" }],
+      needs_outreach: [{ name: "Sarah", message: "Shift update" }],
       family_file_updates: [{ section: "This Week", operation: "append", content: "New entry", old_content: "" }],
       self_corrections: [],
       member_updates: [],
@@ -61,7 +61,8 @@ describe("extractJson", () => {
     });
     const result = extractJson(input);
     expect(result.needsOutreach).toHaveLength(1);
-    expect(result.needsOutreach[0].phone).toBe("+16515551234");
+    expect(result.needsOutreach[0].name).toBe("Sarah");
+    expect(result.needsOutreach[0].message).toBe("Shift update");
     expect(result.familyFileUpdates).toHaveLength(1);
   });
 

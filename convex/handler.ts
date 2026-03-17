@@ -676,49 +676,18 @@ export const handleMessage = internalAction({
     const outreachResults: Array<{ name: string; success: boolean; message?: string }> = [];
     for (const entry of parsed.needsOutreach) {
       try {
-        // Resolve phone: memberId (authoritative) → phone field → name lookup
-        let resolvedPhone = "";
-        let resolvedName = entry.name;
+        // Resolve phone from name within family — server-side, no agent guessing
+        const targetMemberByName = await ctx.runMutation(
+          internal.mutations.getMemberByName,
+          { familyId, name: entry.name },
+        ) as Doc<"members"> | null;
 
-        // Strategy 1: resolve by memberId
-        if (entry.memberId) {
-          try {
-            const targetById = await ctx.runMutation(
-              internal.mutations.getMemberById,
-              { id: entry.memberId as Id<"members"> },
-            ) as Doc<"members"> | null;
-            if (targetById?.phone && targetById.familyId === familyId) {
-              resolvedPhone = targetById.phone;
-              resolvedName = targetById.name;
-              console.log(`[CS] Resolved outreach memberId=${entry.memberId} → ${resolvedName} (${resolvedPhone})`);
-            } else {
-              console.log(`[CS] memberId=${entry.memberId} not found or wrong family`);
-            }
-          } catch (err) {
-            console.log(`[CS] Failed to resolve memberId=${entry.memberId}: ${err instanceof Error ? err.message : String(err)}`);
-          }
+        const normalizedPhone = targetMemberByName?.phone ?? "";
+        const resolvedName = targetMemberByName?.name ?? entry.name;
+
+        if (targetMemberByName) {
+          console.log(`[CS] Outreach resolved: "${entry.name}" → ${resolvedName} (${normalizedPhone})`);
         }
-
-        // Strategy 2: use phone field
-        if (!resolvedPhone && entry.phone) {
-          resolvedPhone = normalizePhone(entry.phone) ?? entry.phone;
-          console.log(`[CS] Fallback to phone field for ${resolvedName}: ${resolvedPhone}`);
-        }
-
-        // Strategy 3: lookup by name in family members
-        if (!resolvedPhone && entry.name) {
-          const memberByName = await ctx.runMutation(
-            internal.mutations.getMemberByName,
-            { familyId, name: entry.name },
-          ) as Doc<"members"> | null;
-          if (memberByName?.phone) {
-            resolvedPhone = memberByName.phone;
-            resolvedName = memberByName.name;
-            console.log(`[CS] Fallback to name lookup for ${entry.name} → ${resolvedPhone}`);
-          }
-        }
-
-        const normalizedPhone = resolvedPhone;
 
         if (!normalizedPhone) {
           console.log(`[CS] Skipping outreach — no phone resolved for ${resolvedName}`);
