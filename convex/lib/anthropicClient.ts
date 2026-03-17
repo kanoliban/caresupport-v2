@@ -46,9 +46,10 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
         type: "array",
         items: {
           type: "object",
-          required: ["phone", "name", "message"],
+          required: ["member_id", "name", "message"],
           additionalProperties: false,
           properties: {
+            member_id: { type: "string" },
             phone: { type: "string" },
             name: { type: "string" },
             message: { type: "string" },

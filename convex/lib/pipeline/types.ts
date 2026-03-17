@@ -52,6 +52,7 @@ export interface SystemBlocksInput {
 }
 
 export interface OutreachEntry {
+  memberId?: string;
   phone: string;
   name: string;
   message: string;

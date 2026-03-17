@@ -676,13 +676,44 @@ export const handleMessage = internalAction({
     const outreachResults: Array<{ name: string; success: boolean; message?: string }> = [];
     for (const entry of parsed.needsOutreach) {
       try {
-        const normalizedPhone = normalizePhone(entry.phone) ?? entry.phone;
+        // Resolve phone from memberId if provided (authoritative), fall back to phone field
+        let resolvedPhone = entry.phone ? (normalizePhone(entry.phone) ?? entry.phone) : "";
+        let resolvedName = entry.name;
+        if (entry.memberId) {
+          try {
+            const targetById = await ctx.runMutation(
+              internal.mutations.getMemberById,
+              { id: entry.memberId as Id<"members"> },
+            ) as Doc<"members"> | null;
+            if (targetById?.phone && targetById.familyId === familyId) {
+              resolvedPhone = targetById.phone;
+              resolvedName = targetById.name;
+              console.log(`[CS] Resolved outreach memberId=${entry.memberId} → ${resolvedName} (${resolvedPhone})`);
+            } else {
+              console.log(`[CS] memberId=${entry.memberId} not found or wrong family, falling back to phone`);
+            }
+          } catch {
+            console.log(`[CS] Failed to resolve memberId=${entry.memberId}, falling back to phone`);
+          }
+        }
+        const normalizedPhone = resolvedPhone;
+
+        if (!normalizedPhone) {
+          console.log(`[CS] Skipping outreach — no phone resolved for ${resolvedName}`);
+          outreachResults.push({ name: resolvedName, success: false });
+          continue;
+        }
+
+        if (normalizedPhone === senderPhone) {
+          console.log(`[CS] Skipping outreach to sender's own phone: ${normalizedPhone}`);
+          continue;
+        }
 
         const outreachEvent = buildOutreachSentEvent({
           familyId,
           initiatedBy: senderPhone,
           sentToPhone: normalizedPhone,
-          sentToName: entry.name,
+          sentToName: resolvedName,
           purpose: entry.message.slice(0, 200),
         });
         await ctx.runMutation(internal.mutations.logAudit, outreachEvent);
@@ -703,7 +734,7 @@ export const handleMessage = internalAction({
             },
             timestamp: Date.now(),
           });
-          outreachResults.push({ name: entry.name, success: false, message: entry.message });
+          outreachResults.push({ name: resolvedName, success: false, message: entry.message });
           continue;
         }
 
@@ -718,7 +749,7 @@ export const handleMessage = internalAction({
             },
             timestamp: Date.now(),
           });
-          outreachResults.push({ name: entry.name, success: false, message: entry.message });
+          outreachResults.push({ name: resolvedName, success: false, message: entry.message });
           continue;
         }
 
@@ -751,7 +782,7 @@ export const handleMessage = internalAction({
         }
 
         if (sendSuccess) {
-          const msgId = await logOutbound(ctx, familyId, normalizedPhone, entry.name, entry.message, Date.now());
+          const msgId = await logOutbound(ctx, familyId, normalizedPhone, resolvedName, entry.message, Date.now());
           if (linqMessageId) {
             await ctx.runMutation(internal.mutations.updateMessageLinqId, {
               messageId: msgId,
@@ -766,14 +797,14 @@ export const handleMessage = internalAction({
               initiatorPhone: senderPhone,
               initiatorChatId: chatId,
               targetPhone: normalizedPhone,
-              targetName: entry.name,
+              targetName: resolvedName,
               outboundMessageId: msgId,
               purpose: entry.message.slice(0, 200),
             });
           }
         }
 
-        outreachResults.push({ name: entry.name, success: sendSuccess, message: entry.message });
+        outreachResults.push({ name: resolvedName, success: sendSuccess, message: entry.message });
       } catch {
         outreachResults.push({ name: entry.name, success: false });
       }

@@ -21,6 +21,7 @@ const SNAKE_TO_CAMEL: Record<string, keyof AgentResponse> = {
   medication_updates: "medicationUpdates",
   schedule_updates: "scheduleUpdates",
   care_team_updates: "careTeamUpdates",
+  member_id: "memberId" as keyof AgentResponse,
   old_content: "oldContent" as keyof AgentResponse,
   access_level: "accessLevel" as keyof AgentResponse,
   target_message: "targetMessage" as keyof AgentResponse,
@@ -36,7 +37,14 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
   return {
     smsResponse: String(result.smsResponse ?? ""),
     internalNotes: String(result.internalNotes ?? ""),
-    needsOutreach: Array.isArray(result.needsOutreach) ? result.needsOutreach : [],
+    needsOutreach: Array.isArray(result.needsOutreach)
+      ? result.needsOutreach.map((e: Record<string, unknown>) => ({
+          memberId: String(e.member_id ?? e.memberId ?? ""),
+          phone: String(e.phone ?? ""),
+          name: String(e.name ?? ""),
+          message: String(e.message ?? ""),
+        }))
+      : [],
     familyFileUpdates: Array.isArray(result.familyFileUpdates) ? result.familyFileUpdates : [],
     selfCorrections: Array.isArray(result.selfCorrections) ? result.selfCorrections : [],
     memberUpdates: Array.isArray(result.memberUpdates) ? result.memberUpdates : [],
