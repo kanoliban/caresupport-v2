@@ -1,6 +1,7 @@
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { buildOnboardingContext } from "./lib/promptContent";
+import { canAddMember, getEffectiveTier } from "./lib/enforcement/planEnforcement";
 
 const directionValidator = v.union(
   v.literal("inbound"),
@@ -61,7 +62,7 @@ const updateValidator = v.object({
   section: v.string(),
   operation: v.string(),
   content: v.string(),
-  oldContent: v.string(),
+  oldContent: v.optional(v.string()),
 });
 
 const VALID_ROLES = new Set([
@@ -112,6 +113,20 @@ export const createMember = internalMutation({
       )
       .first();
     if (existing) return existing._id;
+
+    const family = await ctx.db.get(args.familyId);
+    if (family) {
+      const tier = getEffectiveTier(family.planTier);
+      const activeMembers = await ctx.db
+        .query("members")
+        .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+        .filter((q) => q.eq(q.field("active"), true))
+        .collect();
+      const check = canAddMember(tier, activeMembers.length);
+      if (!check.allowed) {
+        throw new Error("PLAN_LIMIT_REACHED");
+      }
+    }
 
     const role = VALID_ROLES.has(args.role)
       ? (args.role as "care_recipient" | "family_caregiver" | "professional_caregiver" | "community_supporter")

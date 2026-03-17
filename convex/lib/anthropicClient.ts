@@ -9,11 +9,12 @@ import type {
 import type { SystemBlock } from "./pipeline/types";
 
 const MAX_TOKENS = 16_000;
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 45_000;
 
 const FILE_UPDATE_SCHEMA = {
   type: "object",
-  required: ["section", "operation", "content", "old_content"],
+  required: ["section", "operation", "content"],
+  additionalProperties: false,
   properties: {
     section: { type: "string" },
     operation: { type: "string" },
@@ -26,6 +27,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
   type: "json_schema",
   schema: {
     type: "object",
+    additionalProperties: false,
     required: [
       "sms_response",
       "internal_notes",
@@ -45,6 +47,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
         items: {
           type: "object",
           required: ["phone", "name", "message"],
+          additionalProperties: false,
           properties: {
             phone: { type: "string" },
             name: { type: "string" },
@@ -60,6 +63,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
         items: {
           type: "object",
           required: ["action", "phone", "name", "role", "relationship", "access_level"],
+          additionalProperties: false,
           properties: {
             action: { type: "string" },
             phone: { type: "string" },
@@ -75,6 +79,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
         items: {
           type: "object",
           required: ["target_message", "type"],
+          additionalProperties: false,
           properties: {
             target_message: { type: "string", enum: ["last_inbound", "last_outbound"] },
             type: { type: "string", enum: ["love", "like", "dislike", "laugh", "emphasize", "question"] },
@@ -86,6 +91,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
           {
             type: "object",
             required: ["type", "name"],
+            additionalProperties: false,
             properties: {
               type: { type: "string", enum: ["screen", "bubble"] },
               name: { type: "string" },
@@ -129,9 +135,9 @@ function buildSystemParam(blocks: SystemBlock[]): TextBlockParam[] {
   });
 }
 
-function thinkingConfig(model: string): ThinkingConfigParam | undefined {
-  if (model.includes("haiku")) return undefined;
-  return { type: "adaptive" };
+function thinkingConfig(_model: string): ThinkingConfigParam | undefined {
+  // structured JSON output (json_schema) and adaptive thinking are mutually exclusive
+  return undefined;
 }
 
 function effortLevel(model: string): "medium" | "high" | undefined {
@@ -156,7 +162,6 @@ async function tryModel(
     ...(effort && { effort }),
     format: AGENT_RESPONSE_FORMAT,
   };
-
   try {
     const stream = client.messages.stream(
       {
@@ -174,12 +179,17 @@ async function tryModel(
 
     let text = "";
     let thinking = "";
+    const blockTypes = response.content.map((b) => b.type);
+    console.log(`[anthropic] model=${response.model} stop=${response.stop_reason} blocks=${JSON.stringify(blockTypes)} tokens_in=${response.usage.input_tokens} tokens_out=${response.usage.output_tokens}`);
     for (const block of response.content) {
       if (block.type === "text") {
         text += block.text;
       } else if (block.type === "thinking") {
         thinking += block.thinking;
       }
+    }
+    if (!text) {
+      console.error(`[anthropic] EMPTY TEXT. Full content: ${JSON.stringify(response.content).slice(0, 500)}`);
     }
 
     return {
@@ -237,7 +247,10 @@ export async function callAnthropic(
       );
     } catch (error: unknown) {
       lastError = error;
-      if (isRetryableStatus(error) || isAbortError(error)) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      if (isRetryableStatus(error)) {
         continue;
       }
       throw error;

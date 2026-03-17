@@ -1,7 +1,7 @@
 import type { Intent, RouteResult, RouteTier } from "./types";
 
 export const MODELS: Record<RouteTier, string> = {
-  fast: "claude-haiku-4-5",
+  fast: "claude-sonnet-4-6",
   reason: "claude-sonnet-4-6",
   critical: "claude-opus-4-6",
 };
@@ -81,7 +81,9 @@ export function fallbackChain(startModel: string): string[] {
   if (startTier && TIER_ORDER.includes(startTier)) {
     const idx = TIER_ORDER.indexOf(startTier);
     for (const tier of TIER_ORDER.slice(idx + 1)) {
-      chain.push(MODELS[tier]);
+      if (!chain.includes(MODELS[tier])) {
+        chain.push(MODELS[tier]);
+      }
     }
   }
 

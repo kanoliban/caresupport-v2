@@ -8,6 +8,8 @@ const familyStatus = v.union(
   v.literal("archived"),
 );
 
+const planTier = v.union(v.literal("free"), v.literal("family"));
+
 const memberRole = v.union(
   v.literal("care_recipient"),
   v.literal("family_caregiver"),
@@ -115,7 +117,7 @@ const approvalUpdate = v.object({
   section: v.string(),
   operation: v.string(),
   content: v.string(),
-  oldContent: v.string(),
+  oldContent: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -128,6 +130,9 @@ export default defineSchema({
     updatedAt: v.number(),
     familyId: v.optional(v.string()),
     careRecipient: v.optional(v.string()),
+    planTier: v.optional(planTier),
+    stripeCustomerId: v.optional(v.string()),
+    stripeSubscriptionId: v.optional(v.string()),
   }).index("by_status", ["status"]),
 
   members: defineTable({

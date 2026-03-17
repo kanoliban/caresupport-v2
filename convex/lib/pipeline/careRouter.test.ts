@@ -95,10 +95,9 @@ describe("route — priority ordering", () => {
 });
 
 describe("fallbackChain", () => {
-  it("Haiku → [Haiku, Sonnet, Opus]", () => {
+  it("fast (Sonnet) → [Sonnet, Opus]", () => {
     expect(fallbackChain(MODELS.fast)).toEqual([
       MODELS.fast,
-      MODELS.reason,
       MODELS.critical,
     ]);
   });

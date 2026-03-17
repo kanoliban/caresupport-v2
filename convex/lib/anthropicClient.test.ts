@@ -124,23 +124,13 @@ describe("callAnthropic", () => {
     expect(result.model).toBe("claude-sonnet-4-5-20250514");
   });
 
-  it("falls back on timeout (AbortError)", async () => {
-    // #given
-    let callCount = 0;
-    const result = await callWithMock(() => {
-      callCount++;
-      if (callCount === 1) {
-        const err = new DOMException("The operation was aborted", "AbortError");
-        throw err;
-      }
-      return Promise.resolve(
-        makeSuccessResponse({ model: "claude-sonnet-4-5-20250514" }),
-      );
-    });
-
-    // #then
-    expect(callCount).toBe(2);
-    expect(result.model).toBe("claude-sonnet-4-5-20250514");
+  it("throws immediately on timeout (AbortError)", async () => {
+    // #given/#when/#then
+    await expect(
+      callWithMock(() => {
+        throw new DOMException("The operation was aborted", "AbortError");
+      }),
+    ).rejects.toThrow("aborted");
   });
 
   it("throws non-retryable errors immediately", async () => {
@@ -182,12 +172,12 @@ describe("callAnthropic", () => {
     );
   });
 
-  it("sends adaptive thinking, effort, and schema for Sonnet", async () => {
+  it("sends effort and schema (no thinking) for Sonnet", async () => {
     // #given
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
-        expect(body.thinking).toEqual({ type: "adaptive" });
+        expect(body.thinking).toBeUndefined();
         const oc = body.output_config as Record<string, unknown>;
         expect(oc.effort).toBe("medium");
         expect(oc.format).toHaveProperty("type", "json_schema");
@@ -199,12 +189,12 @@ describe("callAnthropic", () => {
     );
   });
 
-  it("sends adaptive thinking, high effort, and schema for Opus", async () => {
+  it("sends high effort and schema (no thinking) for Opus", async () => {
     // #given
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
-        expect(body.thinking).toEqual({ type: "adaptive" });
+        expect(body.thinking).toBeUndefined();
         const oc = body.output_config as Record<string, unknown>;
         expect(oc.effort).toBe("high");
         expect(oc.format).toHaveProperty("type", "json_schema");
