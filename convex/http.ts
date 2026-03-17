@@ -1,6 +1,8 @@
 import { httpAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { internal, components } from "./_generated/api";
 import { httpRouter } from "convex/server";
+import { registerRoutes } from "@convex-dev/stripe";
 import {
   verifyWebhookSignature,
   extractSenderPhone,
@@ -254,6 +256,82 @@ http.route({
 
     return jsonResponse({ handled: false, event: eventType });
   }),
+});
+
+const CHECKOUT_SUCCESS_HTML = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CareSupport</title>
+<style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100dvh;margin:0;background:#f9fafb;color:#111}
+.card{text-align:center;max-width:400px;padding:2rem}</style></head>
+<body><div class="card"><h1>You're all set!</h1><p>Head back to iMessage — CareSupport will confirm your upgrade there.</p><p style="color:#6b7280;font-size:.875rem">You can close this tab.</p></div></body></html>`;
+
+const CHECKOUT_CANCEL_HTML = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CareSupport</title>
+<style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100dvh;margin:0;background:#f9fafb;color:#111}
+.card{text-align:center;max-width:400px;padding:2rem}</style></head>
+<body><div class="card"><h1>No worries</h1><p>You can upgrade anytime — just text "upgrade" in iMessage.</p><p style="color:#6b7280;font-size:.875rem">You can close this tab.</p></div></body></html>`;
+
+http.route({
+  path: "/checkout/success",
+  method: "GET",
+  handler: httpAction(async () => {
+    return new Response(CHECKOUT_SUCCESS_HTML, {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    });
+  }),
+});
+
+http.route({
+  path: "/checkout/cancel",
+  method: "GET",
+  handler: httpAction(async () => {
+    return new Response(CHECKOUT_CANCEL_HTML, {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    });
+  }),
+});
+
+registerRoutes(http, components.stripe, {
+  webhookPath: "/stripe/webhook",
+  events: {
+    "checkout.session.completed": async (ctx, event) => {
+      const session = event.data.object;
+      if (session.mode !== "subscription") return;
+      const familyId = session.metadata?.familyId;
+      const subscriptionId =
+        typeof session.subscription === "string"
+          ? session.subscription
+          : session.subscription?.id;
+      if (familyId && subscriptionId) {
+        await ctx.runMutation(internal.stripe.updateFamilyPlan, {
+          familyId: familyId as Id<"families">,
+          planTier: "family",
+          stripeSubscriptionId: subscriptionId,
+        });
+        await ctx.scheduler.runAfter(0, internal.stripe.sendUpgradeConfirmation, {
+          familyId: familyId as Id<"families">,
+        });
+      }
+    },
+    "customer.subscription.deleted": async (ctx, event) => {
+      const subscription = event.data.object;
+      const subscriptionId = subscription.id;
+      const family = await ctx.runQuery(
+        internal.queries.getFamilyBySubscription,
+        { stripeSubscriptionId: subscriptionId },
+      );
+      if (family) {
+        await ctx.runMutation(internal.stripe.updateFamilyPlan, {
+          familyId: family._id,
+          planTier: "free",
+          stripeSubscriptionId: undefined,
+        });
+      }
+    },
+  },
 });
 
 export default http;

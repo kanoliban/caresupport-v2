@@ -27,6 +27,13 @@ export {
 } from "./approvalPipeline";
 export type { ApprovalResponse } from "./approvalPipeline";
 
+export {
+  canAddMember,
+  getEffectiveTier,
+  getPlanLimits,
+} from "./planEnforcement";
+export type { PlanTier, PlanLimits } from "./planEnforcement";
+
 export type {
   AccessLevel,
   AuditEventType,
