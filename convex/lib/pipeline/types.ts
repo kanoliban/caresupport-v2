@@ -133,6 +133,7 @@ export interface AgentResponse {
   routingUpdates: RoutingUpdate[];
   reactions: ReactionRequest[];
   effect: EffectRequest | null;
+  upgradeRequested?: boolean;
   medicationUpdates?: MedicationUpdate[];
   scheduleUpdates?: ScheduleUpdate[];
   careTeamUpdates?: CareTeamUpdate[];

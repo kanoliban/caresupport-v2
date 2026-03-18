@@ -99,6 +99,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
           { type: "null" },
         ],
       },
+      upgrade_requested: { type: "boolean" },
       medication_updates: {
         type: "array",
         items: {
