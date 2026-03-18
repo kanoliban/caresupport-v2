@@ -1,10 +1,17 @@
 import { action, internalAction, internalMutation } from "./_generated/server";
 import { internal, components } from "./_generated/api";
 import { StripeSubscriptions } from "@convex-dev/stripe";
+import Stripe from "stripe";
 import { v } from "convex/values";
 import { sendMessage } from "./lib/linqClient";
 
 const stripeClient = new StripeSubscriptions(components.stripe, {});
+
+function getStripe(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY environment variable is not set");
+  return new Stripe(key);
+}
 
 export const createFamilyCheckout = internalAction({
   args: { familyId: v.id("families"), priceId: v.string() },
@@ -18,27 +25,54 @@ export const createFamilyCheckout = internalAction({
     });
     if (!family) throw new Error("Family not found");
 
+    const stripe = getStripe();
+
     let customerId: string | undefined = family.stripeCustomerId;
     if (!customerId) {
-      const result = await stripeClient.getOrCreateCustomer(ctx, {
-        userId: args.familyId,
+      const customer = await stripe.customers.create({
         name: family.name,
+        metadata: { familyId: args.familyId },
       });
-      customerId = result.customerId;
+      customerId = customer.id;
       await ctx.runMutation(internal.stripe.updateFamilyStripeCustomer, {
         familyId: args.familyId,
         stripeCustomerId: customerId,
       });
     }
 
-    return await stripeClient.createCheckoutSession(ctx, {
-      priceId: args.priceId,
-      customerId,
-      mode: "subscription",
-      metadata: { familyId: args.familyId },
-      successUrl: `${process.env.SITE_URL ?? "https://keen-raccoon-606.convex.site"}/checkout/success`,
-      cancelUrl: `${process.env.SITE_URL ?? "https://keen-raccoon-606.convex.site"}/checkout/cancel`,
+    // Expire any existing open checkout sessions for this customer
+    const existing = await stripe.checkout.sessions.list({
+      customer: customerId,
+      status: "open",
+      limit: 10,
     });
+    for (const session of existing.data) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch {
+        // best-effort — session may have already expired
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: args.priceId, quantity: 1 }],
+      metadata: { familyId: args.familyId },
+      success_url: `${process.env.SITE_URL ?? "https://keen-raccoon-606.convex.site"}/checkout/success`,
+      cancel_url: `${process.env.SITE_URL ?? "https://keen-raccoon-606.convex.site"}/checkout/cancel`,
+      // Prevent Stripe from retrying failed payments automatically
+      subscription_data: {
+        metadata: { familyId: args.familyId },
+      },
+      payment_method_options: {
+        card: {
+          request_three_d_secure: "automatic",
+        },
+      },
+    });
+
+    return { sessionId: session.id, url: session.url };
   },
 });
 
