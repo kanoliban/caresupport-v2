@@ -240,12 +240,28 @@ export const handleMessage = internalAction({
     // Step 3b: Check for upgrade intent (early return — before AI call)
     const trimmed = messageBody.trim();
     const upgradeIntent =
-      /^(upgrade|subscribe|go premium|family plan)$/i.test(trimmed) ||
-      /^(i want to |i'd like to |let's |ready to )?(upgrade|subscribe|go premium|get family plan)/i.test(trimmed);
+      /\b(upgrade|subscribe|go premium|family plan|sign me up)\b/i.test(trimmed) &&
+      !/\b(don'?t|no|cancel|stop|not)\b/i.test(trimmed);
     if (upgradeIntent) {
       const family = await ctx.runQuery(internal.queries.getFamily, { familyId });
       const tier = family?.planTier ?? "free";
       if (tier === "free") {
+        if (accessLevel !== "full") {
+          const coordPhones = await ctx.runMutation(internal.mutations.getCoordinators, { familyId }) as string[];
+          const coordMembers = await Promise.all(
+            coordPhones.map((phone: string) =>
+              ctx.runMutation(internal.mutations.getMemberByPhone, { phone }) as Promise<Doc<"members"> | null>,
+            ),
+          );
+          const coordNames = coordMembers
+            .filter((m): m is Doc<"members"> => m !== null)
+            .map((m) => m.name)
+            .join(", ") || "the coordinator";
+          const notCoordMsg = `Only the care coordinator can upgrade. Ask ${coordNames} to reply with "upgrade" and they'll get a checkout link.`;
+          await logOutbound(ctx, familyId, senderPhone, memberName, notCoordMsg, now);
+          await sendResponse(chatId, notCoordMsg, env());
+          return { success: true, response: notCoordMsg };
+        }
         const priceId = process.env.FAMILY_MONTHLY_PRICE_ID;
         if (!priceId) {
           const errMsg = "Upgrade isn't available just yet — we're still setting things up. Try again soon!";
@@ -253,17 +269,26 @@ export const handleMessage = internalAction({
           await sendResponse(chatId, errMsg, env());
           return { success: false, response: errMsg, error: "FAMILY_MONTHLY_PRICE_ID not configured" };
         }
-        const session = await ctx.runAction(internal.stripe.createFamilyCheckout, {
-          familyId,
-          priceId,
-        });
-        if (session.url) {
-          const upgradeMsg =
-            `Here's your upgrade link for CareSupport Family ($14/mo):\n\n${session.url}\n\n` +
-            `Once you're set, you can add anyone to your care network.`;
-          await logOutbound(ctx, familyId, senderPhone, memberName, upgradeMsg, now);
-          await sendResponse(chatId, upgradeMsg, env());
-          return { success: true, response: upgradeMsg };
+        try {
+          const session = await ctx.runAction(internal.stripe.createFamilyCheckout, {
+            familyId,
+            priceId,
+          });
+          if (session.url) {
+            const upgradeMsg =
+              `Here's your upgrade link for CareSupport Family ($14/mo):\n\n${session.url}\n\n` +
+              `Once you're set, you can add anyone to your care network.`;
+            await logOutbound(ctx, familyId, senderPhone, memberName, upgradeMsg, now);
+            await sendResponse(chatId, upgradeMsg, env());
+            return { success: true, response: upgradeMsg };
+          }
+        } catch (err: unknown) {
+          const errDetail = err instanceof Error ? err.message : String(err);
+          console.error("[CS] Stripe checkout failed:", errDetail);
+          const failMsg = "Something went wrong generating your upgrade link. The team has been notified — sit tight and we'll get this sorted.";
+          await logOutbound(ctx, familyId, senderPhone, memberName, failMsg, now);
+          await sendResponse(chatId, failMsg, env());
+          return { success: false, response: failMsg, error: `stripe_checkout_failed: ${errDetail}` };
         }
       } else {
         const alreadyMsg = "You're already on CareSupport Family — go ahead and add anyone you need!";
