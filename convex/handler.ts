@@ -545,6 +545,7 @@ export const handleMessage = internalAction({
           scope: "family",
           category,
           text: cleanText,
+          learnedAt: now,
         });
       }
     }
@@ -670,6 +671,7 @@ export const handleMessage = internalAction({
         await ctx.runMutation(internal.mutations.updateOutreachThread, {
           threadId: thread._id,
           status: "responded",
+          respondedAt: Date.now(),
         });
       }
     }
@@ -792,6 +794,7 @@ export const handleMessage = internalAction({
               initiatorChatId: chatId,
               targetPhone: normalizedPhone,
               targetName: resolvedName,
+              outboundMessageId: msgId,
               purpose: entry.message.slice(0, 200),
             });
           }
