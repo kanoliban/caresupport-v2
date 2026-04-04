@@ -116,6 +116,49 @@ export function stripMarkdown(text: string): string {
     .replace(/(^|[\s([{"'])\*(?=\S)(.+?\S)\*(?=$|[\s)\]}.,!?;:'"])/g, "$1$2");
 }
 
+const PROFILE_SAVE_PATTERNS = [
+  /^\s*please save this to my profile(?: for future messages)?[:\s,-]*(.+)$/i,
+  /^\s*(?:please )?(?:save|add|put) (?:this )?(?:to|in) my profile(?: for future messages)?[:\s,-]*(.+)$/i,
+  /^\s*(?:please )?remember (?:this )?about me(?: for future messages)?[:\s,-]*(.+)$/i,
+  /^\s*for future reference[:,]?\s*(.+)$/i,
+];
+
+function inferMemberProfileSection(note: string): string {
+  return /\b(text|texts|call|calls|message|messages|update|updates|sms|imessage|phone)\b/i
+    .test(note)
+    ? "Communication Preferences"
+    : "Personal Context";
+}
+
+export function inferExplicitMemberProfileUpdate(
+  message: string,
+): { section: string; operation: string; content: string; oldContent: string } | null {
+  for (const pattern of PROFILE_SAVE_PATTERNS) {
+    const match = pattern.exec(message);
+    const rawNote = match?.[1]?.trim();
+    if (!rawNote) {
+      continue;
+    }
+
+    const note = rawNote
+      .replace(/^["']+|["']+$/g, "")
+      .trim();
+
+    if (!note || note.includes("?")) {
+      return null;
+    }
+
+    return {
+      section: inferMemberProfileSection(note),
+      operation: "append",
+      content: note.startsWith("-") ? note : `- ${note}`,
+      oldContent: "",
+    };
+  }
+
+  return null;
+}
+
 function truncateReplyQuote(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= MAX_REPLY_QUOTE_LENGTH) {
@@ -592,15 +635,25 @@ export const handleMessage = internalAction({
       }
     }
 
-    if (parsed.memberUpdates.length > 0) {
+    const memberUpdates = parsed.memberUpdates.map((update) => ({
+      section: update.section,
+      operation: update.operation,
+      content: update.content,
+      oldContent: update.oldContent,
+    }));
+    const inferredMemberUpdate = inferExplicitMemberProfileUpdate(messageBody);
+    if (
+      memberUpdates.length === 0 &&
+      inferredMemberUpdate &&
+      !(member.context ?? "").includes(inferredMemberUpdate.content)
+    ) {
+      memberUpdates.push(inferredMemberUpdate);
+    }
+
+    if (memberUpdates.length > 0) {
       await ctx.runMutation(internal.mutations.applyMemberContextUpdates, {
         memberId: member._id,
-        updates: parsed.memberUpdates.map((update) => ({
-          section: update.section,
-          operation: update.operation,
-          content: update.content,
-          oldContent: update.oldContent,
-        })),
+        updates: memberUpdates,
       });
     }
 

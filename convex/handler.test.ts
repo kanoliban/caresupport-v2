@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseCategory, formatConversationLog, stripMarkdown } from "./handler";
+import {
+  parseCategory,
+  formatConversationLog,
+  inferExplicitMemberProfileUpdate,
+  stripMarkdown,
+} from "./handler";
 
 // ─── parseCategory ──────────────────────────────────────────────────────
 
@@ -185,5 +190,43 @@ describe("stripMarkdown", () => {
 
     // #then
     expect(result).toBe(text);
+  });
+});
+
+// ─── inferExplicitMemberProfileUpdate ───────────────────────────────────
+
+describe("inferExplicitMemberProfileUpdate", () => {
+  it("extracts an explicit save-to-profile preference into communication preferences", () => {
+    const update = inferExplicitMemberProfileUpdate(
+      "Please save this to my profile for future messages: I prefer text updates after 8 PM and very short bullet-style messages.",
+    );
+
+    expect(update).toEqual({
+      section: "Communication Preferences",
+      operation: "append",
+      content: "- I prefer text updates after 8 PM and very short bullet-style messages.",
+      oldContent: "",
+    });
+  });
+
+  it("treats future-reference personal details as personal context", () => {
+    const update = inferExplicitMemberProfileUpdate(
+      "For future reference, I work nights on Tuesdays and Thursdays.",
+    );
+
+    expect(update).toEqual({
+      section: "Personal Context",
+      operation: "append",
+      content: "- I work nights on Tuesdays and Thursdays.",
+      oldContent: "",
+    });
+  });
+
+  it("ignores non-preference questions", () => {
+    const update = inferExplicitMemberProfileUpdate(
+      "For future reference, what time is the appointment?",
+    );
+
+    expect(update).toBeNull();
   });
 });

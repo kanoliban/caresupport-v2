@@ -4,6 +4,7 @@
 | Date | Source | What Went Wrong | What To Do Instead |
 |------|--------|----------------|-------------------|
 | 2026-04-04 | self | Checked repo status and local instructions before reading `.claude/napkin.md`. | Read the repo napkin first on entry, then inspect git state and other instructions. |
+| 2026-04-04 | user | Re-triggered Convex device auth after already discovering this machine re-prompts for `convex dev --once`. | Before any future dev sync on this machine, warn the user that Convex device auth will pop again and wait for explicit go-ahead. |
 | 2026-03-06 | self | Wrote handoff notes into the Desktop clone instead of `~/caresupport-v2`. | Treat `~/caresupport-v2` as the canonical repo for this branch work and update notes there. |
 | 2026-03-06 | self | Treated Convex prod deploy failure as a code migration problem. | If deploy fails on schema validation against legacy seed rows, clear the throwaway data first rather than writing a migration. |
 | 2026-03-06 | self | Assumed `npm run seed` would target prod after deploy. | Override `CONVEX_URL` explicitly when seeding prod; `.env.local` still points at dev. |

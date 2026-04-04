@@ -298,3 +298,29 @@ Read the last 2-3 entries before starting work.
 
 ### Concerns
 - Convex CLI auth persistence is still odd on this machine: login works inside `convex dev`, but separate admin-style commands may still fail with `MissingAccessToken`. Treat the `convex dev --once` path as the reliable deploy mechanism here until that is understood.
+
+---
+
+## 2026-04-04 — Codex
+
+### What I did
+- Verified the last failing Family A dev scenario after the new member-profile fallback was synced to dev: sent `Please save this to my profile for future messages: I prefer text updates after 8 PM and very short bullet-style messages.` through `handler:handleMessage` for Liban Kano.
+- Confirmed the live handler no longer gives a false save acknowledgement: it replied `Already in your profile — no changes needed.` once the preference was already present.
+- Queried `members:getByPhone` on dev and confirmed `members.context` now contains the actual saved preference under `## Communication Preferences`.
+- Re-ran the local verification for the patch: `npx vitest run convex/handler.test.ts convex/mutations.test.ts` and `npx tsc --noEmit`.
+
+### State I'm leaving
+- The last known live Family A failure is closed: explicit save-to-profile requests now persist the requested communication preference in `members.context` on dev instead of only seeding the profile scaffold.
+- Local code and the dev deployment are aligned on this fix, but the git working tree still has the validated patch and notes unstaged until the next commit.
+- The repo napkin now records an operational rule from user feedback: do not trigger Convex device auth on this machine again without warning and explicit approval first.
+
+### What the next agent should know
+- The member-profile safeguard is implemented in three places:
+  - `convex/lib/pipeline/promptBuilder.ts` tells the model to populate `member_updates` for explicit save/remember requests and forbids claiming a profile save without it.
+  - `convex/handler.ts` has `inferExplicitMemberProfileUpdate(...)` as a fallback if the model still returns no `member_updates`.
+  - `convex/handler.test.ts` covers the explicit save-to-profile and future-reference cases.
+- The live dev response for the repeat Liban test was `Already in your profile — no changes needed.` and the stored member context includes `- I prefer text updates after 8 PM and very short bullet-style messages.` under `## Communication Preferences`.
+- If another deploy becomes necessary from this machine, warn the user first because `npx convex dev --once --env-file .env.local --typecheck disable` can trigger a browser/device auth flow again.
+
+### Concerns
+- Webhook-path validation is still not complete because the dev `LINQ_WEBHOOK_SECRET` mismatch has not been resolved; current live validation is via `npx convex run handler:handleMessage`.
