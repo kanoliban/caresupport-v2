@@ -2,6 +2,10 @@ import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { buildOnboardingContext } from "./lib/promptContent";
 import { canAddMember, getEffectiveTier } from "./lib/enforcement/planEnforcement";
+import {
+  applySectionUpdates,
+  buildDefaultMemberContext,
+} from "./lib/contextUpdates";
 
 const directionValidator = v.union(
   v.literal("inbound"),
@@ -569,30 +573,32 @@ export const applyContextUpdates = internalMutation({
     const family = await ctx.db.get(args.familyId);
     if (!family) return;
 
-    let context = family.context ?? "";
-    for (const upd of args.updates) {
-      if (upd.operation === "append") {
-        const sectionHeader = `## ${upd.section}`;
-        const idx = context.indexOf(sectionHeader);
-        if (idx >= 0) {
-          const nextSection = context.indexOf("\n## ", idx + 1);
-          const insertAt = nextSection >= 0 ? nextSection : context.length;
-          context = context.slice(0, insertAt) + "\n" + upd.content + context.slice(insertAt);
-        }
-      } else if (upd.operation === "prepend") {
-        const sectionHeader = `## ${upd.section}`;
-        const idx = context.indexOf(sectionHeader);
-        if (idx >= 0) {
-          const afterHeader = context.indexOf("\n", idx) + 1;
-          context = context.slice(0, afterHeader) + upd.content + "\n" + context.slice(afterHeader);
-        }
-      } else if (upd.operation === "replace" && upd.oldContent) {
-        context = context.replace(upd.oldContent, upd.content);
-      } else if (upd.operation === "resolve_issue" && upd.oldContent) {
-        context = context.replace(upd.oldContent, "");
-      }
-    }
-    await ctx.db.patch(args.familyId, { context: context.trim() });
+    const nextContext = applySectionUpdates(family.context ?? "", args.updates);
+    await ctx.db.patch(args.familyId, { context: nextContext });
+  },
+});
+
+export const applyMemberContextUpdates = internalMutation({
+  args: {
+    memberId: v.id("members"),
+    updates: v.array(updateValidator),
+  },
+  handler: async (ctx, args) => {
+    const member = await ctx.db.get(args.memberId);
+    if (!member) return;
+
+    const baseContext = member.context?.trim()
+      ? member.context
+      : buildDefaultMemberContext({
+          name: member.name,
+          phone: member.phone,
+          role: member.role,
+          relationship: member.relationship,
+          accessLevel: member.accessLevel,
+        });
+
+    const nextContext = applySectionUpdates(baseContext, args.updates);
+    await ctx.db.patch(args.memberId, { context: nextContext });
   },
 });
 

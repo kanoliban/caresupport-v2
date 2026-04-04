@@ -1,4 +1,5 @@
 import type { ApprovalUpdate, ClassifiedUpdates } from "./types";
+import { toSectionKey } from "../sections";
 
 const APPROVAL_REQUIRED = new Set([
   "medications:append",
@@ -20,7 +21,7 @@ export function requiresApproval(
   section: string,
   operation: string,
 ): boolean {
-  return APPROVAL_REQUIRED.has(`${section}:${operation}`);
+  return APPROVAL_REQUIRED.has(`${toSectionKey(section)}:${operation}`);
 }
 
 export function classifyUpdates(

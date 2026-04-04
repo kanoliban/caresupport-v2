@@ -1,3 +1,5 @@
+import { toSectionKey } from "../sections";
+
 type AccessLevel = "full" | "schedule+meds" | "schedule" | "provider" | "limited";
 
 interface AccessConfig {
@@ -48,21 +50,6 @@ const ACCESS_MATRIX: Record<AccessLevel, AccessConfig> = {
   },
 };
 
-const SECTION_KEY_MAP: Record<string, string> = {
-  members: "members",
-  "care recipient": "care_recipient",
-  schedule: "schedule",
-  medications: "medications",
-  "active medications": "medications",
-  appointments: "appointments",
-  availability: "availability",
-  "active issues": "active_issues",
-  "recent events": "recent_events",
-  patterns: "patterns",
-  insurance: "insurance",
-  "care preferences": "care_preferences",
-};
-
 const MED_PATTERNS: RegExp[] = [
   /\b\w+pril\b/gi,
   /\b\w+sartan\b/gi,
@@ -103,11 +90,9 @@ export function parseFamilySections(
   for (const line of lines) {
     if (line.startsWith("## ")) {
       if (currentHeader !== null) {
-        const raw = currentHeader.replace(/^#+\s*/, "").trim().toLowerCase();
-        const key = SECTION_KEY_MAP[raw] ?? raw.replace(/ /g, "_");
         sections.push({
           header: currentHeader,
-          key,
+          key: toSectionKey(currentHeader),
           content: currentLines.join("\n"),
         });
       }
@@ -121,11 +106,9 @@ export function parseFamilySections(
   }
 
   if (currentHeader !== null) {
-    const raw = currentHeader.replace(/^#+\s*/, "").trim().toLowerCase();
-    const key = SECTION_KEY_MAP[raw] ?? raw.replace(/ /g, "_");
     sections.push({
       header: currentHeader,
-      key,
+      key: toSectionKey(currentHeader),
       content: currentLines.join("\n"),
     });
   }

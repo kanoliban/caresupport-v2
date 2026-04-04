@@ -19,7 +19,6 @@ import {
   checkOutboundMessage,
   classifyUpdates,
   detectApprovalResponse,
-  formatConfirmationSms,
   buildContextLoadEvent,
   buildResponseSentEvent,
   buildResponseBlockedEvent,
@@ -240,19 +239,49 @@ export const handleMessage = internalAction({
     // Step 4: Check if this is an approval response (early return)
     const approvalCheck = detectApprovalResponse(messageBody);
     if (approvalCheck.decision !== null) {
-      const pendingApprovals = await ctx.runMutation(
-        internal.mutations.getPendingApprovals,
-        { familyId },
+      const approvalResult = await ctx.runMutation(
+        internal.approvals.resolveFromReply,
+        {
+          familyId,
+          status: approvalCheck.decision,
+          resolvedBy: senderPhone,
+          approvalId: approvalCheck.approvalId ?? undefined,
+        },
       );
-      const matchingApproval =
-        pendingApprovals.length === 1 ? pendingApprovals[0] : null;
 
-      if (matchingApproval) {
-        const response =
-          approvalCheck.decision === "approved"
-            ? `Approved: ${matchingApproval.description.slice(0, 150)}. Change applied.`
-            : `Rejected: ${matchingApproval.description.slice(0, 150)}. No changes made.`;
+      let response: string | null = null;
+      if (approvalResult.action === "approved") {
+        await ctx.runMutation(internal.mutations.logAudit, {
+          familyId,
+          event: "context_updated",
+          phone: senderPhone,
+          accessLevel,
+          role: member.role,
+          details: {
+            triggerMessage: messageBody.slice(0, 120),
+            sectionsLoaded: approvalResult.update
+              ? [approvalResult.update.section]
+              : undefined,
+          },
+          timestamp: now,
+        });
+        response = `Approved: ${approvalResult.description.slice(0, 150)}. Change applied.`;
+      } else if (approvalResult.action === "rejected") {
+        response = `Rejected: ${approvalResult.description.slice(0, 150)}. No changes made.`;
+      } else if (approvalResult.action === "ambiguous") {
+        response =
+          "I found more than one pending approval. Reply YES <ref> or NO <ref> using the reference from the approval message.";
+      } else if (approvalResult.action === "expired") {
+        response =
+          "That approval has expired. Please resend the request if you still want to make that change.";
+      } else if (approvalResult.action === "unauthorized") {
+        response = "I can't accept that approval from this phone number.";
+      } else if (approvalResult.action === "not_found") {
+        response =
+          "I couldn't find a matching pending approval. Reply YES <ref> or NO <ref> from the approval message if there are multiple requests open.";
+      }
 
+      if (response) {
         await logOutbound(ctx, familyId, senderPhone, memberName, response, now);
         await sendResponse(chatId, response, env());
         return { success: true, response, approvalHandled: true };
@@ -336,7 +365,7 @@ export const handleMessage = internalAction({
         accessLevel,
         relationship: member.relationship ?? "",
       },
-      memberContext: "",
+      memberContext: member.context ?? "",
       familyContext: filteredContext,
       intent: routeResult.intent,
       service,
@@ -563,6 +592,18 @@ export const handleMessage = internalAction({
       }
     }
 
+    if (parsed.memberUpdates.length > 0) {
+      await ctx.runMutation(internal.mutations.applyMemberContextUpdates, {
+        memberId: member._id,
+        updates: parsed.memberUpdates.map((update) => ({
+          section: update.section,
+          operation: update.operation,
+          content: update.content,
+          oldContent: update.oldContent,
+        })),
+      });
+    }
+
     // Step 15: Pace response + log outbound + send
     const effectForSend: MessageEffect | null =
       parsed.effect
@@ -594,7 +635,8 @@ export const handleMessage = internalAction({
         } catch (err: unknown) {
           const errDetail = err instanceof Error ? err.message : String(err);
           console.error("[CS] Stripe checkout failed:", errDetail);
-          const failMsg = "Something went wrong generating your upgrade link — the team has been notified.";
+          const failMsg =
+            "Something went wrong generating your upgrade link. Please try again in a bit, or email support@caresupport.ai if it keeps happening.";
           await logOutbound(ctx, familyId, senderPhone, memberName, failMsg, Date.now());
           await sendMessage(chatId, failMsg, env().linqApiToken);
         }

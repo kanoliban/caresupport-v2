@@ -41,8 +41,7 @@ iMessage arrives via Linq webhook
 |-------|---------|
 | `families` | Family/network info + agent-written context |
 | `members` | People in families, roles, access levels, agent-written context |
-| `chats` | Linq chat tracking (1:1 and group) |
-| `messages` | Conversation history linked to chats |
+| `messages` | Conversation history plus Linq message tracking |
 | `medications` | Structured med records (access-controlled) |
 | `scheduleItems` | Shifts, appointments, tasks, rides |
 | `approvals` | Pending coordinator confirmations |
@@ -51,7 +50,7 @@ iMessage arrives via Linq webhook
 
 ## Transitional State
 
-The agent now outputs both v1 fields (familyFileUpdates for freeform notes) and v2 structured fields (medicationUpdates, scheduleUpdates, careTeamUpdates). Both are processed — structured updates go to typed tables, freeform updates still go to families.context. The context prompt is built from typed tables first, with families.context appended as "Notes". Existing markdown in families.context will be migrated to typed tables via a one-time script (not yet written).
+The agent currently outputs both freeform context updates (`familyFileUpdates`, `memberUpdates`) and v2 structured fields (`medicationUpdates`, `scheduleUpdates`, `careTeamUpdates`). Both are processed — typed updates go to typed tables, while freeform updates still go to `families.context` and `members.context`. The prompt is assembled from typed tables first, with `families.context` appended as notes and the current sender's `members.context` included when present.
 
 ## Multi-Agent Setup
 

@@ -22,7 +22,7 @@ See [`docs/design.md`](docs/design.md) for the full design document — decision
 ## Key Concepts
 
 - **iMessage is the UI.** No app, no dashboard. Coordinator onboards via text, invites their team.
-- **Three access levels** — full (coordinator), standard (most members), view-only.
+- **Five access levels** — full, schedule+meds, schedule, provider, limited.
 - **Coordinator is a role flag**, not a fixed person. Can be the care recipient (Rob), a family member (Liban), or shared.
 - **Context fields** — each family and member has an agent-written `context` field that captures preferences, observations, and learned behavior. The agent reads and updates these on every message.
 - **Structured tables** for medications and schedules (code needs these for access control, reminders, gap detection). Everything else lives in context fields.

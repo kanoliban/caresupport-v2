@@ -1,5 +1,6 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+import { applySectionUpdates } from "./lib/contextUpdates";
 
 const statusValidator = v.union(
   v.literal("pending"),
@@ -83,6 +84,78 @@ export const resolve = mutation({
       resolvedBy: args.resolvedBy,
     });
     return { action: args.status };
+  },
+});
+
+export const resolveFromReply = internalMutation({
+  args: {
+    familyId: v.id("families"),
+    status: v.union(v.literal("approved"), v.literal("rejected")),
+    resolvedBy: v.string(),
+    approvalId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const pendingApprovals = await ctx.db
+      .query("approvals")
+      .withIndex("by_family_status", (q) =>
+        q.eq("familyId", args.familyId).eq("status", "pending"),
+      )
+      .collect();
+
+    const matchingApproval = args.approvalId
+      ? pendingApprovals.find((approval) => String(approval._id) === args.approvalId) ?? null
+      : pendingApprovals.length === 1
+        ? pendingApprovals[0]
+        : null;
+
+    if (!matchingApproval) {
+      return {
+        action:
+          pendingApprovals.length > 1 && !args.approvalId
+            ? ("ambiguous" as const)
+            : ("not_found" as const),
+      };
+    }
+
+    if (Date.now() > matchingApproval.expiresAt) {
+      await ctx.db.patch(matchingApproval._id, { status: "expired" });
+      return {
+        action: "expired" as const,
+        approvalId: matchingApproval._id,
+        description: matchingApproval.description,
+      };
+    }
+
+    if (!matchingApproval.approverPhones.includes(args.resolvedBy)) {
+      return {
+        action: "unauthorized" as const,
+        approvalId: matchingApproval._id,
+        description: matchingApproval.description,
+      };
+    }
+
+    await ctx.db.patch(matchingApproval._id, {
+      status: args.status,
+      resolvedAt: Date.now(),
+      resolvedBy: args.resolvedBy,
+    });
+
+    if (args.status === "approved") {
+      const family = await ctx.db.get(args.familyId);
+      if (family) {
+        const nextContext = applySectionUpdates(family.context ?? "", [
+          matchingApproval.update,
+        ]);
+        await ctx.db.patch(args.familyId, { context: nextContext });
+      }
+    }
+
+    return {
+      action: args.status,
+      approvalId: matchingApproval._id,
+      description: matchingApproval.description,
+      update: matchingApproval.update,
+    };
   },
 });
 

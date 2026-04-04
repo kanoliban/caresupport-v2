@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../schema";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import {
   requiresApproval,
   classifyUpdates,
@@ -9,7 +9,7 @@ import {
   formatConfirmationSms,
 } from "./approvalPipeline";
 import type { ApprovalUpdate } from "./types";
-import { PHONES, TEST_FAMILY_ARGS } from "./fixtures";
+import { FAMILY_MD, PHONES, TEST_FAMILY_ARGS } from "./fixtures";
 
 const modules = import.meta.glob("../../**/*.ts");
 
@@ -22,6 +22,11 @@ describe("requiresApproval", () => {
 
   it("care_recipient replace requires approval", () => {
     expect(requiresApproval("care_recipient", "replace")).toBe(true);
+  });
+
+  it("title-cased section headers still require approval", () => {
+    expect(requiresApproval("Care Recipient", "replace")).toBe(true);
+    expect(requiresApproval("Medications", "append")).toBe(true);
   });
 
   it("members append/replace require approval", () => {
@@ -313,5 +318,48 @@ describe("approval lifecycle via Convex", () => {
       resolvedBy: PHONES.ROB,
     });
     expect(result.action).toBe("already_resolved");
+  });
+
+  it("resolveFromReply approves and applies the pending update atomically", async () => {
+    const t = convexTest(schema, modules);
+    const familyId = await t.mutation(api.families.create, {
+      ...TEST_FAMILY_ARGS,
+      context: FAMILY_MD,
+    });
+
+    const now = Date.now();
+    const approvalId = await t.mutation(api.approvals.create, {
+      familyId,
+      status: "pending",
+      requesterPhone: PHONES.SARAH,
+      requesterName: "Sarah",
+      approverPhones: [PHONES.ROB],
+      description: "Update care recipient details",
+      update: {
+        section: "care_recipient",
+        operation: "replace",
+        content: "Name: Rob Moreno\nConditions: Type 2 diabetes, hypertension, mobility improving",
+        oldContent:
+          "Name: Rob Moreno\nConditions: Type 2 diabetes, hypertension, limited mobility (uses walker)\nMobility: Walker indoors, wheelchair for longer distances\nEmergency Contact: Marta Moreno (+1-555-0102)",
+      },
+      createdAt: now,
+      expiresAt: now + 24 * 60 * 60 * 1000,
+    });
+
+    const result = await t.mutation(internal.approvals.resolveFromReply, {
+      familyId,
+      status: "approved",
+      resolvedBy: PHONES.ROB,
+      approvalId: String(approvalId),
+    });
+
+    expect(result.action).toBe("approved");
+
+    const family = await t.query(api.families.get, { id: familyId });
+    expect(family?.context).toContain("mobility improving");
+
+    const approvals = await t.query(api.approvals.listByFamily, { familyId });
+    expect(approvals[0]?.status).toBe("approved");
+    expect(approvals[0]?.resolvedBy).toBe(PHONES.ROB);
   });
 });

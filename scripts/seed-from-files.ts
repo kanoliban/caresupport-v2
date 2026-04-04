@@ -3,6 +3,7 @@ import { api } from "../convex/_generated/api.js";
 import type { Id } from "../convex/_generated/dataModel.js";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const WORKSPACE = path.resolve(
   import.meta.dirname,
@@ -422,7 +423,13 @@ async function main() {
   console.log("\nSeed complete.");
 }
 
-main().catch((err) => {
-  console.error("Seed failed:", err);
-  process.exit(1);
-});
+const isDirectExecution = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
+
+if (isDirectExecution) {
+  main().catch((err) => {
+    console.error("Seed failed:", err);
+    process.exit(1);
+  });
+}

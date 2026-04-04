@@ -163,3 +163,138 @@ Read the last 2-3 entries before starting work.
 
 ### Concerns
 - I did not run full `npm test` because this repo's seed-related tests are not hermetic and can hit a real Convex deployment; only the targeted vitest files plus `tsc` were verified in this session.
+
+---
+
+## 2026-03-31 — Codex
+
+### What I did
+- Removed stale v1 tool instructions from the active runtime prompt content and aligned the active README/CLAUDE docs with the current five-level access model and transitional runtime contract.
+- Completed the live member-context loop: `convex/handler.ts` now loads the sender's `members.context` into prompt assembly, and a new `applyMemberContextUpdates` mutation persists `member_updates` into `members.context`.
+- Added shared section-update helpers plus lazy member-context initialization from the current member row using the existing member-profile section shape (`Identity`, `Communication Preferences`, `Care Responsibilities`, `Personal Context`, `Interaction History`).
+- Made `scripts/seed-from-files.ts` import-safe by gating `main()` behind a direct-execution check so parser tests can import it without hitting a real Convex deployment.
+- Added targeted tests for prompt honesty, section-update helpers, member-context persistence, and the seed parser path; re-ran targeted vitest files, the full `npm test` suite, and `npx tsc --noEmit` successfully.
+
+### State I'm leaving
+- `convex/handler.ts`, `convex/mutations.ts`, and the new `convex/lib/contextUpdates.ts` now support loading and persisting per-member context without changing the current agent response schema.
+- `convex/lib/promptContent.ts`, `README.md`, and `CLAUDE.md` are aligned with the live runtime instead of the old v1 tool story.
+- `scripts/seed-from-files.ts` no longer runs seeding work on import, so `tests/seed.test.ts` is hermetic again.
+- Verification passed: `npx vitest run convex/lib/contextUpdates.test.ts convex/lib/promptContent.test.ts convex/mutations.test.ts tests/seed.test.ts`, full `npm test`, and `npx tsc --noEmit`.
+
+### What the next agent should know
+- `member_updates` still use the existing section-based freeform contract; this tranche did not redesign the JSON schema toward `memberContextUpdate`.
+- Lazy member-context initialization only happens when `member_updates` are actually applied. Members without context still do not get empty profile templates injected into prompts.
+- The current sender's `members.context` is now part of prompt assembly, but there is still no live tool-call layer for supplementary lookups; the prompt now reflects that honestly.
+- There were unrelated pre-existing untracked files in `.claude/skills/`, `docs/STRATEGY.*`, `docs/product-decisions/`, and `images__1_-removebg-preview.png`; this session did not modify them.
+
+### Concerns
+- The member-context template is intentionally minimal and section-based to match the existing legacy profile shape. If the product later wants a stricter typed profile contract, that should be a separate schema/prompt redesign rather than folded into this stabilization path.
+
+---
+
+## 2026-04-04 — Codex
+
+### What I did
+- Oriented in `~/caresupport-v2`: read the repo `AGENTS.md`, repo napkin, and the latest handoff entries in `docs/agent-log.md`.
+- Checked current repo state with `git status --short --branch` and noted a dirty tree on `main`.
+- Recorded one session-start process mistake in `.claude/napkin.md` so future sessions read the napkin before inspecting repo state.
+
+### State I'm leaving
+- No product code was changed in this pass.
+- Working tree is still dirty with pre-existing tracked edits in `CLAUDE.md`, `README.md`, `convex/handler.ts`, `convex/lib/promptContent.ts`, `convex/mutations*.ts`, `docs/agent-log.md`, `scripts/seed-from-files.ts`, plus untracked files under `.claude/skills/`, `docs/STRATEGY.*`, `docs/product-decisions/`, and `images__1_-removebg-preview.png`.
+
+### What the next agent should know
+- Repo-local rules require keeping `docs/agent-log.md` current and treating `~/caresupport-v2` as the canonical clone.
+- The latest substantive work on this tree was the 2026-03-31 member-context loop and prompt/runtime documentation alignment.
+
+### Concerns
+- No task-specific changes or verification were run because the user only provided the repo path so far; wait for concrete direction before touching the existing dirty files.
+
+---
+
+## 2026-04-04 — Codex
+
+### What I did
+- Fetched `origin` and verified remote state for `main`.
+- Confirmed `HEAD..origin/main` is empty, so this clone is not behind remote and `git pull` would currently be a no-op.
+- Reviewed the live handler/prompt path to translate repo state into an execution recommendation.
+
+### State I'm leaving
+- Latest remote commit remains `599ffc8` (`2026-03-26`, `Remove leftover v1 CI workflow`).
+- The meaningful in-progress work is still local and uncommitted: member-context persistence, prompt/runtime honesty updates, and seed script import-safety.
+
+### What the next agent should know
+- The runtime is transitional, not fully “clean-room” aligned to the design doc: `handler.ts` already assembles structured meds/schedule/team/member context, but still packages it as a family-file style prompt plus section-based updates.
+- Suggested priority order is: stabilize and commit the local member-context tranche, then reduce prompt/schema drift, then do end-to-end pilot hardening around Family A.
+
+### Concerns
+- There is still architectural drift between `docs/design.md` (“no markdown blob”) and the current prompt/update contract (`family_file_updates`, section headers, filtered family file text). Avoid layering more behavior onto that contract without deciding whether to keep or replace it.
+
+---
+
+## 2026-04-04 — Codex
+
+### What I did
+- Fixed the approval-reply runtime so YES/NO responses no longer just acknowledge a pending approval; they now resolve it through a new atomic internal mutation in `convex/approvals.ts`.
+- Applied approved family-context updates inside that same mutation, so approval status and the approved change persist together.
+- Added shared section-key normalization in `convex/lib/sections.ts` and wired it into approval gating, family-context writes, and role-filter parsing so slug keys like `care_recipient` match title-case headers like `## Care Recipient`.
+- Updated the Stripe checkout failure message in `convex/handler.ts` to stop claiming “the team has been notified” and instead direct users to `support@caresupport.ai`.
+- Added regression coverage for slug/header section matching and for `resolveFromReply` applying an approved pending update to family context.
+
+### State I'm leaving
+- Local approval handling is materially safer: the handler now calls `internal.approvals.resolveFromReply` and only tells users “Change applied” after the mutation returns `approved`.
+- Full local verification passed: `npx vitest run convex/lib/contextUpdates.test.ts convex/lib/enforcement/approvalPipeline.test.ts convex/mutations.test.ts convex/handler.test.ts`, `npm test`, and `npx tsc --noEmit`.
+
+### What the next agent should know
+- The handler still uses the transitional family-file prompt/update contract, but section-key normalization now makes that contract more robust against mixed naming (`Care Recipient` vs `care_recipient`).
+- This tranche did not attempt real deployment/webhook smoke tests or broader architecture cleanup; it was limited to approval correctness and runtime truthfulness.
+
+### Concerns
+- The broader hybrid architecture still remains: structured tables are assembled into prompt context, but updates still flow through section-based family/member context text. That is stable enough for pilot hardening, not a final design.
+
+---
+
+## 2026-04-04 — Codex
+
+### What I did
+- Ran live Family A smoke tests directly against the dev Convex deployment by sourcing `.env.local` and invoking public queries plus `npx convex run handler:handleMessage`.
+- Expired two stale pending approvals on dev with `approvals:expireStale`, then created a fresh test approval (`j57brz8xb52r09y29hb8k5t5h9846r0t`) for the coordinator phone `+16517037981`.
+- Sent a plain `YES` through the live handler for Liban Kano and captured both the handler response and the resulting deployment state.
+
+### State I'm leaving
+- The deployed dev runtime still has the approval trust-break: the live handler replied `Approved: SMOKE approval should resolve on YES. Change applied.` but the approval row remained `pending`.
+- Recent dev message history now contains the full repro sequence:
+  - inbound `YES j57ajgdr4tw6n3qynng17kp07d82dd2w` -> outbound `That looks like a code or token...`
+  - inbound `YES` -> outbound `Approved: ... Change applied.`
+- Local code has the fix and tests pass, but that fix is not currently deployed to dev.
+
+### What the next agent should know
+- Direct live validation is possible even without a working Linq webhook: `npx convex run handler:handleMessage` reaches the deployed handler and writes real `messages` rows on dev.
+- HTTP webhook smoke tests are currently blocked because the local `LINQ_WEBHOOK_SECRET` does not match the secret configured on the dev deployment, so signed POSTs to `/webhook/linq` return `401 invalid_signature`.
+- Deploying the local fix to dev is also blocked from this terminal right now because Convex CLI needs an access token / interactive login.
+
+### Concerns
+- Family A on the deployed dev environment is still on stale runtime behavior, so pilot trust is blocked until the current local approval fix is actually deployed and re-smoke-tested.
+
+---
+
+## 2026-04-04 — Codex
+
+### What I did
+- Re-authenticated the Convex CLI through the interactive `npx convex dev --once --env-file .env.local --typecheck disable` device flow.
+- Removed the stale legacy `familyId` field from the dev Family A row with `admin:stripLegacyFields`, which had been blocking schema validation on the dev deployment.
+- Synced the current local Convex code onto the dev deployment with `npx convex dev --once --env-file .env.local --typecheck disable`.
+- Re-ran the live Family A approval smoke test by sending `YES` through `handler:handleMessage` against the updated deployment.
+
+### State I'm leaving
+- The approval fix is now validated on the dev deployment: approval `j57brz8xb52r09y29hb8k5t5h9846r0t` moved from `pending` to `approved` with `resolvedAt` and `resolvedBy` after the live `YES` reply.
+- The same reply path still produces the user-facing text `Approved: ... Change applied.`, but it now matches stored state on dev instead of lying.
+- The dev family row no longer contains the legacy `familyId` slug field that was breaking schema validation.
+
+### What the next agent should know
+- The workable deploy path to the dev deployment from this machine was `npx convex dev --once --env-file .env.local --typecheck disable`, not `convex deploy`; `deploy` and `env list` still reported `MissingAccessToken` in separate noninteractive invocations.
+- Direct live validation remains practical via `npx convex run handler:handleMessage '{...}'` plus follow-up state checks in `approvals:listByFamily` and `messages:listByFamily`.
+- The Linq webhook secret mismatch is still unresolved; direct signed POSTs to `/webhook/linq` were not re-tested in this tranche.
+
+### Concerns
+- Convex CLI auth persistence is still odd on this machine: login works inside `convex dev`, but separate admin-style commands may still fail with `MissingAccessToken`. Treat the `convex dev --once` path as the reliable deploy mechanism here until that is understood.
