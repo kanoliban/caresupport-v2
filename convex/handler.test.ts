@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applySoloBetaProductBoundary,
+  ensureExplicitMemberProfileUpdate,
   parseCategory,
   formatConversationLog,
   inferExplicitMemberProfileUpdate,
@@ -230,6 +231,72 @@ describe("inferExplicitMemberProfileUpdate", () => {
     );
 
     expect(update).toBeNull();
+  });
+});
+
+describe("ensureExplicitMemberProfileUpdate", () => {
+  it("adds inferred explicit profile updates when parsed member updates are empty", () => {
+    const updates = ensureExplicitMemberProfileUpdate(
+      [],
+      "Please save this to my profile: I prefer reminder texts after 8 PM.",
+      "",
+    );
+
+    expect(updates).toContainEqual({
+      section: "Communication Preferences",
+      operation: "append",
+      content: "- I prefer reminder texts after 8 PM.",
+      oldContent: "",
+    });
+  });
+
+  it("does not duplicate an explicit profile update already present in parsed updates", () => {
+    const updates = ensureExplicitMemberProfileUpdate(
+      [
+        {
+          section: "Communication Preferences",
+          operation: "append",
+          content: "- I prefer reminder texts after 8 PM.",
+          oldContent: "",
+        },
+      ],
+      "Please save this to my profile: I prefer reminder texts after 8 PM.",
+      "",
+    );
+
+    expect(updates).toHaveLength(1);
+  });
+
+  it("appends the inferred update when parsed member updates are non-empty but unrelated", () => {
+    const updates = ensureExplicitMemberProfileUpdate(
+      [
+        {
+          section: "Personal Context",
+          operation: "replace",
+          content: "Alex prefers evenings",
+          oldContent: "Alex prefers mornings",
+        },
+      ],
+      "Please save this to my profile: I prefer reminder texts after 8 PM.",
+      "",
+    );
+
+    expect(updates).toContainEqual({
+      section: "Communication Preferences",
+      operation: "append",
+      content: "- I prefer reminder texts after 8 PM.",
+      oldContent: "",
+    });
+  });
+
+  it("does not add an inferred update when it already exists in member context", () => {
+    const updates = ensureExplicitMemberProfileUpdate(
+      [],
+      "Please save this to my profile: I prefer reminder texts after 8 PM.",
+      "# Alex — Member Profile\n\n## Communication Preferences\n- I prefer reminder texts after 8 PM.",
+    );
+
+    expect(updates).toEqual([]);
   });
 });
 

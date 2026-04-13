@@ -414,3 +414,59 @@ Read the last 2-3 entries before starting work.
 
 ### Concerns
 - This solves direction drift inside the repo, but it does not yet make the pivot live. Deploy/reset is still the boundary between “well-documented local implementation” and “actual running product.”
+
+---
+
+## 2026-04-13 — Codex
+
+### What I did
+- Deployed the solo-beta runtime to the dev Convex deployment using the only reliable path on this machine: `npx convex dev --once --env-file .env.local --typecheck disable`.
+- Discovered the repo reset script's original `convex import --env-file ...` approach was not operational here because fresh-process Convex admin commands fail with `401 MissingAccessToken`.
+- Replaced the reset mechanism with an internal admin mutation, `admin:clearAppData`, and updated `scripts/reset-convex.sh` to target deployments by explicit deployment name rather than `--env-file`.
+- Found the working run/reset path for this machine:
+  - authenticate/sync with `npx convex dev --once --env-file .env.local --typecheck disable`
+  - use `npx convex run <fn> --deployment-name <name>` for follow-up admin commands
+- Wiped the dev deployment and verified zero counts across:
+  - `families`
+  - `members`
+  - `messages`
+  - `medications`
+  - `scheduleItems`
+  - `approvals`
+  - `auditLogs`
+  - `lessons`
+  - `careTeam`
+  - `outreachThreads`
+- Ran a clean dev solo-beta smoke flow with synthetic input through the real `handler:handleMessage` path:
+  - unknown number created a single onboarding family
+  - second message captured user name + care recipient
+  - appointment reminder request persisted a `scheduleItems` row
+  - add-member request was blocked without creating members/outreach
+- During the clean dev smoke test, found a new false-confirmation bug:
+  - explicit “save this to my profile” messaging could still reply “Saved” while no new preference text was persisted
+- Fixed that bug by adding `ensureExplicitMemberProfileUpdate(...)` in `convex/handler.ts`, so explicit save requests append an inferred member update unless the exact content is already present.
+- Re-synced dev and re-ran the exact profile-save message; confirmed the preference now appears in `members.context` under `## Communication Preferences`.
+- Deployed the updated runtime to the prod Convex deployment with `npx convex deploy --typecheck disable -y` from the authenticated shell.
+- Wiped prod using `npx convex run admin:clearAppData --deployment-name keen-raccoon-606`.
+- Verified prod table counts are now zero across all core app tables.
+
+### State I'm leaving
+- Dev is on the solo-beta runtime and has been clean-smoke-tested successfully after the profile-save fix.
+- Prod is on the solo-beta runtime and all app data has been cleared.
+- Prod has not been repopulated with synthetic smoke data; it is intentionally empty after the restart.
+- The repo contains the deploy/reset operational fix (`admin:clearAppData` + updated `scripts/reset-convex.sh`) but that work is not committed yet in this session.
+
+### What the next agent should know
+- The active product direction remains the same:
+  - one user
+  - one loved one / care situation
+  - one 1:1 thread
+  - no active multiplayer behavior
+- The reliable Convex operational pattern on this machine is:
+  1. `npx convex dev --once --env-file .env.local --typecheck disable`
+  2. `npx convex run <function> --deployment-name <deployment-name>`
+- `--env-file` works for the `convex dev --once` sync, but it was not reliable for follow-up `convex run` / `convex import` admin commands here.
+- The explicit profile-save regression is fixed mechanically in `convex/handler.ts`; do not weaken that fallback without replacing it with another hard guarantee.
+
+### Concerns
+- Prod has been reset cleanly, but there has not yet been a real post-reset iMessage conversation on prod. The next real user message will effectively be the first production validation on the restarted system.

@@ -30,6 +30,9 @@
 - Normalize section names through shared slug keys (`care_recipient`, `family members`, `Care Recipient`, etc.) before approval checks or context writes; this repo mixes slug keys and title-case headers.
 - When the product is in transition, default runtime mode to the most restrictive path (`solo_beta`) and require explicit opt-in for broader capabilities; that enforces the pivot before operational resets are complete.
 - To prevent product drift, lock direction in four places at once: repo-local `AGENTS.md`, a durable decision log, archive notes on legacy strategy docs, and regression tests that fail if runtime behavior broadens accidentally.
+- On this machine, `convex run` is reliable only when targeting deployments explicitly by `--deployment-name`; the `--env-file` path can still fail with `MissingAccessToken` even right after a successful `convex dev --once` login.
+- For destructive resets here, prefer an internal `admin:clearAppData` mutation plus `npx convex run ... --deployment-name ...` over `convex import --replace`; the latter was not operationally reliable in this environment.
+- Explicit "save this to my profile" requests need a mechanical merge step, not just a prompt instruction. If the model returns unrelated or malformed `member_updates`, append the inferred explicit update anyway unless the exact content already exists.
 
 ## Patterns That Don't Work
 - `npm test` is not hermetic here; `tests/seed.test.ts` can hit a real Convex deployment because importing `scripts/seed-from-files.ts` runs `main()`.

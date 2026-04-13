@@ -8,32 +8,27 @@ if [[ "$TARGET" != "dev" && "$TARGET" != "prod" ]]; then
   exit 1
 fi
 
-EMPTY_JSON="$(mktemp)"
-trap 'rm -f "$EMPTY_JSON"' EXIT
-printf '[]' > "$EMPTY_JSON"
-
-TABLES=(
-  families
-  members
-  messages
-  medications
-  scheduleItems
-  approvals
-  auditLogs
-  lessons
-  careTeam
-  outreachThreads
-)
-
-PROD_FLAG=()
-if [[ "$TARGET" == "prod" ]]; then
-  PROD_FLAG=(--prod)
+if [[ -z "${CONVEX_OVERRIDE_ACCESS_TOKEN:-}" && -f "$HOME/.convex/config.json" ]]; then
+  export CONVEX_OVERRIDE_ACCESS_TOKEN="$(
+    node -e "const fs=require('fs');const p=process.env.HOME + '/.convex/config.json';const data=JSON.parse(fs.readFileSync(p,'utf8'));process.stdout.write(data.accessToken || '')"
+  )"
 fi
 
-echo "Resetting Convex tables for $TARGET..."
-for table in "${TABLES[@]}"; do
-  echo "  - $table"
-  npx convex import --table "$table" --replace "${PROD_FLAG[@]}" -y "$EMPTY_JSON"
-done
+if [[ "$TARGET" == "prod" ]]; then
+  DEPLOYMENT_NAME="$(
+    sed -n 's/^export CONVEX_DEPLOYMENT="prod:\([^"]*\)".*/\1/p' .envrc
+  )"
+else
+  DEPLOYMENT_NAME="$(
+    sed -n 's/^CONVEX_DEPLOYMENT=dev:\([^[:space:]#]*\).*/\1/p' .env.local
+  )"
+fi
 
+if [[ -z "$DEPLOYMENT_NAME" ]]; then
+  echo "Could not determine Convex deployment name for $TARGET"
+  exit 1
+fi
+
+echo "Resetting Convex app data for $TARGET..."
+npx convex run admin:clearAppData --deployment-name "$DEPLOYMENT_NAME"
 echo "Reset complete for $TARGET."

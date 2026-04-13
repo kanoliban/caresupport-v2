@@ -165,6 +165,36 @@ export const stripLegacyFields = internalMutation({
   },
 });
 
+export const clearAppData = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const tables = [
+      "messages",
+      "medications",
+      "scheduleItems",
+      "approvals",
+      "auditLogs",
+      "lessons",
+      "careTeam",
+      "outreachThreads",
+      "members",
+      "families",
+    ] as const;
+
+    const deleted: Record<string, number> = {};
+
+    for (const table of tables) {
+      const rows = await ctx.db.query(table).collect();
+      deleted[table] = rows.length;
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return deleted;
+  },
+});
+
 export const tableCounts = internalQuery({
   args: {},
   handler: async (ctx) => {

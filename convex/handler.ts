@@ -163,6 +163,34 @@ export function inferExplicitMemberProfileUpdate(
   return null;
 }
 
+export function ensureExplicitMemberProfileUpdate(
+  updates: Array<{ section: string; operation: string; content: string; oldContent: string }>,
+  message: string,
+  existingContext: string | undefined,
+): Array<{ section: string; operation: string; content: string; oldContent: string }> {
+  const inferredUpdate = inferExplicitMemberProfileUpdate(message);
+  if (!inferredUpdate) {
+    return updates;
+  }
+
+  if ((existingContext ?? "").includes(inferredUpdate.content)) {
+    return updates;
+  }
+
+  const alreadyPresent = updates.some(
+    (update) =>
+      update.section === inferredUpdate.section &&
+      update.operation === inferredUpdate.operation &&
+      update.content.trim() === inferredUpdate.content.trim(),
+  );
+
+  if (alreadyPresent) {
+    return updates;
+  }
+
+  return [...updates, inferredUpdate];
+}
+
 export function isSoloBetaMultiplayerRequest(
   args: {
     senderPhone: string;
@@ -739,20 +767,16 @@ export const handleMessage = internalAction({
       }
     }
 
-    const memberUpdates = parsed.memberUpdates.map((update) => ({
-      section: update.section,
-      operation: update.operation,
-      content: update.content,
-      oldContent: update.oldContent,
-    }));
-    const inferredMemberUpdate = inferExplicitMemberProfileUpdate(messageBody);
-    if (
-      memberUpdates.length === 0 &&
-      inferredMemberUpdate &&
-      !(member.context ?? "").includes(inferredMemberUpdate.content)
-    ) {
-      memberUpdates.push(inferredMemberUpdate);
-    }
+    const memberUpdates = ensureExplicitMemberProfileUpdate(
+      parsed.memberUpdates.map((update) => ({
+        section: update.section,
+        operation: update.operation,
+        content: update.content,
+        oldContent: update.oldContent,
+      })),
+      messageBody,
+      member.context,
+    );
 
     if (memberUpdates.length > 0) {
       await ctx.runMutation(internal.mutations.applyMemberContextUpdates, {
