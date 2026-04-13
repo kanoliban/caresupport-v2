@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPABILITIES_CONTENT, SOUL_CONTENT } from "./promptContent";
+import { CAPABILITIES_CONTENT, SKILLS_CONTENT, SOUL_CONTENT } from "./promptContent";
 
 describe("SOUL_CONTENT", () => {
   it("does not reference inactive v1 lookup tools", () => {
@@ -12,5 +12,11 @@ describe("SOUL_CONTENT", () => {
     expect(SOUL_CONTENT).toContain("one person manage one loved one's care");
     expect(CAPABILITIES_CONTENT).toContain("one user, one loved one, one thread");
     expect(CAPABILITIES_CONTENT).toContain("CareSupport is free during the concierge beta");
+  });
+
+  it("tells the model not to save inferred emotional summaries as durable memory", () => {
+    expect(SKILLS_CONTENT).toContain(
+      "Do not save inferred emotional summaries or support instructions as durable memory by default.",
+    );
   });
 });

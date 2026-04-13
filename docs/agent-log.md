@@ -8,6 +8,28 @@ Read the last 2-3 entries before starting work.
 ## 2026-04-13 — Codex
 
 ### What I did
+- Tightened the memory persistence contract so CareSupport no longer saves inferred emotional support summaries as durable `care_note` entries by default.
+- Added code-side filtering in `convex/lib/memory.ts` and `convex/mutations.ts` to reject support-style / emotional-paraphrase memory proposals and suppress near-duplicate memory content before insert.
+- Strengthened model-facing instructions in `convex/lib/promptContent.ts` and `convex/lib/pipeline/promptBuilder.ts` so the model prefers structured records and explicit long-term memory over vague emotional summaries.
+- Added regression tests covering the new boundary: inferred emotional notes are rejected, concrete care facts still persist, and prompt copy preserves the rule.
+- Re-ran `npx vitest run convex/mutations.test.ts convex/lib/promptContent.test.ts convex/lib/pipeline/promptBuilder.test.ts`, `npx tsc --noEmit`, and the full `npm test` suite successfully.
+
+### State I'm leaving
+- The live production logs from Liban/Degitu showed that structured save and retrieval worked, but memory was over-eager and duplicative around caregiver-burden summaries.
+- The local repo now contains the fix for that behavior, verified in tests, but it has not been deployed yet in this session.
+
+### What the next agent should know
+- The current memory rule is intentional: empathy is fine, but inferred emotional summaries and “be warm/patient” coaching should not become durable memory automatically.
+- If future product work wants to remember emotional state, it should be explicit and deliberate, not a side effect of supportive responses.
+
+### Concerns
+- The current fix is intentionally narrow. It solves the observed production failure mode without inventing a full training pipeline abstraction.
+
+---
+
+## 2026-04-13 — Codex
+
+### What I did
 - Replaced the active Convex schema and runtime contract with a solo-native core built around `users`, `careCases`, `messages`, `medications`, `scheduleItems`, `memoryEntries`, and `auditLogs`.
 - Removed legacy active-model files and concepts tied to the family/network product path, including `families`, `members`, `approvals`, `careTeam`, `outreachThreads`, product-mode helpers, and enforcement modules that only existed for the multiplayer model.
 - Rewrote the handler, prompt pipeline, admin/reset path, and seed script so CareSupport now reads and writes deterministic solo-care state instead of relying on family-file style updates.

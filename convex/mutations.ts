@@ -4,6 +4,7 @@ import {
   buildCareCaseContext,
   buildUserContext,
   normalizeMemoryCategory,
+  shouldPersistMemoryUpdate,
   uniqueMemoryUpdates,
 } from "./lib/memory";
 
@@ -347,26 +348,26 @@ export const upsertMemoryEntries = internalMutation({
     const now = Date.now();
     const updates = uniqueMemoryUpdates(args.updates);
     const savedCategories = new Set<string>();
+    const activeEntries = await ctx.db
+      .query("memoryEntries")
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), args.userId),
+          q.eq(q.field("scope"), args.scope),
+          q.eq(q.field("active"), true),
+        ),
+      )
+      .collect();
+    const acceptedEntries = activeEntries.map((entry) => ({
+      scope: entry.scope,
+      category: entry.category,
+      content: entry.content,
+      active: entry.active,
+    }));
 
     for (const update of updates) {
-      const existing = await ctx.db
-        .query("memoryEntries")
-        .withIndex("by_care_case_scope_category", (q) =>
-          q
-            .eq("careCaseId", args.careCaseId)
-            .eq("scope", args.scope)
-            .eq("category", update.category),
-        )
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("userId"), args.userId),
-            q.eq(q.field("active"), true),
-            q.eq(q.field("content"), update.content),
-          ),
-        )
-        .first();
-
-      if (existing) {
+      if (!shouldPersistMemoryUpdate(update, acceptedEntries)) {
         continue;
       }
 
@@ -380,6 +381,12 @@ export const upsertMemoryEntries = internalMutation({
         active: true,
         createdAt: now,
         updatedAt: now,
+      });
+      acceptedEntries.push({
+        scope: args.scope,
+        category: update.category,
+        content: update.content,
+        active: true,
       });
       savedCategories.add(update.category);
     }

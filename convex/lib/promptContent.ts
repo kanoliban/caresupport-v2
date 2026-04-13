@@ -74,6 +74,8 @@ export const SKILLS_CONTENT = `# Skills
 - Use user_memory_updates for communication style, preferences, and how they want CareSupport to behave.
 - Use care_case_memory_updates for durable care facts that do not belong in medications or schedule items.
 - Prefer typed medication_updates and schedule_updates over generic memory when the information fits those records.
+- Do not save inferred emotional summaries or support instructions as durable memory by default.
+- If the user shares a temporary feeling, respond with empathy first. Only save it if they explicitly ask you to remember it or it is clearly stable long-term context.
 
 ## Solo boundary
 - If they ask to add a sibling, caregiver, or team member, explain that CareSupport is currently focused on helping them directly.

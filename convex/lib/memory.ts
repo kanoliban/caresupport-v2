@@ -53,6 +53,39 @@ export interface MemoryUpdateInstruction {
   source?: string;
 }
 
+const MEMORY_TOKEN_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "for",
+  "from",
+  "has",
+  "have",
+  "her",
+  "him",
+  "i",
+  "in",
+  "is",
+  "it",
+  "just",
+  "of",
+  "on",
+  "or",
+  "she",
+  "that",
+  "the",
+  "their",
+  "them",
+  "they",
+  "to",
+  "was",
+  "with",
+]);
+
 export function normalizeMemoryCategory(
   raw: string | undefined,
 ): MemoryCategory {
@@ -90,6 +123,105 @@ export function uniqueMemoryUpdates(
   }
 
   return result;
+}
+
+function normalizeMemoryText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeMemoryText(text: string): string[] {
+  return normalizeMemoryText(text)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter(
+      (token) =>
+        token.length > 2 &&
+        !MEMORY_TOKEN_STOPWORDS.has(token),
+    );
+}
+
+function isEmotionalSupportInference(content: string): boolean {
+  const normalized = normalizeMemoryText(content);
+
+  const supportInstruction =
+    /\b(be|handle)\b.*\b(warm|patient|patience|low pressure|lowpressure|gentle|extra warmth)\b/.test(
+      normalized,
+    ) ||
+    /\bwith extra warmth\b/.test(normalized);
+
+  const inferredEmotionalSummary =
+    /\bexpressed feeling\b/.test(normalized) ||
+    /\bis experiencing\b/.test(normalized) ||
+    /\b(feeling|feels)\b.*\b(overwhelmed|isolated|alone|tired|exhausted)\b/.test(normalized) ||
+    /\bcaregiver exhaustion\b/.test(normalized) ||
+    /\bhas no one to talk to\b/.test(normalized) ||
+    /\bjuggling many responsibilities\b/.test(normalized);
+
+  return supportInstruction || inferredEmotionalSummary;
+}
+
+function hasHighTokenOverlap(a: string, b: string): boolean {
+  const aTokens = new Set(tokenizeMemoryText(a));
+  const bTokens = new Set(tokenizeMemoryText(b));
+
+  if (aTokens.size === 0 || bTokens.size === 0) {
+    return false;
+  }
+
+  let intersection = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) {
+      intersection += 1;
+    }
+  }
+
+  const smaller = Math.min(aTokens.size, bTokens.size);
+  return intersection >= 4 && intersection / smaller >= 0.7;
+}
+
+export function isNearDuplicateMemoryContent(a: string, b: string): boolean {
+  const normalizedA = normalizeMemoryText(a);
+  const normalizedB = normalizeMemoryText(b);
+
+  if (!normalizedA || !normalizedB) {
+    return false;
+  }
+
+  if (normalizedA === normalizedB) {
+    return true;
+  }
+
+  if (normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) {
+    return true;
+  }
+
+  return hasHighTokenOverlap(normalizedA, normalizedB);
+}
+
+export function shouldPersistMemoryUpdate(
+  update: MemoryUpdateInstruction,
+  existingEntries: MemoryEntryLike[],
+): boolean {
+  const category = normalizeMemoryCategory(update.category);
+  const content = update.content.trim();
+  if (!content) {
+    return false;
+  }
+
+  if (category === "care_note" && isEmotionalSupportInference(content)) {
+    return false;
+  }
+
+  return !existingEntries.some(
+    (entry) =>
+      entry.active &&
+      entry.category === category &&
+      isNearDuplicateMemoryContent(entry.content, content),
+  );
 }
 
 export function buildUserContext(

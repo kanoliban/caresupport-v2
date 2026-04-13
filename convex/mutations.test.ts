@@ -80,6 +80,69 @@ describe("upsertMemoryEntries", () => {
     expect(second.inserted).toBe(0);
     expect(entries).toHaveLength(1);
   });
+
+  it("does not persist inferred emotional support summaries as durable memory", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      {
+        phone: "+16517030003",
+        chatId: "chat-3",
+      },
+    );
+
+    const result = await t.mutation(internal.mutations.upsertMemoryEntries, {
+      userId,
+      careCaseId,
+      scope: "care_case",
+      updates: [
+        {
+          category: "care_note",
+          content:
+            "Alex expressed feeling overwhelmed and isolated as a caregiver. Handle with extra warmth and patience.",
+        },
+      ],
+    });
+
+    const compiled = await t.mutation(internal.mutations.getCompiledPromptContext, {
+      userId,
+      careCaseId,
+    });
+
+    expect(result.inserted).toBe(0);
+    expect(compiled?.careCaseContext).not.toContain("overwhelmed and isolated");
+  });
+
+  it("still persists concrete care facts that are useful later", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      {
+        phone: "+16517030004",
+        chatId: "chat-4",
+      },
+    );
+
+    const result = await t.mutation(internal.mutations.upsertMemoryEntries, {
+      userId,
+      careCaseId,
+      scope: "care_case",
+      updates: [
+        {
+          category: "care_note",
+          content: "Solan is usually the pickup driver for Tuesday cardiology visits.",
+        },
+      ],
+    });
+
+    const compiled = await t.mutation(internal.mutations.getCompiledPromptContext, {
+      userId,
+      careCaseId,
+    });
+
+    expect(result.inserted).toBe(1);
+    expect(compiled?.careCaseContext).toContain("Solan is usually the pickup driver");
+  });
 });
 
 describe("getCompiledPromptContext", () => {
