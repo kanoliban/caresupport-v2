@@ -324,3 +324,93 @@ Read the last 2-3 entries before starting work.
 
 ### Concerns
 - Webhook-path validation is still not complete because the dev `LINQ_WEBHOOK_SECRET` mismatch has not been resolved; current live validation is via `npx convex run handler:handleMessage`.
+
+---
+
+## 2026-04-13 — Codex
+
+### What I did
+- Implemented the solo-beta pivot in the active runtime and docs instead of treating it as a planning-only exercise.
+- Added `productMode` support to `families` in `convex/schema.ts`, `convex/families.ts`, and `convex/admin.ts`.
+- Set `createOnboardingFamily` to create `"New Care Profile"` accounts in `productMode: "solo_beta"` with solo-beta onboarding context in `convex/mutations.ts`.
+- Added `convex/lib/productMode.ts` and made missing or unknown product modes default to `solo_beta` so the runtime is restrictive even before a database wipe.
+- Updated `convex/handler.ts` to block multiplayer behavior in solo beta:
+  - suppress outreach, care-team additions, upgrade prompts, and non-self routing updates
+  - replace those requests with a fixed single-user boundary response
+  - log blocked attempts as `response_blocked` with `failureReason: "solo_beta_multiplayer_request"`
+- Updated `convex/lib/promptContent.ts` and `convex/lib/pipeline/promptBuilder.ts` so the active prompt now frames CareSupport as a solo caregiver beta, free during beta, centered on one user managing one loved one's care.
+- Added and updated tests for the new behavior:
+  - `convex/lib/productMode.test.ts`
+  - `convex/handler.test.ts`
+  - `convex/mutations.test.ts`
+  - `convex/lib/pipeline/promptBuilder.test.ts`
+- Added reset tooling in `scripts/reset-convex.sh` plus `npm run reset:dev` / `npm run reset:prod`.
+- Rewrote the active product docs toward solo beta:
+  - `docs/design.md`
+  - `docs/ROADMAP.md`
+  - `docs/onboarding.md`
+  - `docs/product-specs/sms-care-coordination.md`
+  - `docs/concierge-beta.md`
+- Added status notes to legacy strategy docs (`docs/PRODUCT_STRATEGY.md`, `docs/VISION.md`) so they no longer read like the active product definition.
+- Verified the implementation locally with:
+  - `npx vitest run convex/lib/productMode.test.ts convex/handler.test.ts convex/mutations.test.ts convex/lib/pipeline/promptBuilder.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test`
+
+### State I'm leaving
+- The repo now defaults to the solo-beta product path at runtime. If an existing family row has no `productMode`, it is treated as `solo_beta`, not family coordination.
+- Multiplayer/family coordination logic still exists in the codebase, but it is no longer the active product path for unspecified or newly created accounts.
+- The implementation is local only right now. I did not run a Convex deploy/sync in this tranche, and I did not run the destructive dev/prod reset scripts.
+- The working tree still contains the pivot changes plus unrelated pre-existing untracked files outside this tranche (`.claude/skills/`, `docs/STRATEGY.*`, `docs/product-decisions/`, `images__1_-removebg-preview.png`).
+
+### What the next agent should know
+- The active product is now intentionally:
+  - one user
+  - one loved one / care situation
+  - no invites, outreach, group-chat behavior, or team management in the active beta path
+- The safest enforcement point is the runtime default: `getEffectiveProductMode(undefined)` now returns `solo_beta`.
+- The reset tooling exists but has not been exercised yet:
+  - `npm run reset:dev`
+  - `npm run reset:prod`
+- If a deploy/sync is needed from this machine, warn the user first before any `npx convex dev --once ...` flow because that can trigger device/browser auth again.
+
+### Concerns
+- The pivot is implemented in code and active docs, but not yet operationally completed because the required Convex data reset and deployment are destructive steps that still need an explicit go-ahead.
+- Older deep strategy/reference docs still contain family/multi-network language. The current mitigation is status notes plus updated active docs, not a full archive pass across every historical document.
+
+---
+
+## 2026-04-13 — Codex
+
+### What I did
+- Added a repo-local [AGENTS.md](/Users/libankano/caresupport-v2/AGENTS.md) so future agents inherit the active product direction from the repository itself instead of stale global/default context.
+- Added [docs/DECISIONS.md](/Users/libankano/caresupport-v2/docs/DECISIONS.md) to record the pivot as a durable product decision with explicit non-goals and revisit criteria.
+- Added [docs/ARCHIVE.md](/Users/libankano/caresupport-v2/docs/ARCHIVE.md) and strengthened archive banners in [docs/PRODUCT_STRATEGY.md](/Users/libankano/caresupport-v2/docs/PRODUCT_STRATEGY.md) and [docs/VISION.md](/Users/libankano/caresupport-v2/docs/VISION.md) so they stop competing with the active solo-beta docs.
+- Refactored the solo-beta enforcement in [convex/handler.ts](/Users/libankano/caresupport-v2/convex/handler.ts) into `applySoloBetaProductBoundary(...)` so the product boundary is directly testable.
+- Added regression coverage that proves solo beta strips outreach, upgrades, and member-creation side effects instead of relying only on prompt instructions.
+- Re-ran local verification:
+  - `npx vitest run convex/handler.test.ts convex/lib/productMode.test.ts convex/lib/pipeline/promptBuilder.test.ts convex/lib/promptContent.test.ts convex/mutations.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test`
+
+### State I'm leaving
+- The repo now has four anti-dilution layers:
+  - repo-local agent instructions
+  - durable decision log
+  - archive boundary for legacy strategy docs
+  - runtime/test enforcement of the solo-beta product boundary
+- The active docs and tests now point to the solo-beta wedge consistently.
+- The code is still local only until the next commit/push/deploy step.
+
+### What the next agent should know
+- Start from `AGENTS.md` and `docs/DECISIONS.md`, not legacy strategy documents.
+- If someone proposes reactivating multiplayer/team behavior, that should be treated as a new product decision, not an incidental code change.
+- The remaining operational steps are still unchanged:
+  - commit
+  - deploy updated runtime
+  - reset dev
+  - validate solo onboarding on clean data
+  - then repeat for prod if approved
+
+### Concerns
+- This solves direction drift inside the repo, but it does not yet make the pivot live. Deploy/reset is still the boundary between “well-documented local implementation” and “actual running product.”

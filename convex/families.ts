@@ -26,6 +26,9 @@ export const create = mutation({
     ),
     timezone: v.string(),
     context: v.optional(v.string()),
+    productMode: v.optional(
+      v.union(v.literal("solo_beta"), v.literal("family_coordination")),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
     careRecipient: v.optional(v.string()),
@@ -49,6 +52,9 @@ export const update = mutation({
     ),
     timezone: v.optional(v.string()),
     context: v.optional(v.string()),
+    productMode: v.optional(
+      v.union(v.literal("solo_beta"), v.literal("family_coordination")),
+    ),
     careRecipient: v.optional(v.string()),
     updatedAt: v.number(),
   },

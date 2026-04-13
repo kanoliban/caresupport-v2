@@ -171,7 +171,13 @@ describe("buildSystemBlocks", () => {
 
   it("EMERGENCY intent loads full family context", () => {
     const familyContext = "## Care Recipient\nRob\n\n## Financial\nInsurance";
-    const blocks = buildSystemBlocks(makeInput({ intent: "EMERGENCY", familyContext }));
+    const blocks = buildSystemBlocks(
+      makeInput({
+        intent: "EMERGENCY",
+        familyContext,
+        productMode: "family_coordination",
+      }),
+    );
     const familyBlock = blocks.find((b) => b.text.includes("FAMILY FILE"));
     expect(familyBlock).toBeDefined();
     expect(familyBlock!.text).toContain("Financial");
@@ -179,7 +185,13 @@ describe("buildSystemBlocks", () => {
 
   it("GENERAL intent loads full family context", () => {
     const longContext = "## Care Team\nMembers\n\n## Active Medications\nMeds here";
-    const blocks = buildSystemBlocks(makeInput({ intent: "GENERAL", familyContext: longContext }));
+    const blocks = buildSystemBlocks(
+      makeInput({
+        intent: "GENERAL",
+        familyContext: longContext,
+        productMode: "family_coordination",
+      }),
+    );
     const familyBlock = blocks.find((b) => b.text.includes("FAMILY FILE"));
     expect(familyBlock).toBeDefined();
     expect(familyBlock!.text).toContain("Care Team");
@@ -199,6 +211,31 @@ describe("buildSystemBlocks", () => {
     const memberBlock = blocks.find((b) => b.text.includes("YOU ARE TEXTING WITH"));
     expect(memberBlock!.text).toContain("WHAT YOU KNOW ABOUT ROB");
     expect(memberBlock!.text).toContain("Prefers morning texts");
+  });
+
+  it("adds solo-beta guidance and beta plan label when product mode is solo_beta", () => {
+    const blocks = buildSystemBlocks(
+      makeInput({ productMode: "solo_beta", planTier: "family" }),
+    );
+    const memberBlock = blocks.find((b) => b.text.includes("YOU ARE TEXTING WITH"));
+    const modeBlock = blocks.find((b) => b.text.includes("PRODUCT MODE: SOLO BETA"));
+
+    expect(memberBlock!.text).toContain("Current product mode: Solo Beta");
+    expect(memberBlock!.text).toContain("Current plan: Beta (free)");
+    expect(modeBlock).toBeDefined();
+    expect(modeBlock!.text).toContain("Do NOT add members");
+  });
+
+  it("defaults missing product mode to solo beta", () => {
+    const blocks = buildSystemBlocks(
+      makeInput({ familyContext: "## Care Team\nMembers" }),
+    );
+    const memberBlock = blocks.find((b) => b.text.includes("YOU ARE TEXTING WITH"));
+    const carePlanBlock = blocks.find((b) => b.text.includes("── CARE PLAN ──"));
+
+    expect(memberBlock!.text).toContain("Current product mode: Solo Beta");
+    expect(memberBlock!.text).toContain("Current plan: Beta (free)");
+    expect(carePlanBlock).toBeDefined();
   });
 });
 

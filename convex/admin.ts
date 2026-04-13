@@ -107,6 +107,7 @@ export const patchFamily = internalMutation({
     name: v.optional(v.string()),
     status: v.optional(v.string()),
     context: v.optional(v.string()),
+    productMode: v.optional(v.string()),
     careRecipient: v.optional(v.string()),
     timezone: v.optional(v.string()),
   },

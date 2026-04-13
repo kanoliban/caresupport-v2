@@ -47,6 +47,7 @@ import {
   CAPABILITIES_CONTENT,
   SKILLS_CONTENT,
 } from "./lib/promptContent";
+import { getEffectiveProductMode } from "./lib/productMode";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
@@ -55,11 +56,14 @@ const MAX_REPLY_QUOTE_LENGTH = 200;
 
 const BLOCKED_RESPONSE =
   "I'm sorry, I can't share that information with your access level. " +
-  "Please contact the care coordinator if you need more details.";
+  "Please contact the person coordinating this care if you need more details.";
 
 const UNKNOWN_NUMBER_RESPONSE =
-  "Hi! Welcome to CareSupport — I help families coordinate care.\n\n" +
-  "To get started: are you caring for someone, or are you being cared for?";
+  "Hi! Welcome to CareSupport — I help you manage a loved one's care over text.\n\n" +
+  "To get started: what's your name, and who are you caring for?";
+
+const SOLO_BETA_MULTIPLAYER_RESPONSE =
+  "Right now CareSupport is focused on helping you manage one loved one's care directly. I can't add family members or message other people yet, but I can keep the plan, meds, appointments, and reminders organized for you here.";
 
 const VALID_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
 
@@ -157,6 +161,73 @@ export function inferExplicitMemberProfileUpdate(
   }
 
   return null;
+}
+
+export function isSoloBetaMultiplayerRequest(
+  args: {
+    senderPhone: string;
+    intent: string;
+    parsed: AgentResponse;
+  },
+): boolean {
+  const normalizedSender = normalizePhone(args.senderPhone) ?? args.senderPhone;
+  const hasUnsupportedRouting = args.parsed.routingUpdates.some((routing) => {
+    const normalizedTarget = normalizePhone(routing.phone) ?? routing.phone;
+    return routing.action !== "update" || normalizedTarget !== normalizedSender;
+  });
+
+  return (
+    args.intent === "MULTI_MEMBER" ||
+    args.parsed.needsOutreach.length > 0 ||
+    hasUnsupportedRouting ||
+    Boolean(args.parsed.careTeamUpdates?.length)
+  );
+}
+
+export function applySoloBetaProductBoundary(
+  args: {
+    senderPhone: string;
+    intent: string;
+    parsed: AgentResponse;
+    smsResponse: string;
+  },
+): { blocked: boolean; parsed: AgentResponse; smsResponse: string } {
+  const blocked = isSoloBetaMultiplayerRequest({
+    senderPhone: args.senderPhone,
+    intent: args.intent,
+    parsed: args.parsed,
+  });
+
+  if (!blocked) {
+    return {
+      blocked: false,
+      parsed: args.parsed,
+      smsResponse: args.smsResponse,
+    };
+  }
+
+  const normalizedSender = normalizePhone(args.senderPhone) ?? args.senderPhone;
+
+  return {
+    blocked: true,
+    smsResponse: SOLO_BETA_MULTIPLAYER_RESPONSE,
+    parsed: {
+      ...args.parsed,
+      needsOutreach: [],
+      familyFileUpdates: [],
+      memberUpdates: [],
+      routingUpdates: args.parsed.routingUpdates.filter((routing) => {
+        const normalizedTarget = normalizePhone(routing.phone) ?? routing.phone;
+        return routing.action === "update" && normalizedTarget === normalizedSender;
+      }),
+      reactions: [],
+      effect: null,
+      upgradeRequested: false,
+      medicationUpdates: [],
+      scheduleUpdates: [],
+      careTeamUpdates: [],
+    },
+  };
 }
 
 function truncateReplyQuote(text: string): string {
@@ -393,6 +464,7 @@ export const handleMessage = internalAction({
     // Step 8b: Load family for plan tier
     const family = await ctx.runQuery(internal.queries.getFamily, { familyId });
     const planTier = family?.planTier ?? "free";
+    const productMode = getEffectiveProductMode(family?.productMode);
 
     // Step 9: Build system prompt
     const systemBlocks = buildSystemBlocks({
@@ -414,6 +486,7 @@ export const handleMessage = internalAction({
       service,
       toolsActive: false,
       planTier,
+      productMode,
     });
     const messages = buildMessages(messageForClaude, conversationLog);
 
@@ -447,7 +520,38 @@ export const handleMessage = internalAction({
       return { success: false, response: fallbackMsg, error: errMsg };
     }
 
-    const smsResponse = stripMarkdown(parsed.smsResponse);
+    let smsResponse = stripMarkdown(parsed.smsResponse);
+
+    const soloBetaBoundary =
+      productMode === "solo_beta"
+        ? applySoloBetaProductBoundary({
+            senderPhone,
+            intent: routeResult.intent,
+            parsed,
+            smsResponse,
+          })
+        : { blocked: false, parsed, smsResponse };
+
+    parsed = soloBetaBoundary.parsed;
+    smsResponse = soloBetaBoundary.smsResponse;
+    const blockedForSoloBeta = soloBetaBoundary.blocked;
+
+    if (blockedForSoloBeta) {
+      await ctx.runMutation(internal.mutations.logAudit, {
+        familyId,
+        event: "response_blocked",
+        phone: senderPhone,
+        accessLevel,
+        role: member.role,
+        details: {
+          severity: "LOW",
+          recipientPhone: senderPhone,
+          failureReason: "solo_beta_multiplayer_request",
+          triggerMessage: messageBody.slice(0, 200),
+        },
+        timestamp: now,
+      });
+    }
 
     // Step 11: Post-check outbound for leakage
     const leakage = checkOutboundMessage(smsResponse, accessLevel);
@@ -672,7 +776,12 @@ export const handleMessage = internalAction({
     }
 
     // Step 15b: Generate checkout link if AI signaled upgrade intent
-    if (parsed.upgradeRequested && planTier === "free" && accessLevel === "full") {
+    if (
+      parsed.upgradeRequested &&
+      productMode !== "solo_beta" &&
+      planTier === "free" &&
+      accessLevel === "full"
+    ) {
       const priceId = process.env.FAMILY_MONTHLY_PRICE_ID;
       if (priceId) {
         try {

@@ -51,6 +51,7 @@ export interface SystemBlocksInput {
   service: string;
   toolsActive: boolean;
   planTier?: string;
+  productMode?: string;
 }
 
 export interface OutreachEntry {

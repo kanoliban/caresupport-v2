@@ -1,5 +1,9 @@
 # CareSupport — Product Vision
 
+> Archived for active product decisions — 2026-04-13:
+> This document captures the broader family-coordination vision. It is not the active product definition.
+> For the current product definition, use [DECISIONS.md](/Users/libankano/caresupport-v2/docs/DECISIONS.md), [design.md](/Users/libankano/caresupport-v2/docs/design.md), [ROADMAP.md](/Users/libankano/caresupport-v2/docs/ROADMAP.md), and [concierge-beta.md](/Users/libankano/caresupport-v2/docs/concierge-beta.md).
+
 > _"Families are operators, not consumers. They run invisible home care agencies."_
 > — Liban Kano, Founder
 

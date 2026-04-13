@@ -9,6 +9,10 @@ const familyStatus = v.union(
 );
 
 const planTier = v.union(v.literal("free"), v.literal("family"));
+const productMode = v.union(
+  v.literal("solo_beta"),
+  v.literal("family_coordination"),
+);
 
 const memberRole = v.union(
   v.literal("care_recipient"),
@@ -133,6 +137,7 @@ export default defineSchema({
     status: familyStatus,
     timezone: v.string(),
     context: v.optional(v.string()),
+    productMode: v.optional(productMode),
     createdAt: v.number(),
     updatedAt: v.number(),
     careRecipient: v.optional(v.string()),

@@ -28,6 +28,8 @@
 - For TSX/ESM CLI scripts that are imported by tests, gate `main()` behind a direct-execution check so parser/helper tests stay hermetic.
 - Approval replies are safer as a single internal mutation that resolves the approval and applies the approved family-context update atomically; splitting that across action calls risks “applied” confirmations without persisted state.
 - Normalize section names through shared slug keys (`care_recipient`, `family members`, `Care Recipient`, etc.) before approval checks or context writes; this repo mixes slug keys and title-case headers.
+- When the product is in transition, default runtime mode to the most restrictive path (`solo_beta`) and require explicit opt-in for broader capabilities; that enforces the pivot before operational resets are complete.
+- To prevent product drift, lock direction in four places at once: repo-local `AGENTS.md`, a durable decision log, archive notes on legacy strategy docs, and regression tests that fail if runtime behavior broadens accidentally.
 
 ## Patterns That Don't Work
 - `npm test` is not hermetic here; `tests/seed.test.ts` can hit a real Convex deployment because importing `scripts/seed-from-files.ts` runs `main()`.

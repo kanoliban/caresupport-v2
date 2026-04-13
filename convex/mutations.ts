@@ -445,9 +445,10 @@ export const createOnboardingFamily = internalMutation({
 
     const now = Date.now();
     const familyId = await ctx.db.insert("families", {
-      name: "New Family",
+      name: "New Care Profile",
       status: "onboarding",
       timezone: "America/Chicago",
+      productMode: "solo_beta",
       context: buildOnboardingContext(phone),
       createdAt: now,
       updatedAt: now,

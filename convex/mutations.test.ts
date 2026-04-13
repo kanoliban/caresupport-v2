@@ -135,3 +135,24 @@ describe("applyMemberContextUpdates", () => {
     expect(untouchedMember?.context).toBeUndefined();
   });
 });
+
+describe("createOnboardingFamily", () => {
+  it("creates a solo-beta account with solo onboarding context", async () => {
+    const t = convexTest(schema, modules);
+
+    const result = await t.mutation(internal.mutations.createOnboardingFamily, {
+      phone: "+16517037981",
+      chatId: "chat-123",
+    });
+
+    const family = await t.query(api.families.get, { id: result.familyId });
+    const member = await t.query(api.members.getByPhone, { phone: "+16517037981" });
+
+    expect(family?.name).toBe("New Care Profile");
+    expect(family?.productMode).toBe("solo_beta");
+    expect(family?.context).toContain("Solo Beta Onboarding");
+    expect(family?.context).toContain("who they're caring for");
+    expect(member?.isCoordinator).toBe(true);
+    expect(member?.accessLevel).toBe("full");
+  });
+});

@@ -1,51 +1,43 @@
-# Product Spec: SMS Care Coordination
+# Product Spec: Solo CareSupport Beta
 
 ## What it is
 
-A care coordination agent that texts with family members one-to-one and maintains a persistent context file (`family.md`) per care network.
+CareSupport is an iMessage-based care planning and reminders assistant for one person managing a loved one's care.
+
+There is no app, dashboard, or team workspace in the active beta. The product is a direct 1:1 thread between CareSupport and the user.
 
 ## Who it's for
 
-Families coordinating care for an aging or recovering family member. The primary user is the family caregiver managing a network of helpers — professional caregivers, community supporters, providers, and the care recipient themselves.
+The primary user is a solo caregiver coordinating day-to-day care for a parent or loved one.
 
-## How it works (from the user's perspective)
+## Core promise
 
-1. A family signs up. The coordinator provides basic info: who's in the care network, what's the care situation, what medications are active.
+The user can text CareSupport to keep one care plan organized:
+- medications
+- appointments
+- tasks and rides
+- reminders
+- persistent care notes and preferences
 
-2. Each family member gets a text from a phone number. They text it like they'd text a person.
+## How it should feel
 
-3. The agent knows who everyone is, what the schedule looks like, what medications are active, and what's happened recently. It coordinates: reassigns shifts when someone cancels, reminds caregivers about medications, preps families for appointments, flags gaps in coverage.
+The user should feel like they have one reliable place to offload care logistics over text.
 
-4. The agent texts proactively: medication reminders, appointment prep, shift confirmations, coverage gap alerts.
+CareSupport should:
+- remember what matters
+- keep the plan current
+- reduce the chance of forgetting
+- make the next step obvious
 
-5. Over time, the agent learns the family's patterns — who's reliable, who prefers what tasks, what time the care recipient is most alert, which caregiver is burning out.
+## Out of scope for the active beta
 
-## Key behaviors
+- adding family members or caregivers
+- contacting other people on the user's behalf
+- team coordination and group chats
+- member permissions and role management as part of the user-facing product
 
-- **Reactive**: Family member texts → agent reads context → responds and coordinates
-- **Proactive**: Heartbeat scans for upcoming issues → sends alerts
-- **Accumulative**: Every interaction makes `family.md` more complete → better coordination over time
+Those capabilities may return later, but they are not the active product path.
 
-## Interface
+## Success
 
-SMS only (v1). No app, no dashboard, no login. The constraint is intentional — SMS is universal, low-friction, and works for tired caregivers at 11pm.
-
-## Safety requirements
-
-- Medication changes require confirmation from primary caregiver + prescriber order
-- PHI scoped by role (community supporters don't see medical details)
-- Emergency keywords trigger immediate escalation
-- Unknown phone numbers receive zero PHI
-- HIPAA audit trail for every interaction
-
-## What success looks like
-
-A family caregiver says: "I didn't have to do anything." The agent handled the coordination. The schedule covered. The medications tracked. The appointments prepped. The family focused on caring, not coordinating.
-
-## Reference scenario
-
-See `examples/rob-family.md` for a fully populated care network example.
-
-## Simulation results
-
-52 conversations across 5 families. 99.5% score. Zero safety failures. See `fork/simulation/results/SYNTHESIS.md`.
+The next phase succeeds when solo caregivers keep coming back weekly because CareSupport is genuinely useful for managing care in real life.
