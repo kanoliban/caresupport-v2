@@ -1,12 +1,10 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const typeValidator = v.union(
-  v.literal("shift"),
   v.literal("appointment"),
   v.literal("task"),
-  v.literal("ride"),
-  v.literal("careTask"),
+  v.literal("reminder"),
 );
 
 const statusValidator = v.union(
@@ -16,26 +14,26 @@ const statusValidator = v.union(
   v.literal("active"),
 );
 
-export const listByFamily = query({
-  args: { familyId: v.id("families") },
+export const listByCareCase = query({
+  args: { careCaseId: v.id("careCases") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("scheduleItems")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
       .collect();
   },
 });
 
-export const listByFamilyAndType = query({
+export const listByCareCaseAndType = query({
   args: {
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
     type: typeValidator,
   },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("scheduleItems")
-      .withIndex("by_family_type", (q) =>
-        q.eq("familyId", args.familyId).eq("type", args.type),
+      .withIndex("by_care_case_type", (q) =>
+        q.eq("careCaseId", args.careCaseId).eq("type", args.type),
       )
       .collect();
   },
@@ -43,20 +41,17 @@ export const listByFamilyAndType = query({
 
 export const create = mutation({
   args: {
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
     type: typeValidator,
     title: v.string(),
     date: v.optional(v.string()),
     time: v.optional(v.string()),
     endTime: v.optional(v.string()),
     recurrence: v.optional(v.string()),
-    assignedTo: v.optional(v.string()),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     status: statusValidator,
-    day: v.optional(v.string()),
     provider: v.optional(v.string()),
-    transport: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("scheduleItems", args);
@@ -71,13 +66,10 @@ export const update = mutation({
     time: v.optional(v.string()),
     endTime: v.optional(v.string()),
     recurrence: v.optional(v.string()),
-    assignedTo: v.optional(v.string()),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
-    status: v.optional(statusValidator),
-    day: v.optional(v.string()),
     provider: v.optional(v.string()),
-    transport: v.optional(v.string()),
+    status: v.optional(statusValidator),
   },
   handler: async (ctx, args) => {
     const { id, ...fields } = args;

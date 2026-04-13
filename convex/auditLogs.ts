@@ -1,14 +1,20 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const eventValidator = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
   v.literal("response_blocked"),
-  v.literal("outreach_sent"),
-  v.literal("unknown_number"),
+  v.literal("unknown_user"),
   v.literal("message_failed"),
   v.literal("message_status_update"),
+  v.literal("reaction_received"),
+  v.literal("participant_changed"),
+  v.literal("user_created"),
+  v.literal("care_case_created"),
+  v.literal("user_profile_updated"),
+  v.literal("care_case_updated"),
+  v.literal("memory_saved"),
 );
 
 const detailsValidator = v.object({
@@ -20,57 +26,32 @@ const detailsValidator = v.object({
   leakedTerms: v.optional(v.array(v.string())),
   severity: v.optional(v.string()),
   recipientPhone: v.optional(v.string()),
-  initiatedBy: v.optional(v.string()),
-  sentTo: v.optional(
-    v.object({
-      phone: v.string(),
-      name: v.string(),
-    }),
-  ),
-  purpose: v.optional(v.string()),
-  phiDisclosed: v.optional(v.boolean()),
   sourceMessageId: v.optional(v.string()),
   failureReason: v.optional(v.string()),
   deliveryStatus: v.optional(v.string()),
+  reactionType: v.optional(v.string()),
+  participantAction: v.optional(v.string()),
+  participantPhone: v.optional(v.string()),
+  savedCategories: v.optional(v.array(v.string())),
 });
 
-export const listByFamily = query({
-  args: { familyId: v.id("families") },
+export const listByCareCase = query({
+  args: { careCaseId: v.id("careCases") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("auditLogs")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-      .collect();
-  },
-});
-
-export const listByFamilyWindow = query({
-  args: {
-    familyId: v.id("families"),
-    from: v.number(),
-    to: v.number(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("auditLogs")
-      .withIndex("by_family_timestamp", (q) =>
-        q
-          .eq("familyId", args.familyId)
-          .gte("timestamp", args.from)
-          .lte("timestamp", args.to),
-      )
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
       .collect();
   },
 });
 
 export const create = mutation({
   args: {
-    familyId: v.optional(v.id("families")),
+    careCaseId: v.optional(v.id("careCases")),
+    userId: v.optional(v.id("users")),
     event: eventValidator,
     phone: v.optional(v.string()),
-    accessLevel: v.optional(v.string()),
-    role: v.optional(v.string()),
-    details: v.optional(detailsValidator),
+    details: detailsValidator,
     timestamp: v.number(),
   },
   handler: async (ctx, args) => {

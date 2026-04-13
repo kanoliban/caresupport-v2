@@ -1,107 +1,44 @@
-import type { FamilyContextMode, Intent, MessageTurn, SystemBlock, SystemBlocksInput } from "./types";
-import { getEffectiveProductMode } from "../productMode";
+import type { Intent, MessageTurn, SystemBlock, SystemBlocksInput } from "./types";
 
 export const RESPONSE_FORMAT = `── WHAT YOU CAN AND CANNOT DO ──
-CAN: Generate SMS responses, apply family_file_updates (append/prepend/replace to sections that EXIST in the care plan above — the system writes them immediately), flag needs_outreach (requests to text anyone whose phone number you know — only when the product mode allows it), persist self_corrections to lessons.md (loaded into every future prompt).
-CANNOT: Directly text people (outreach is sent shortly after this response, not in real-time — say "I'll message [name]" not "I'm texting them now"), access external systems, make medical decisions, see data outside your filtered context.
-CRITICAL: Never claim you did something unless the care plan above confirms it. If a section doesn't exist yet, you cannot update it — ask the user to confirm the information and note that you'll save it.
+CAN: Generate SMS responses, update the user's profile, update the care case profile, save user_memory_updates, save care_case_memory_updates, capture self_corrections, and create typed medication_updates or schedule_updates.
+CANNOT: Contact other people, add teammates, create group chats, access external systems, make medical decisions, or claim a save happened unless you returned the matching structured update in this response.
+CRITICAL: Never claim you saved something unless the matching user_profile_update, care_case_profile_update, user_memory_updates, care_case_memory_updates, medication_updates, or schedule_updates is non-empty.
 
 ── WHEN THINGS GO WRONG ──
-If the conversation history shows the system sent an error message on your behalf, acknowledge it: "Sorry about that — [resume what you were working on]." Never deflect or pretend it didn't happen. The user can see everything.
-CRITICAL: Never claim a technical error occurred unless the conversation history explicitly shows one. Saying "I hit a glitch" when no glitch happened is fabrication. If you don't know the answer, say so — don't invent a system error as an excuse.
+If the conversation history shows the system sent an error message, acknowledge it briefly and continue the work.
+Never invent a technical problem as an excuse.
 
 ── RESPONSE FORMAT ──
 Your output must be valid JSON matching the required schema. No markdown fencing, no explanation outside the JSON.
 
 FIELD GUIDE:
-- sms_response: REQUIRED. The text message sent to the user via SMS/iMessage. This is what they see. It must ALWAYS contain your actual reply — never leave it empty. To send multiple message bubbles, separate paragraphs with a double newline (\\n\\n in JSON). Each \\n\\n-separated paragraph becomes its own iMessage bubble. Keep each paragraph under 450 chars. A single \\n does NOT create a new bubble. For short responses (greetings, confirmations), a single paragraph is fine.
-- internal_notes: Your reasoning (not shown to user).
-- needs_outreach: Array of objects with name and message. The system resolves phone numbers from the name — you never need to provide a phone number. Only use this when the current product mode explicitly allows contacting other people. CRITICAL: If you say "I'll reach out" or "I'll message [name]" in sms_response, you MUST populate this array in the same response. If this array is empty, the outreach WILL NOT HAPPEN — there is no other mechanism. Say "I'll message [name]" in sms_response — never "I'm texting them now." If the person is not in the Family Members list, ask for their name first.
-- family_file_updates: Array of objects with section, operation, content, old_content to update the care plan. Operations: append, prepend, replace, resolve_issue. Only target sections that EXIST above.
-  ATTRIBUTION RULE: When updating based on something a member told you, prepend the content with "[Source: {member name}]". Example: If Liban says Degitu's surgery was Feb 24, write content as "[Source: Liban] Surgery date: Feb 24, 2026". For Recent Updates, format as: "- YYYY-MM-DD [via {name}]: description". If the update is your own inference (not directly stated by a member), use "[Source: CareSupport]".
-- self_corrections: When the user corrects you, teaches you something, or says "remember that" / "don't do that again" / "that's wrong" — capture the lesson. The system writes these to lessons.md immediately; you will see them in your context on the next message. Prefix each with a category: [behavioral] how to reason/respond, [factual] care facts about this family, [operational] system behavior. Empty array if no correction this message.
-- member_updates: Array of objects with section, operation, content, old_content to update the member's profile. Same format as family_file_updates. Use for personal preferences, communication style, etc. Empty array if nothing to update.
-  CRITICAL: If the user asks you to remember/save something about their own preferences, future communication style, or personal context, populate member_updates. Do NOT put that into self_corrections instead. Never say "Saved to your profile" or "I'll remember that" unless member_updates is non-empty.
-- routing_updates: Array of objects to update member records. Use action "update" when you learn the current user's name during onboarding. Use action "add" only when the current product mode explicitly allows adding more members. Each object: action, phone (E.164), name, role, relationship, access_level.
-- reactions: Array of objects with targetMessage ("last_inbound" or "last_outbound") and type (love/like/dislike/laugh/emphasize/question). See "Tapback Reactions" in skills for when to use each. A heart on "I'll be there at 3" is warmer than "Got it." A thumbs-up on a task claim is cleaner than "Noted." Use sparingly — most messages still need a text reply. Never use dislike or question as the agent. Empty array if no reaction this message.
-- effect: Object with type ("screen" or "bubble") and name. Screen effects: confetti, balloons, fireworks, hearts, celebration, happy_birthday. Bubble effects: gentle, loud, slam, invisible. Use for milestone moments only — onboarding welcome (balloons), first schedule completion (confetti). Null if no effect.
+- sms_response: REQUIRED. The actual text message sent to the user. Separate message bubbles with a double newline (\\n\\n in JSON). Keep each paragraph under 450 chars.
+- internal_notes: REQUIRED. Private reasoning.
+- user_profile_update: Object for durable user fields such as name or relationship_to_recipient. Null if unchanged.
+- care_case_profile_update: Object for durable care-case fields such as care_recipient_name, relationship_to_recipient, timezone, or status. Null if unchanged.
+- user_memory_updates: Durable user-level memory facts and preferences. Use categories: profile, communication_preference, care_preference.
+- care_case_memory_updates: Durable care-case facts, preferences, and notes. Use categories: care_note, care_preference.
+- self_corrections: Lessons the system should remember about how to behave. Prefix each with [behavioral], [factual], or [operational].
+- medication_updates: Typed medication add/update/remove operations.
+- schedule_updates: Typed schedule add/update/remove operations. Types are appointment, task, reminder.
+- reactions: Optional tapbacks.
+- effect: Optional iMessage effect.
 
-BEFORE YOU PROMISE TO CONTACT SOMEONE:
-- Do you have their phone number? (check conversation history and family file)
-- If yes: populate needs_outreach NOW. Don't just say you will — do it in this response.
-- If no: tell the user you don't have the number and ask for it.
-- Never say "I'll reach out" with an empty needs_outreach. That's a broken promise.`;
-
-const SECTION_RE = /^## /gm;
-
-export const FAMILY_SECTIONS: Record<FamilyContextMode, Set<string> | null> = {
-  family_full: null,
-  family_meds: new Set([
-    "Active Medications",
-    "Care Tasks",
-  ]),
-  family_team: new Set([
-    "Care Team",
-    "Rides",
-    "Care Tasks",
-    "Appointments",
-  ]),
-};
-
-export const INTENT_FAMILY_MODE: Record<string, FamilyContextMode> = {
-  EMERGENCY: "family_full",
-  ESCALATION: "family_full",
-  MEDICATION_CHANGE: "family_meds",
-  ONBOARDING: "family_team",
-  MULTI_MEMBER: "family_team",
-  UPGRADE: "family_team",
-  GENERAL: "family_full",
-};
-
-function productModeGuidance(productMode: string | undefined): string {
-  const mode = getEffectiveProductMode(productMode);
-  if (mode !== "solo_beta") return "";
-
-  return [
-    "── PRODUCT MODE: SOLO BETA ──",
-    "CareSupport is currently focused on helping one person manage one loved one's care.",
-    "This beta is free. Do not mention paid plans, family plans, or upgrades unless the user asks, and if they do ask, say CareSupport is currently free during beta.",
-    "Do NOT add members, invite teammates, create group chats, contact other people, or set upgrade_requested in this mode.",
-    "Leave needs_outreach empty unless a system instruction explicitly says outreach is enabled.",
-    "Leave routing_updates empty except when updating the CURRENT user's own name during onboarding.",
-    "If the user asks to add family members, caregivers, or anyone else, explain that CareSupport is currently single-user only and offer to keep the plan, meds, appointments, and reminders organized here.",
-  ].join("\n");
-}
-
-export function extractFamilySections(familyText: string, sections: Set<string>): string {
-  if (!familyText || !sections.size) return "";
-
-  const parts = familyText.split(SECTION_RE);
-  const result: string[] = [];
-
-  if (parts[0].trim()) {
-    result.push(parts[0].trim());
-  }
-
-  for (const part of parts.slice(1)) {
-    const newlineIdx = part.indexOf("\n");
-    const header = (newlineIdx >= 0 ? part.slice(0, newlineIdx) : part).trim();
-    if (sections.has(header)) {
-      result.push(`## ${part.trimEnd()}`);
-    }
-  }
-
-  return result.join("\n\n");
-}
+SOLO RULES:
+- CareSupport is a 1:1 assistant for one person managing one loved one's care.
+- Do not promise to text, call, invite, or add anyone else.
+- If asked about pricing, say CareSupport is free during the concierge beta.
+- If asked to add another person, explain the single-user boundary and keep helping directly in this thread.`;
 
 export function channelGuidance(service: string): string {
   if (service.toUpperCase() === "SMS") {
-    return (
-      '── CHANNEL: iMessage/SMS ──\n' +
-      'You are texting via iMessage. They see read receipts and typing indicators.\n' +
-      'Keep each message bubble under 320 characters when possible.\n' +
-      'Plain text only — no markdown, no bold, no headers.'
-    );
+    return [
+      "── CHANNEL: iMessage/SMS ──",
+      "They see read receipts and typing indicators.",
+      "Plain text only — no markdown, no bullets, no headers.",
+      "Most replies should fit in 1-2 message bubbles.",
+    ].join("\n");
   }
   return "";
 }
@@ -116,23 +53,23 @@ export function buildMessages(userMessage: string, conversationHistory: string):
     for (const line of conversationHistory.split("\n")) {
       if (line.startsWith("[") && LOG_LINE_RE.test(line)) {
         rawEntries.push(line);
-      } else if (rawEntries.length) {
-        rawEntries[rawEntries.length - 1] += "\n" + line;
+      } else if (rawEntries.length > 0) {
+        rawEntries[rawEntries.length - 1] += `\n${line}`;
       }
     }
 
     for (const entry of rawEntries) {
-      const m = LOG_LINE_RE.exec(entry);
-      if (!m) continue;
-      const direction = m[2];
-      const attribution = m[3] ?? "";
-      const text = m[4].trim();
+      const match = LOG_LINE_RE.exec(entry);
+      if (!match) continue;
+      const direction = match[2];
+      const attribution = match[3] ?? "";
+      const text = match[4].trim();
       if (!text) continue;
       const role: "user" | "assistant" = direction === "INBOUND" ? "user" : "assistant";
       const labeled = attribution ? `[${attribution}]: ${text}` : text;
 
-      if (messages.length && messages[messages.length - 1].role === role) {
-        messages[messages.length - 1].content += "\n" + labeled;
+      if (messages.length > 0 && messages[messages.length - 1].role === role) {
+        messages[messages.length - 1].content += `\n${labeled}`;
       } else {
         messages.push({ role, content: labeled });
       }
@@ -143,100 +80,87 @@ export function buildMessages(userMessage: string, conversationHistory: string):
   return messages;
 }
 
+function intentGuidance(intent: Intent | string): string {
+  switch (intent) {
+    case "ONBOARDING":
+      return [
+        "── INTENT: ONBOARDING ──",
+        "Ask one question at a time.",
+        "Learn their name first, then who they are caring for, then the first thing to track.",
+        "Write what you learn immediately through the structured update fields.",
+      ].join("\n");
+    case "MEDICATION_CHANGE":
+      return [
+        "── INTENT: MEDICATION ──",
+        "Prefer medication_updates over generic care_case_memory_updates when the user gives specific medication instructions.",
+      ].join("\n");
+    case "BILLING":
+      return [
+        "── INTENT: BILLING ──",
+        "Answer directly: CareSupport is currently free during the concierge beta.",
+      ].join("\n");
+    default:
+      return "";
+  }
+}
+
 export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
   const blocks: SystemBlock[] = [];
 
-  // Block 1: SOUL.md — agent identity
   blocks.push({
     type: "text",
-    text: input.soulContent || "You are CareSupport — a care coordination agent.",
+    text: input.soulContent || "You are CareSupport — a solo care-planning assistant.",
     cacheBreakpoint: false,
   });
 
-  // Block 2: Routing + Capabilities + Skills
-  const parts: string[] = [];
-  if (input.routingContent) parts.push(`── ROUTING ──\n${input.routingContent}`);
-  if (input.capabilitiesContent) parts.push(`── CAPABILITIES ──\n${input.capabilitiesContent}`);
-  if (input.skillsContent) parts.push(`── SKILLS ──\n${input.skillsContent}`);
-  if (parts.length) {
-    blocks.push({ type: "text", text: parts.join("\n\n"), cacheBreakpoint: false });
+  const operationalParts: string[] = [];
+  if (input.routingContent) operationalParts.push(`── ROUTING ──\n${input.routingContent}`);
+  if (input.capabilitiesContent) operationalParts.push(`── CAPABILITIES ──\n${input.capabilitiesContent}`);
+  if (input.skillsContent) operationalParts.push(`── SKILLS ──\n${input.skillsContent}`);
+  const intentBlock = intentGuidance(input.intent);
+  if (intentBlock) operationalParts.push(intentBlock);
+  if (operationalParts.length > 0) {
+    blocks.push({
+      type: "text",
+      text: operationalParts.join("\n\n"),
+      cacheBreakpoint: false,
+    });
   }
 
-  // Block 3: Response format + channel guidance (end of static prefix — cache here)
   const channel = channelGuidance(input.service);
-  let block3Text = channel ? channel + "\n\n" + RESPONSE_FORMAT : RESPONSE_FORMAT;
-  if (input.toolsActive) {
-    block3Text +=
-      "\n\n── TOOLS ──\n" +
-      "You have tools to look up care information on demand. " +
-      "For greetings and simple conversation, respond directly without tools. " +
-      "For questions about schedule, medications, appointments, reminders, or care notes, " +
-      "call the relevant tool first, then use the returned data in your response.";
-  }
-  blocks.push({ type: "text", text: block3Text, cacheBreakpoint: true });
+  blocks.push({
+    type: "text",
+    text: channel ? `${channel}\n\n${RESPONSE_FORMAT}` : RESPONSE_FORMAT,
+    cacheBreakpoint: true,
+  });
 
-  // Block 4: Lessons
   if (input.lessonsContent) {
     blocks.push({ type: "text", text: input.lessonsContent, cacheBreakpoint: false });
   }
 
-  // Block 5: Member identity + member context (CACHE BREAKPOINT)
-  const productMode = getEffectiveProductMode(input.productMode);
-  const planLabel =
-    productMode === "solo_beta"
-      ? "Beta (free)"
-      : input.planTier === "family"
-        ? "Family ($14/mo)"
-        : "Free";
-  const memberLines = [
-    `YOU ARE TEXTING WITH: ${input.member.name} (${input.member.role})`,
-    `Their phone: ${input.member.phone}`,
-    `Their access level: ${input.member.accessLevel}`,
-    `Their relationship to care recipient: ${input.member.relationship}`,
-    `Current product mode: ${productMode === "solo_beta" ? "Solo Beta" : "Family Coordination"}`,
-    `Current plan: ${planLabel}`,
-    productMode === "solo_beta"
-      ? `Conversation history is this user's 1:1 thread with CareSupport. You're responding to ${input.member.name}.`
-      : `Conversation history includes all family members' 1:1 chats (attributed by name). You're responding to ${input.member.name}.`,
+  const userLines = [
+    `YOU ARE TEXTING WITH: ${input.user.name}`,
+    `Phone: ${input.user.phone}`,
+    `Relationship to care recipient: ${input.user.relationshipToRecipient ?? "unknown"}`,
+    `User status: ${input.user.status}`,
   ];
-  let memberBlock = memberLines.join("\n");
-  if (input.memberContext) {
-    memberBlock += `\n\n── WHAT YOU KNOW ABOUT ${input.member.name.toUpperCase()} ──\n${input.memberContext}`;
+  let userBlock = userLines.join("\n");
+  if (input.userContext.trim()) {
+    userBlock += `\n\n${input.userContext.trim()}`;
   }
-  blocks.push({ type: "text", text: memberBlock, cacheBreakpoint: true });
+  blocks.push({ type: "text", text: userBlock, cacheBreakpoint: true });
 
-  const modeGuidance = productModeGuidance(input.productMode);
-  if (modeGuidance) {
-    blocks.push({ type: "text", text: modeGuidance, cacheBreakpoint: false });
-  }
-
-  // Block 6: Family context (intent-driven filtering)
-  if (!input.toolsActive && input.familyContext) {
-    const familyMode = INTENT_FAMILY_MODE[input.intent] ?? "family_full";
-    const sectionFilter = FAMILY_SECTIONS[familyMode];
-
-    let ctx: string;
-    if (sectionFilter === null) {
-      ctx = input.familyContext;
-    } else {
-      ctx = extractFamilySections(input.familyContext, sectionFilter as Set<string>);
-    }
-
-    if (ctx.trim()) {
-      blocks.push({
-        type: "text",
-        text:
-          productMode === "solo_beta"
-            ? `── CARE PLAN ──\n${ctx}\n\n── CONVERSATION AWARENESS ──\nThe conversation log is this user's direct thread with CareSupport.`
-            : `── FAMILY FILE (scoped to ${input.member.name}'s access level) ──\n${ctx}\n\n── CONVERSATION AWARENESS ──\nThe conversation log includes messages from all family members. Reference what others have said when relevant.`,
-        cacheBreakpoint: false,
-      });
-    }
+  if (input.careCaseContext.trim()) {
+    blocks.push({
+      type: "text",
+      text: `── CARE CASE ──\n${input.careCaseContext.trim()}`,
+      cacheBreakpoint: false,
+    });
   }
 
   return blocks;
 }
 
 export function systemBlocksToString(blocks: SystemBlock[]): string {
-  return blocks.map((b) => b.text).join("\n\n");
+  return blocks.map((block) => block.text).join("\n\n");
 }

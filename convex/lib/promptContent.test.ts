@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOUL_CONTENT } from "./promptContent";
+import { CAPABILITIES_CONTENT, SOUL_CONTENT } from "./promptContent";
 
 describe("SOUL_CONTENT", () => {
   it("does not reference inactive v1 lookup tools", () => {
@@ -8,9 +8,9 @@ describe("SOUL_CONTENT", () => {
     expect(SOUL_CONTENT).not.toContain("check_schedule");
   });
 
-  it("tells the agent to rely on assembled context instead of lookups", () => {
-    expect(SOUL_CONTENT).toContain("primary source of truth");
-    expect(SOUL_CONTENT).toContain("member-specific context");
-    expect(SOUL_CONTENT).toContain("don't have it yet");
+  it("frames the product as a solo care planning assistant", () => {
+    expect(SOUL_CONTENT).toContain("one person manage one loved one's care");
+    expect(CAPABILITIES_CONTENT).toContain("one user, one loved one, one thread");
+    expect(CAPABILITIES_CONTENT).toContain("CareSupport is free during the concierge beta");
   });
 });

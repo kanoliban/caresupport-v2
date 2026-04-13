@@ -23,6 +23,17 @@ Reset the product and infrastructure around the single-user wedge.
 - Billing and family-plan upsell are removed from the primary experience
 - Convex data reset procedure exists for dev and prod
 
+## Phase 0.5 — Schema Alignment
+
+Replace the old family-network substrate with a solo-native deterministic core while prod is still empty.
+
+### Required outcomes
+- Active schema is centered on `users`, `careCases`, `messages`, `medications`, `scheduleItems`, `memoryEntries`, and `auditLogs`
+- Legacy multiplayer entities are removed from the active runtime contract
+- Prompt context is assembled from structured records plus explicit memory entries
+- Tests enforce that CareSupport does not claim a save/action unless it persisted deterministically
+- Future agents can infer the real product model from code and docs without reading chat history
+
 ## Phase 1 — Core Solo Loop
 
 Prove that solo caregivers return because the product is genuinely useful.

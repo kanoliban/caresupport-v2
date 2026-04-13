@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const directionValidator = v.union(
@@ -6,25 +6,33 @@ const directionValidator = v.union(
   v.literal("outbound"),
 );
 
-export const listByFamily = query({
-  args: { familyId: v.id("families") },
+const actorTypeValidator = v.union(
+  v.literal("user"),
+  v.literal("assistant"),
+  v.literal("system"),
+);
+
+export const listByCareCase = query({
+  args: { careCaseId: v.id("careCases") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("messages")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
       .collect();
   },
 });
 
 export const create = mutation({
   args: {
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
     senderPhone: v.optional(v.string()),
+    actorType: actorTypeValidator,
     direction: directionValidator,
     body: v.string(),
     timestamp: v.number(),
     linqMessageId: v.optional(v.string()),
-    memberName: v.optional(v.string()),
+    displayName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("messages", args);

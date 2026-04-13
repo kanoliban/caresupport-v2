@@ -1,58 +1,84 @@
+import { normalizeMemoryCategory } from "../memory";
 import type { AgentResponse } from "./types";
 
-const EMPTY_ARRAYS: Omit<AgentResponse, "smsResponse" | "internalNotes"> = {
-  needsOutreach: [],
-  familyFileUpdates: [],
+const EMPTY_ARRAYS: Omit<
+  AgentResponse,
+  "smsResponse" | "internalNotes" | "userProfileUpdate" | "careCaseProfileUpdate"
+> = {
+  userMemoryUpdates: [],
+  careCaseMemoryUpdates: [],
   selfCorrections: [],
-  memberUpdates: [],
-  routingUpdates: [],
   reactions: [],
   effect: null,
 };
 
-const SNAKE_TO_CAMEL: Record<string, keyof AgentResponse> = {
+const SNAKE_TO_CAMEL: Record<string, string> = {
   sms_response: "smsResponse",
   internal_notes: "internalNotes",
-  needs_outreach: "needsOutreach",
-  family_file_updates: "familyFileUpdates",
+  user_profile_update: "userProfileUpdate",
+  care_case_profile_update: "careCaseProfileUpdate",
+  user_memory_updates: "userMemoryUpdates",
+  care_case_memory_updates: "careCaseMemoryUpdates",
   self_corrections: "selfCorrections",
-  member_updates: "memberUpdates",
-  routing_updates: "routingUpdates",
-  upgrade_requested: "upgradeRequested",
   medication_updates: "medicationUpdates",
   schedule_updates: "scheduleUpdates",
-  care_team_updates: "careTeamUpdates",
-  old_content: "oldContent" as keyof AgentResponse,
-  access_level: "accessLevel" as keyof AgentResponse,
-  target_message: "targetMessage" as keyof AgentResponse,
+  target_message: "targetMessage",
 };
+
+function normalizeMemoryUpdates(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const updates: AgentResponse["userMemoryUpdates"] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const content = String(record.content ?? "").trim();
+    if (!content) continue;
+
+    updates.push({
+      category: normalizeMemoryCategory(
+        typeof record.category === "string" ? record.category : undefined,
+      ),
+      content,
+      source:
+        typeof record.source === "string" && record.source.trim()
+          ? record.source.trim()
+          : undefined,
+    });
+  }
+  return updates;
+}
 
 export function normalizeResponse(parsed: Record<string, unknown>): AgentResponse {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed)) {
-    const camelKey = SNAKE_TO_CAMEL[key] ?? key;
-    result[camelKey] = value;
+    result[SNAKE_TO_CAMEL[key] ?? key] = value;
   }
 
   return {
     smsResponse: String(result.smsResponse ?? ""),
     internalNotes: String(result.internalNotes ?? ""),
-    needsOutreach: Array.isArray(result.needsOutreach)
-      ? result.needsOutreach.map((e: Record<string, unknown>) => ({
-          name: String(e.name ?? ""),
-          message: String(e.message ?? ""),
-        }))
-      : [],
-    familyFileUpdates: Array.isArray(result.familyFileUpdates) ? result.familyFileUpdates : [],
+    userProfileUpdate:
+      result.userProfileUpdate && typeof result.userProfileUpdate === "object"
+        ? (result.userProfileUpdate as AgentResponse["userProfileUpdate"])
+        : null,
+    careCaseProfileUpdate:
+      result.careCaseProfileUpdate && typeof result.careCaseProfileUpdate === "object"
+        ? (result.careCaseProfileUpdate as AgentResponse["careCaseProfileUpdate"])
+        : null,
+    userMemoryUpdates: normalizeMemoryUpdates(result.userMemoryUpdates),
+    careCaseMemoryUpdates: normalizeMemoryUpdates(result.careCaseMemoryUpdates),
     selfCorrections: Array.isArray(result.selfCorrections) ? result.selfCorrections : [],
-    memberUpdates: Array.isArray(result.memberUpdates) ? result.memberUpdates : [],
-    routingUpdates: Array.isArray(result.routingUpdates) ? result.routingUpdates : [],
     reactions: Array.isArray(result.reactions) ? result.reactions : [],
-    effect: result.effect && typeof result.effect === "object" ? result.effect as AgentResponse["effect"] : null,
-    upgradeRequested: result.upgradeRequested === true,
-    medicationUpdates: Array.isArray(result.medicationUpdates) ? result.medicationUpdates : undefined,
-    scheduleUpdates: Array.isArray(result.scheduleUpdates) ? result.scheduleUpdates : undefined,
-    careTeamUpdates: Array.isArray(result.careTeamUpdates) ? result.careTeamUpdates : undefined,
+    effect:
+      result.effect && typeof result.effect === "object"
+        ? (result.effect as AgentResponse["effect"])
+        : null,
+    medicationUpdates: Array.isArray(result.medicationUpdates)
+      ? (result.medicationUpdates as AgentResponse["medicationUpdates"])
+      : undefined,
+    scheduleUpdates: Array.isArray(result.scheduleUpdates)
+      ? (result.scheduleUpdates as AgentResponse["scheduleUpdates"])
+      : undefined,
   };
 }
 
@@ -63,14 +89,12 @@ export function extractJson(raw: string | null | undefined): AgentResponse {
 
   const text = raw.trim();
 
-  // Strategy 1: direct parse
   try {
     return normalizeResponse(JSON.parse(text));
   } catch {
-    // continue to next strategy
+    // continue
   }
 
-  // Strategy 2: strip markdown fences
   if (text.startsWith("```")) {
     const stripped = text
       .replace(/^```(?:json)?\s*\n?/, "")
@@ -78,11 +102,10 @@ export function extractJson(raw: string | null | undefined): AgentResponse {
     try {
       return normalizeResponse(JSON.parse(stripped.trim()));
     } catch {
-      // continue to next strategy
+      // continue
     }
   }
 
-  // Strategy 3: find outermost { ... } substring
   const start = text.indexOf("{");
   if (start >= 0) {
     const end = text.lastIndexOf("}");
@@ -90,26 +113,28 @@ export function extractJson(raw: string | null | undefined): AgentResponse {
       try {
         return normalizeResponse(JSON.parse(text.slice(start, end + 1)));
       } catch {
-        // continue to next strategy
+        // continue
       }
     }
   }
 
-  // Strategy 4: regex extract sms_response from malformed response
   const smsMatch = /"sms_response"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
   if (smsMatch) {
     return {
       smsResponse: smsMatch[1],
       internalNotes: "Extracted from malformed response",
+      userProfileUpdate: null,
+      careCaseProfileUpdate: null,
       ...EMPTY_ARRAYS,
     };
   }
 
-  // Strategy 5: plain text fallback — model responded conversationally
   if (!text.startsWith("{")) {
     return {
       smsResponse: text,
       internalNotes: "Model responded with plain text instead of JSON",
+      userProfileUpdate: null,
+      careCaseProfileUpdate: null,
       ...EMPTY_ARRAYS,
     };
   }

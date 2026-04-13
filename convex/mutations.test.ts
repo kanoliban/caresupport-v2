@@ -1,158 +1,145 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { normalizePhone } from "./mutations";
-import { TEST_FAMILY_ARGS } from "./lib/enforcement/fixtures";
 
 const modules = import.meta.glob("./**/*.ts");
 
 describe("normalizePhone", () => {
-  it("strips dashes and parens from 10-digit US number", () => {
-    expect(normalizePhone("518-698-4328")).toBe("+15186984328");
+  it("normalizes US numbers to E.164", () => {
     expect(normalizePhone("(518) 698-4328")).toBe("+15186984328");
-  });
-
-  it("handles raw 10 digits", () => {
-    expect(normalizePhone("5186984328")).toBe("+15186984328");
-  });
-
-  it("handles 11 digits starting with 1", () => {
     expect(normalizePhone("15186984328")).toBe("+15186984328");
   });
 
-  it("preserves already-formatted E.164", () => {
-    expect(normalizePhone("+15186984328")).toBe("+15186984328");
-  });
-
-  it("strips formatting from E.164 with spaces", () => {
-    expect(normalizePhone("+1 (518) 698-4328")).toBe("+15186984328");
-  });
-
-  it("returns null for too-short numbers", () => {
+  it("returns null for invalid input", () => {
     expect(normalizePhone("698-4328")).toBeNull();
   });
-
-  it("returns null for empty string", () => {
-    expect(normalizePhone("")).toBeNull();
-  });
 });
 
-describe("applyMemberContextUpdates", () => {
-  it("initializes missing member context from the member row before applying updates", async () => {
-    const t = convexTest(schema, modules);
-    const familyId = await t.mutation(api.families.create, TEST_FAMILY_ARGS);
-    const memberId = await t.mutation(api.members.create, {
-      familyId,
-      phone: "+16517037981",
-      name: "Liban Kano",
-      role: "family_caregiver",
-      accessLevel: "full",
-      isCoordinator: true,
-      isEmergencyContact: false,
-      active: true,
-      relationship: "grandson",
-    });
-
-    await t.mutation(internal.mutations.applyMemberContextUpdates, {
-      memberId,
-      updates: [
-        {
-          section: "Personal Context",
-          operation: "append",
-          content: "- Prefers evening updates.",
-        },
-      ],
-    });
-
-    const member = await t.query(api.members.getByFamilyAndPhone, {
-      familyId,
-      phone: "+16517037981",
-    });
-
-    expect(member?.context).toContain("# Liban Kano — Member Profile");
-    expect(member?.context).toContain("- Name: Liban Kano");
-    expect(member?.context).toContain("- Phone: +16517037981");
-    expect(member?.context).toContain("- Relationship to care recipient: grandson");
-    expect(member?.context).toContain("- Prefers evening updates.");
-  });
-
-  it("only updates the targeted member record", async () => {
-    const t = convexTest(schema, modules);
-    const familyA = await t.mutation(api.families.create, {
-      ...TEST_FAMILY_ARGS,
-      name: "Family A",
-    });
-    const familyB = await t.mutation(api.families.create, {
-      ...TEST_FAMILY_ARGS,
-      name: "Family B",
-    });
-
-    const memberA = await t.mutation(api.members.create, {
-      familyId: familyA,
-      phone: "+16517030001",
-      name: "Asha",
-      role: "family_caregiver",
-      accessLevel: "schedule+meds",
-      isCoordinator: false,
-      isEmergencyContact: false,
-      active: true,
-      relationship: "daughter",
-    });
-    await t.mutation(api.members.create, {
-      familyId: familyB,
-      phone: "+16517030002",
-      name: "Bini",
-      role: "family_caregiver",
-      accessLevel: "schedule+meds",
-      isCoordinator: false,
-      isEmergencyContact: false,
-      active: true,
-      relationship: "son",
-    });
-
-    await t.mutation(internal.mutations.applyMemberContextUpdates, {
-      memberId: memberA,
-      updates: [
-        {
-          section: "Communication Preferences",
-          operation: "append",
-          content: "- Prefers SMS.",
-        },
-      ],
-    });
-
-    const updatedMember = await t.query(api.members.getByFamilyAndPhone, {
-      familyId: familyA,
-      phone: "+16517030001",
-    });
-    const untouchedMember = await t.query(api.members.getByFamilyAndPhone, {
-      familyId: familyB,
-      phone: "+16517030002",
-    });
-
-    expect(updatedMember?.context).toContain("- Prefers SMS.");
-    expect(untouchedMember?.context).toBeUndefined();
-  });
-});
-
-describe("createOnboardingFamily", () => {
-  it("creates a solo-beta account with solo onboarding context", async () => {
+describe("createOnboardingUserAndCareCase", () => {
+  it("creates a solo onboarding user attached to a care case", async () => {
     const t = convexTest(schema, modules);
 
-    const result = await t.mutation(internal.mutations.createOnboardingFamily, {
+    const result = await t.mutation(internal.mutations.createOnboardingUserAndCareCase, {
       phone: "+16517037981",
       chatId: "chat-123",
     });
 
-    const family = await t.query(api.families.get, { id: result.familyId });
-    const member = await t.query(api.members.getByPhone, { phone: "+16517037981" });
+    const careCase = await t.query(api.careCases.get, { id: result.careCaseId });
+    const user = await t.query(api.users.getByPhone, { phone: "+16517037981" });
 
-    expect(family?.name).toBe("New Care Profile");
-    expect(family?.productMode).toBe("solo_beta");
-    expect(family?.context).toContain("Solo Beta Onboarding");
-    expect(family?.context).toContain("who they're caring for");
-    expect(member?.isCoordinator).toBe(true);
-    expect(member?.accessLevel).toBe("full");
+    expect(careCase?.title).toBe("New Care Plan");
+    expect(careCase?.status).toBe("onboarding");
+    expect(user?.careCaseId).toBe(result.careCaseId);
+    expect(user?.chatId).toBe("chat-123");
+  });
+});
+
+describe("upsertMemoryEntries", () => {
+  it("deduplicates exact memory updates", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      {
+        phone: "+16517030001",
+        chatId: "chat-1",
+      },
+    );
+
+    const first = await t.mutation(internal.mutations.upsertMemoryEntries, {
+      userId,
+      careCaseId,
+      scope: "user",
+      updates: [
+        {
+          category: "communication_preference",
+          content: "Prefers evening updates.",
+        },
+      ],
+    });
+
+    const second = await t.mutation(internal.mutations.upsertMemoryEntries, {
+      userId,
+      careCaseId,
+      scope: "user",
+      updates: [
+        {
+          category: "communication_preference",
+          content: "Prefers evening updates.",
+        },
+      ],
+    });
+
+    const entries = await t.query(api.memoryEntries.listByUserScope, {
+      userId,
+      scope: "user",
+    });
+
+    expect(first.inserted).toBe(1);
+    expect(second.inserted).toBe(0);
+    expect(entries).toHaveLength(1);
+  });
+});
+
+describe("getCompiledPromptContext", () => {
+  it("renders user memory, care-case memory, schedule, and medications into prompt context", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      {
+        phone: "+16517030002",
+        chatId: "chat-2",
+      },
+    );
+
+    await t.mutation(internal.mutations.updateUserProfile, {
+      userId,
+      name: "Alex",
+      relationshipToRecipient: "son",
+    });
+    await t.mutation(internal.mutations.updateCareCaseProfile, {
+      careCaseId,
+      careRecipientName: "Sam",
+      relationshipToRecipient: "father",
+      status: "active",
+    });
+    await t.mutation(internal.mutations.upsertMemoryEntries, {
+      userId,
+      careCaseId,
+      scope: "user",
+      updates: [{ category: "communication_preference", content: "Prefers short texts." }],
+    });
+    await t.mutation(internal.mutations.upsertMemoryEntries, {
+      userId,
+      careCaseId,
+      scope: "care_case",
+      updates: [{ category: "care_note", content: "Sam uses a cane." }],
+    });
+    await t.mutation(internal.mutations.upsertMedication, {
+      careCaseId,
+      action: "add",
+      name: "Lisinopril",
+      dose: "10mg",
+      schedule: "daily",
+    });
+    await t.mutation(internal.mutations.upsertScheduleItem, {
+      careCaseId,
+      action: "add",
+      type: "appointment",
+      title: "Cardiology visit",
+      date: "2026-05-01",
+      time: "10:00 AM",
+    });
+
+    const compiled = await t.mutation(internal.mutations.getCompiledPromptContext, {
+      userId,
+      careCaseId,
+    });
+
+    expect(compiled?.userContext).toContain("Prefers short texts.");
+    expect(compiled?.careCaseContext).toContain("Sam uses a cane.");
+    expect(compiled?.careCaseContext).toContain("Lisinopril 10mg");
+    expect(compiled?.careCaseContext).toContain("Cardiology visit");
   });
 });

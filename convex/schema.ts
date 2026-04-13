@@ -1,32 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-const familyStatus = v.union(
+const entityStatus = v.union(
   v.literal("onboarding"),
   v.literal("active"),
   v.literal("paused"),
   v.literal("archived"),
-);
-
-const planTier = v.union(v.literal("free"), v.literal("family"));
-const productMode = v.union(
-  v.literal("solo_beta"),
-  v.literal("family_coordination"),
-);
-
-const memberRole = v.union(
-  v.literal("care_recipient"),
-  v.literal("family_caregiver"),
-  v.literal("professional_caregiver"),
-  v.literal("community_supporter"),
-);
-
-const accessLevel = v.union(
-  v.literal("full"),
-  v.literal("schedule+meds"),
-  v.literal("schedule"),
-  v.literal("provider"),
-  v.literal("limited"),
 );
 
 const medicationStatus = v.union(
@@ -37,11 +16,9 @@ const medicationStatus = v.union(
 );
 
 const scheduleItemType = v.union(
-  v.literal("shift"),
   v.literal("appointment"),
   v.literal("task"),
-  v.literal("ride"),
-  v.literal("careTask"),
+  v.literal("reminder"),
 );
 
 const scheduleItemStatus = v.union(
@@ -56,6 +33,12 @@ const messageDirection = v.union(
   v.literal("outbound"),
 );
 
+const messageActorType = v.union(
+  v.literal("user"),
+  v.literal("assistant"),
+  v.literal("system"),
+);
+
 const deliveryStatus = v.union(
   v.literal("sent"),
   v.literal("delivered"),
@@ -63,44 +46,33 @@ const deliveryStatus = v.union(
   v.literal("failed"),
 );
 
-const approvalStatus = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
-  v.literal("expired"),
+const memoryScope = v.union(
+  v.literal("user"),
+  v.literal("care_case"),
 );
 
-const lessonScope = v.union(
-  v.literal("global"),
-  v.literal("family"),
-);
-
-const lessonCategory = v.union(
-  v.literal("behavioral"),
-  v.literal("factual"),
-  v.literal("operational"),
-);
-
-const outreachStatus = v.union(
-  v.literal("pending"),
-  v.literal("responded"),
-  v.literal("expired"),
-  v.literal("closed"),
+const memoryCategory = v.union(
+  v.literal("profile"),
+  v.literal("communication_preference"),
+  v.literal("care_preference"),
+  v.literal("care_note"),
+  v.literal("lesson"),
 );
 
 const auditEvent = v.union(
   v.literal("context_load"),
-  v.literal("context_updated"),
   v.literal("response_sent"),
   v.literal("response_blocked"),
-  v.literal("outreach_sent"),
-  v.literal("unknown_number"),
+  v.literal("unknown_user"),
   v.literal("message_failed"),
   v.literal("message_status_update"),
   v.literal("reaction_received"),
   v.literal("participant_changed"),
-  v.literal("member_added"),
-  v.literal("family_created"),
+  v.literal("user_created"),
+  v.literal("care_case_created"),
+  v.literal("user_profile_updated"),
+  v.literal("care_case_updated"),
+  v.literal("memory_saved"),
 );
 
 const auditDetails = v.object({
@@ -112,60 +84,44 @@ const auditDetails = v.object({
   leakedTerms: v.optional(v.array(v.string())),
   severity: v.optional(v.string()),
   recipientPhone: v.optional(v.string()),
-  initiatedBy: v.optional(v.string()),
-  sentTo: v.optional(v.object({ phone: v.string(), name: v.string() })),
-  purpose: v.optional(v.string()),
-  phiDisclosed: v.optional(v.boolean()),
   sourceMessageId: v.optional(v.string()),
   failureReason: v.optional(v.string()),
   deliveryStatus: v.optional(v.string()),
   reactionType: v.optional(v.string()),
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
-});
-
-const approvalUpdate = v.object({
-  section: v.string(),
-  operation: v.string(),
-  content: v.string(),
-  oldContent: v.optional(v.string()),
+  savedCategories: v.optional(v.array(v.string())),
 });
 
 export default defineSchema({
-  families: defineTable({
+  users: defineTable({
+    phone: v.string(),
     name: v.string(),
-    status: familyStatus,
-    timezone: v.string(),
-    context: v.optional(v.string()),
-    productMode: v.optional(productMode),
+    careCaseId: v.id("careCases"),
+    status: entityStatus,
+    relationshipToRecipient: v.optional(v.string()),
+    chatId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-    careRecipient: v.optional(v.string()),
-    planTier: v.optional(planTier),
-    stripeCustomerId: v.optional(v.string()),
-    stripeSubscriptionId: v.optional(v.string()),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_care_case", ["careCaseId"]),
+
+  careCases: defineTable({
+    title: v.string(),
+    status: entityStatus,
+    timezone: v.string(),
+    careRecipientName: v.optional(v.string()),
+    relationshipToRecipient: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }).index("by_status", ["status"]),
 
-  members: defineTable({
-    familyId: v.id("families"),
-    phone: v.optional(v.string()),
-    name: v.string(),
-    role: memberRole,
-    accessLevel: accessLevel,
-    isCoordinator: v.boolean(),
-    isEmergencyContact: v.boolean(),
-    active: v.boolean(),
-    context: v.optional(v.string()),
-    relationship: v.optional(v.string()),
-    chatId: v.optional(v.string()),
-  })
-    .index("by_family", ["familyId"])
-    .index("by_phone", ["phone"])
-    .index("by_family_phone", ["familyId", "phone"]),
-
   messages: defineTable({
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
     senderPhone: v.optional(v.string()),
+    actorType: messageActorType,
     direction: messageDirection,
     body: v.string(),
     timestamp: v.number(),
@@ -174,109 +130,71 @@ export default defineSchema({
     deliveredAt: v.optional(v.number()),
     readAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
-    memberName: v.optional(v.string()),
+    displayName: v.optional(v.string()),
   })
-    .index("by_family", ["familyId"])
-    .index("by_family_timestamp", ["familyId", "timestamp"])
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
     .index("by_linq_message_id", ["linqMessageId"])
-    .index("by_family_sender_phone", ["familyId", "senderPhone"])
+    .index("by_user", ["userId"])
     .index("by_sender_phone", ["senderPhone"]),
 
   medications: defineTable({
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
     name: v.string(),
     dose: v.string(),
     schedule: v.string(),
     prescriber: v.optional(v.string()),
-    status: medicationStatus,
     pharmacy: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    status: medicationStatus,
     lastConfirmed: v.optional(v.number()),
     refillDue: v.optional(v.string()),
   })
-    .index("by_family", ["familyId"])
-    .index("by_family_status", ["familyId", "status"]),
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_status", ["careCaseId", "status"]),
 
   scheduleItems: defineTable({
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
     type: scheduleItemType,
     title: v.string(),
     date: v.optional(v.string()),
     time: v.optional(v.string()),
     endTime: v.optional(v.string()),
     recurrence: v.optional(v.string()),
-    assignedTo: v.optional(v.string()),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     status: scheduleItemStatus,
-    day: v.optional(v.string()),
     provider: v.optional(v.string()),
-    transport: v.optional(v.string()),
   })
-    .index("by_family", ["familyId"])
-    .index("by_family_type", ["familyId", "type"])
-    .index("by_family_date", ["familyId", "date"]),
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_type", ["careCaseId", "type"])
+    .index("by_care_case_date", ["careCaseId", "date"]),
 
-  approvals: defineTable({
-    familyId: v.id("families"),
-    status: approvalStatus,
-    requesterPhone: v.string(),
-    requesterName: v.string(),
-    approverPhones: v.array(v.string()),
-    description: v.string(),
-    update: approvalUpdate,
-    createdAt: v.number(),
-    expiresAt: v.number(),
-    resolvedAt: v.optional(v.number()),
-    resolvedBy: v.optional(v.string()),
-  }).index("by_family_status", ["familyId", "status"]),
-
-  careTeam: defineTable({
-    familyId: v.id("families"),
-    name: v.string(),
-    role: v.string(),
-    phone: v.optional(v.string()),
-    organization: v.optional(v.string()),
-    notes: v.optional(v.string()),
+  memoryEntries: defineTable({
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    scope: memoryScope,
+    category: memoryCategory,
+    content: v.string(),
+    source: v.optional(v.string()),
     active: v.boolean(),
-  })
-    .index("by_family", ["familyId"])
-    .index("by_family_active", ["familyId", "active"]),
-
-  outreachThreads: defineTable({
-    familyId: v.id("families"),
-    initiatorPhone: v.string(),
-    initiatorChatId: v.string(),
-    targetPhone: v.string(),
-    targetName: v.string(),
-    outboundMessageId: v.id("messages"),
-    purpose: v.string(),
-    status: outreachStatus,
     createdAt: v.number(),
-    respondedAt: v.optional(v.number()),
-    expiresAt: v.number(),
+    updatedAt: v.number(),
   })
-    .index("by_target_pending", ["targetPhone", "status"])
-    .index("by_family_status", ["familyId", "status"]),
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_scope", ["careCaseId", "scope"])
+    .index("by_care_case_scope_category", ["careCaseId", "scope", "category"])
+    .index("by_user_scope", ["userId", "scope"]),
 
   auditLogs: defineTable({
-    familyId: v.optional(v.id("families")),
+    careCaseId: v.optional(v.id("careCases")),
+    userId: v.optional(v.id("users")),
     event: auditEvent,
     phone: v.optional(v.string()),
-    accessLevel: v.optional(v.string()),
-    role: v.optional(v.string()),
-    details: v.optional(auditDetails),
+    details: auditDetails,
     timestamp: v.number(),
   })
-    .index("by_family", ["familyId"])
-    .index("by_family_timestamp", ["familyId", "timestamp"]),
-
-  lessons: defineTable({
-    familyId: v.optional(v.id("families")),
-    scope: lessonScope,
-    category: lessonCategory,
-    text: v.string(),
-    learnedAt: v.number(),
-  })
-    .index("by_scope", ["scope"])
-    .index("by_family", ["familyId"]),
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
+    .index("by_event", ["event"]),
 });

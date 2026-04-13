@@ -8,49 +8,9 @@ export const MODELS: Record<RouteTier, string> = {
 
 export const TIER_ORDER: RouteTier[] = ["fast", "reason", "critical"];
 
-const EMERGENCY = new RegExp(
-  "\\b(911|emergency|ambulance|chest pain|can'?t breathe|" +
-    "choking|seizure|unconscious|unresponsive|bleeding|overdose|" +
-    "heart attack|stroke|passed out|not breathing)\\b|" +
-    "\\bfell\\b(?!\\s*(asleep|behind|short|silent|quiet|flat|in love))",
-  "i",
-);
-
-const ESCALATION = new RegExp(
-  "\\b(missed (his|her|the|a) (med|medication|pill|dose)|" +
-    "hasn'?t taken|didn'?t take (his|her|the)|" +
-    "no one (is|was) (here|available|scheduled)|" +
-    "no coverage|gap in coverage|nobody showed|" +
-    "hasn'?t shown up|didn'?t show up)\\b",
-  "i",
-);
-
-const MEDICATION_CHANGE = new RegExp(
-  "\\b(change|stop|start|switch|adjust|increase|decrease|new|discontinue|hold|pause|resume) " +
-    "(his|her|the|a|my)?\\s*(\\w+\\s+){0,3}(med|medication|prescription|dosage|dose|pill)\\b|" +
-    "\\b(med|medication|prescription|dosage|dose) (change|adjustment|update)\\b",
-  "i",
-);
-
-const ONBOARDING = new RegExp(
-  "\\b(new (caregiver|member|person|helper|aide)|" +
-    "add (someone|a member|a caregiver|a helper|them|her|him)|" +
-    "join(ing)? the (team|circle|care)|" +
-    "set(ting)? (up|me up)|" +
-    "sign(ing)? up)\\b",
-  "i",
-);
-
-const UPGRADE = new RegExp(
-  "\\b(upgrade|pricing|how much|cost|subscribe|billing|plan)\\b",
-  "i",
-);
-
-const MULTI_MEMBER = new RegExp(
-  "\\b(tell|message|text|contact|reach out to|let .+ know|notify)\\b.*" +
-    "\\b(and|also|both|everyone|all|the team)\\b",
-  "i",
-);
+const EMERGENCY = /\b(911|emergency|ambulance|chest pain|can't breathe|not breathing|stroke|heart attack|unconscious|unresponsive|seizure|overdose)\b/i;
+const MEDICATION_CHANGE = /\b(change|stop|start|switch|adjust|increase|decrease|new|discontinue|hold|pause|resume).{0,30}\b(med|medication|prescription|dosage|dose|pill)\b|\b(med|medication|prescription|dosage|dose)\s+(change|update|adjustment)\b/i;
+const BILLING = /\b(price|pricing|cost|charge|billing|bill|free|paid|plan)\b/i;
 
 const PATTERNS: Array<{
   pattern: RegExp;
@@ -59,11 +19,8 @@ const PATTERNS: Array<{
   reason: string;
 }> = [
   { pattern: EMERGENCY, tier: "critical", intent: "EMERGENCY", reason: "emergency keywords detected" },
-  { pattern: ESCALATION, tier: "critical", intent: "ESCALATION", reason: "escalation trigger detected" },
-  { pattern: MEDICATION_CHANGE, tier: "reason", intent: "MEDICATION_CHANGE", reason: "medication change request" },
-  { pattern: ONBOARDING, tier: "reason", intent: "ONBOARDING", reason: "new member onboarding" },
-  { pattern: UPGRADE, tier: "fast", intent: "UPGRADE", reason: "upgrade or billing inquiry" },
-  { pattern: MULTI_MEMBER, tier: "reason", intent: "MULTI_MEMBER", reason: "multi-member coordination" },
+  { pattern: MEDICATION_CHANGE, tier: "reason", intent: "MEDICATION_CHANGE", reason: "medication request detected" },
+  { pattern: BILLING, tier: "fast", intent: "BILLING", reason: "billing question detected" },
 ];
 
 export function route(message: string): RouteResult {
@@ -80,13 +37,12 @@ export function route(message: string): RouteResult {
 
 export function fallbackChain(startModel: string): string[] {
   const chain = [startModel];
-  const startTier = (Object.entries(MODELS) as [RouteTier, string][]).find(
-    ([, m]) => m === startModel,
-  )?.[0];
+  const startTier = (Object.entries(MODELS) as [RouteTier, string][])
+    .find(([, model]) => model === startModel)?.[0];
 
-  if (startTier && TIER_ORDER.includes(startTier)) {
-    const idx = TIER_ORDER.indexOf(startTier);
-    for (const tier of TIER_ORDER.slice(idx + 1)) {
+  if (startTier) {
+    const index = TIER_ORDER.indexOf(startTier);
+    for (const tier of TIER_ORDER.slice(index + 1)) {
       if (!chain.includes(MODELS[tier])) {
         chain.push(MODELS[tier]);
       }

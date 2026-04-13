@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const statusValidator = v.union(
@@ -8,23 +8,23 @@ const statusValidator = v.union(
   v.literal("discontinued"),
 );
 
-export const listByFamily = query({
-  args: { familyId: v.id("families") },
+export const listByCareCase = query({
+  args: { careCaseId: v.id("careCases") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("medications")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
       .collect();
   },
 });
 
-export const listActiveByFamily = query({
-  args: { familyId: v.id("families") },
+export const listActiveByCareCase = query({
+  args: { careCaseId: v.id("careCases") },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("medications")
-      .withIndex("by_family_status", (q) =>
-        q.eq("familyId", args.familyId).eq("status", "active"),
+      .withIndex("by_care_case_status", (q) =>
+        q.eq("careCaseId", args.careCaseId).eq("status", "active"),
       )
       .collect();
   },
@@ -32,12 +32,13 @@ export const listActiveByFamily = query({
 
 export const create = mutation({
   args: {
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
     name: v.string(),
     dose: v.string(),
     schedule: v.string(),
     prescriber: v.optional(v.string()),
     pharmacy: v.optional(v.string()),
+    notes: v.optional(v.string()),
     lastConfirmed: v.optional(v.number()),
     refillDue: v.optional(v.string()),
     status: statusValidator,
@@ -55,6 +56,7 @@ export const update = mutation({
     schedule: v.optional(v.string()),
     prescriber: v.optional(v.string()),
     pharmacy: v.optional(v.string()),
+    notes: v.optional(v.string()),
     lastConfirmed: v.optional(v.number()),
     refillDue: v.optional(v.string()),
     status: v.optional(statusValidator),

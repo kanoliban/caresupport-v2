@@ -5,10 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const WORKSPACE = path.resolve(
-  import.meta.dirname,
-  "../fork/workspace",
-);
+const WORKSPACE = path.resolve(import.meta.dirname, "../fork/workspace");
 const FAMILY_DIR_NAME = "kano";
 const FAMILY_DIR = path.join(WORKSPACE, "families", FAMILY_DIR_NAME);
 
@@ -21,17 +18,23 @@ function getConvexUrl(): string {
   return match[1].trim();
 }
 
-const ROLE_MAP: Record<string, "care_recipient" | "family_caregiver" | "professional_caregiver" | "community_supporter"> = {
-  primary_caregiver: "family_caregiver",
-  care_recipient: "care_recipient",
-  family_caregiver: "family_caregiver",
-  professional_caregiver: "professional_caregiver",
-  community_supporter: "community_supporter",
-  provider: "professional_caregiver",
+type RoutingData = {
+  family_id: string;
+  care_recipient?: string;
+  status: string;
+  created: string;
+  members: Record<
+    string,
+    {
+      name: string;
+      role: string;
+      access_level: string;
+      active: boolean;
+      chat_id?: string;
+      relationship?: string;
+    }
+  >;
 };
-
-const VALID_ACCESS_LEVELS = new Set(["full", "schedule+meds", "schedule", "provider", "limited"]);
-type AccessLevel = "full" | "schedule+meds" | "schedule" | "provider" | "limited";
 
 // --- Parsers ---
 
@@ -60,7 +63,7 @@ export function parseMarkdownTableRows(
     if (!pastSeparator) continue;
     const cells = trimmed
       .split("|")
-      .map((c) => c.trim())
+      .map((cell) => cell.trim())
       .filter(Boolean);
     if (cells.length > 0) rows.push(cells);
   }
@@ -80,7 +83,7 @@ export function parseTimelineLogLine(
   );
   if (!match) return null;
   return {
-    timestamp: new Date(match[1] + "Z").getTime(),
+    timestamp: new Date(`${match[1]}Z`).getTime(),
     direction: match[2].toLowerCase() as "inbound" | "outbound",
     memberName: match[3],
     body: match[4],
@@ -99,7 +102,7 @@ export function parseConversationLogLine(
   );
   if (!match) return null;
   return {
-    timestamp: new Date(match[1] + "Z").getTime(),
+    timestamp: new Date(`${match[1]}Z`).getTime(),
     direction: match[2].toLowerCase() as "inbound" | "outbound",
     body: match[3],
   };
@@ -113,101 +116,87 @@ export function parseLessonLine(
   return { date: match[1], text: match[2] };
 }
 
-// --- Seed functions ---
-
-async function seedFamily(client: ConvexHttpClient): Promise<{ familyId: Id<"families">; routing: Record<string, unknown> }> {
+function loadRouting(): RoutingData {
   const routingPath = path.join(FAMILY_DIR, "routing.json");
-  const routing = JSON.parse(fs.readFileSync(routingPath, "utf-8"));
+  return JSON.parse(fs.readFileSync(routingPath, "utf-8")) as RoutingData;
+}
+
+function pickPrimaryUser(routing: RoutingData): {
+  phone: string;
+  name: string;
+  relationship?: string;
+  chatId?: string;
+} {
+  const members = Object.entries(routing.members);
+  const primary =
+    members.find(([, member]) => member.role === "primary_caregiver" && member.active) ??
+    members.find(([, member]) => member.active) ??
+    members[0];
+
+  if (!primary) {
+    throw new Error("No members found in routing.json");
+  }
+
+  const [phone, member] = primary;
+  return {
+    phone,
+    name: member.name,
+    relationship: member.relationship,
+    chatId: member.chat_id,
+  };
+}
+
+async function seedCareCaseAndUser(
+  client: ConvexHttpClient,
+): Promise<{ careCaseId: Id<"careCases">; userId: Id<"users">; userPhone: string; userName: string }> {
+  const routing = loadRouting();
+  const primary = pickPrimaryUser(routing);
   const now = Date.now();
 
-  const familyMdPath = path.join(FAMILY_DIR, "family.md");
-  const context = fs.existsSync(familyMdPath)
-    ? fs.readFileSync(familyMdPath, "utf-8")
-    : undefined;
-
-  const familyId = await client.mutation(api.families.create, {
-    name: routing.family_id.charAt(0).toUpperCase() + routing.family_id.slice(1),
-    careRecipient: routing.care_recipient,
-    status: routing.status === "active" ? "active" as const : "onboarding" as const,
+  const careCaseId = await client.mutation(api.careCases.create, {
+    title: `${primary.name} caring for ${routing.care_recipient ?? "their loved one"}`,
+    status: routing.status === "active" ? "active" : "onboarding",
     timezone: "America/Chicago",
+    careRecipientName: routing.care_recipient,
+    relationshipToRecipient: primary.relationship,
     createdAt: new Date(routing.created).getTime(),
     updatedAt: now,
-    context,
   });
 
-  console.log(`  Family: ${routing.family_id} (id: ${familyId})`);
-  return { familyId, routing };
+  const userId = await client.mutation(api.users.create, {
+    phone: primary.phone,
+    name: primary.name,
+    careCaseId,
+    status: routing.status === "active" ? "active" : "onboarding",
+    relationshipToRecipient: primary.relationship,
+    chatId: primary.chatId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  console.log(`  Care case: ${careCaseId}`);
+  console.log(`  User: ${primary.name} (${primary.phone})`);
+
+  return {
+    careCaseId,
+    userId,
+    userPhone: primary.phone,
+    userName: primary.name,
+  };
 }
 
-async function seedMembers(
+async function seedMedications(
   client: ConvexHttpClient,
-  familyId: Id<"families">,
-  routing: Record<string, unknown>,
+  careCaseId: Id<"careCases">,
 ) {
-  const members = routing.members as Record<
-    string,
-    {
-      name: string;
-      role: string;
-      access_level: string;
-      active: boolean;
-      chat_id?: string;
-      relationship?: string;
-    }
-  >;
-
-  let count = 0;
-  for (const [phone, member] of Object.entries(members)) {
-    const originalRole = member.role;
-    const role = ROLE_MAP[originalRole] ?? "community_supporter";
-    const accessLevel: AccessLevel = VALID_ACCESS_LEVELS.has(member.access_level)
-      ? (member.access_level as AccessLevel)
-      : "limited";
-
-    await client.mutation(api.members.create, {
-      familyId,
-      phone,
-      name: member.name,
-      role,
-      accessLevel,
-      isCoordinator: originalRole === "primary_caregiver",
-      isEmergencyContact: role === "family_caregiver",
-      active: member.active,
-      chatId: member.chat_id,
-      relationship: member.relationship,
-    });
-    count++;
-  }
-
-  // Add care recipient as a member (may not have a phone)
-  const careRecipientName = routing.care_recipient as string | undefined;
-  if (careRecipientName) {
-    await client.mutation(api.members.create, {
-      familyId,
-      name: careRecipientName,
-      role: "care_recipient",
-      accessLevel: "full",
-      isCoordinator: false,
-      isEmergencyContact: false,
-      active: true,
-    });
-    count++;
-  }
-
-  console.log(`  Members: ${count}`);
-}
-
-async function seedMedications(client: ConvexHttpClient, familyId: Id<"families">) {
-  const content = fs.readFileSync(
-    path.join(FAMILY_DIR, "medications.md"),
-    "utf-8",
-  );
+  const content = fs.readFileSync(path.join(FAMILY_DIR, "medications.md"), "utf-8");
   const rows = parseMarkdownTableRows(content, "## Active Medications");
   let count = 0;
+
   for (const row of rows) {
     const [name, dose, schedule, prescriber, pharmacy, lastConfirmed, status, refillDue] = row;
     await client.mutation(api.medications.create, {
-      familyId,
+      careCaseId,
       name,
       dose,
       schedule,
@@ -221,14 +210,15 @@ async function seedMedications(client: ConvexHttpClient, familyId: Id<"families"
     });
     count++;
   }
+
   console.log(`  Medications: ${count}`);
 }
 
-async function seedScheduleItems(client: ConvexHttpClient, familyId: Id<"families">) {
-  const content = fs.readFileSync(
-    path.join(FAMILY_DIR, "schedule.md"),
-    "utf-8",
-  );
+async function seedScheduleItems(
+  client: ConvexHttpClient,
+  careCaseId: Id<"careCases">,
+) {
+  const content = fs.readFileSync(path.join(FAMILY_DIR, "schedule.md"), "utf-8");
   let count = 0;
 
   const rideRows = parseMarkdownTableRows(content, "### Rides");
@@ -236,12 +226,11 @@ async function seedScheduleItems(client: ConvexHttpClient, familyId: Id<"familie
     const [day, amDriver, pmDriver, notes] = row;
     if (amDriver && amDriver !== "—") {
       await client.mutation(api.scheduleItems.create, {
-        familyId,
-        type: "ride",
+        careCaseId,
+        type: "task",
         title: "AM ride to work",
-        day,
+        date: day,
         time: "7:30 AM",
-        assignedTo: amDriver,
         notes: notes || undefined,
         status: "active",
       });
@@ -249,12 +238,11 @@ async function seedScheduleItems(client: ConvexHttpClient, familyId: Id<"familie
     }
     if (pmDriver && pmDriver !== "—") {
       await client.mutation(api.scheduleItems.create, {
-        familyId,
-        type: "ride",
+        careCaseId,
+        type: "task",
         title: "PM ride from work",
-        day,
+        date: day,
         time: "4:30 PM",
-        assignedTo: pmDriver,
         notes: notes || undefined,
         status: "active",
       });
@@ -266,31 +254,30 @@ async function seedScheduleItems(client: ConvexHttpClient, familyId: Id<"familie
   for (const row of taskRows) {
     const [day, time, task, assigned, notes] = row;
     await client.mutation(api.scheduleItems.create, {
-      familyId,
-      type: "careTask",
-      title: task,
-      day,
+      careCaseId,
+      type: "reminder",
+      title: `${task}${assigned ? ` (${assigned})` : ""}`,
+      date: day,
       time,
-      assignedTo: assigned,
       notes: notes || undefined,
       status: "active",
     });
     count++;
   }
 
-  const apptRows = parseMarkdownTableRows(content, "### Appointments");
-  for (const row of apptRows) {
+  const appointmentRows = parseMarkdownTableRows(content, "### Appointments");
+  for (const row of appointmentRows) {
     const [date, time, type, provider, location, transport, notes] = row;
+    const noteParts = [transport, notes].filter((value) => value && value !== "—");
     await client.mutation(api.scheduleItems.create, {
-      familyId,
+      careCaseId,
       type: "appointment",
       title: type,
-      day: date,
+      date,
       time,
-      provider,
-      location,
-      transport,
-      notes: notes || undefined,
+      provider: provider === "—" ? undefined : provider,
+      location: location === "—" ? undefined : location,
+      notes: noteParts.length > 0 ? noteParts.join(" | ") : undefined,
       status: "active",
     });
     count++;
@@ -299,126 +286,99 @@ async function seedScheduleItems(client: ConvexHttpClient, familyId: Id<"familie
   console.log(`  Schedule items: ${count}`);
 }
 
-async function seedMessages(client: ConvexHttpClient, familyId: Id<"families">) {
+async function seedMessages(
+  client: ConvexHttpClient,
+  careCaseId: Id<"careCases">,
+  userId: Id<"users">,
+  userPhone: string,
+  userName: string,
+) {
   const convDir = path.join(WORKSPACE, "conversations");
   if (!fs.existsSync(convDir)) {
     console.log("  Messages: 0 (no directory)");
     return;
   }
-  const phoneDirs = fs
-    .readdirSync(convDir)
-    .filter((d) => d.startsWith("+"));
+
+  const logDir = path.join(convDir, userPhone);
+  if (!fs.existsSync(logDir)) {
+    console.log("  Messages: 0 (no user conversation directory)");
+    return;
+  }
+
+  const logFiles = fs.readdirSync(logDir).filter((file) => file.endsWith(".log"));
   let count = 0;
 
-  for (const phoneDir of phoneDirs) {
-    const phone = phoneDir;
-    const logFiles = fs
-      .readdirSync(path.join(convDir, phoneDir))
-      .filter((f) => f.endsWith(".log"));
+  for (const logFile of logFiles) {
+    const content = fs.readFileSync(path.join(logDir, logFile), "utf-8");
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue;
+      const parsed = parseConversationLogLine(line);
+      if (!parsed) continue;
 
-    for (const logFile of logFiles) {
-      const content = fs.readFileSync(
-        path.join(convDir, phoneDir, logFile),
-        "utf-8",
-      );
-      for (const line of content.split("\n")) {
-        if (!line.trim()) continue;
-        const parsed = parseConversationLogLine(line);
-        if (!parsed) continue;
-        await client.mutation(api.messages.create, {
-          familyId,
-          senderPhone: phone,
-          direction: parsed.direction,
-          body: parsed.body,
-          timestamp: parsed.timestamp,
-        });
-        count++;
-      }
+      await client.mutation(api.messages.create, {
+        careCaseId,
+        userId,
+        senderPhone: userPhone,
+        actorType: parsed.direction === "inbound" ? "user" : "assistant",
+        direction: parsed.direction,
+        displayName: userName,
+        body: parsed.body,
+        timestamp: parsed.timestamp,
+      });
+      count++;
     }
   }
+
   console.log(`  Messages: ${count}`);
 }
 
-async function seedLessons(client: ConvexHttpClient, familyId: Id<"families">) {
-  const lessonsPath = path.resolve(
-    import.meta.dirname,
-    "../runtime/learning/lessons.md",
-  );
+async function seedLessons(
+  client: ConvexHttpClient,
+  careCaseId: Id<"careCases">,
+  userId: Id<"users">,
+) {
+  const lessonsPath = path.resolve(import.meta.dirname, "../runtime/learning/lessons.md");
   if (!fs.existsSync(lessonsPath)) {
     console.log("  Lessons: 0 (no file)");
     return;
   }
+
   const content = fs.readFileSync(lessonsPath, "utf-8");
   let count = 0;
 
   for (const line of content.split("\n")) {
     const parsed = parseLessonLine(line);
     if (!parsed) continue;
-    await client.mutation(api.lessons.create, {
-      familyId,
-      scope: "family",
-      category: "behavioral",
-      text: parsed.text,
-      learnedAt: new Date(parsed.date).getTime(),
+
+    await client.mutation(api.memoryEntries.create, {
+      careCaseId,
+      userId,
+      scope: "care_case",
+      category: "lesson",
+      content: parsed.text,
+      active: true,
+      createdAt: new Date(parsed.date).getTime(),
+      updatedAt: new Date(parsed.date).getTime(),
     });
     count++;
   }
+
   console.log(`  Lessons: ${count}`);
 }
-
-async function seedApprovals(client: ConvexHttpClient, familyId: Id<"families">) {
-  const approvalsPath = path.join(FAMILY_DIR, "pending_approvals.json");
-  if (!fs.existsSync(approvalsPath)) {
-    console.log("  Approvals: 0 (no file)");
-    return;
-  }
-  const data = JSON.parse(fs.readFileSync(approvalsPath, "utf-8"));
-  const pending = data.pending || [];
-  let count = 0;
-
-  for (const approval of pending) {
-    await client.mutation(api.approvals.create, {
-      familyId,
-      status: approval.status as "pending" | "approved" | "rejected" | "expired",
-      requesterPhone: approval.requester_phone,
-      requesterName: approval.requester_name,
-      approverPhones: approval.approver_phones,
-      description: approval.description,
-      update: {
-        section: approval.update.section,
-        operation: approval.update.operation,
-        content: approval.update.content,
-        oldContent: approval.update.old_content,
-      },
-      createdAt: new Date(approval.created_at).getTime(),
-      expiresAt: new Date(approval.expires_at).getTime(),
-      resolvedAt: approval.resolved_at
-        ? new Date(approval.resolved_at).getTime()
-        : undefined,
-      resolvedBy: approval.resolved_by || undefined,
-    });
-    count++;
-  }
-  console.log(`  Approvals: ${count}`);
-}
-
-// --- Main ---
 
 async function main() {
   const url = getConvexUrl();
   const client = new ConvexHttpClient(url);
 
   console.log(`Seeding Convex at ${url}...`);
-  console.log(`Family: ${FAMILY_DIR_NAME}`);
-  console.log(`Source: ${WORKSPACE}\n`);
+  console.log(`Source family: ${FAMILY_DIR_NAME}`);
+  console.log(`Workspace: ${WORKSPACE}\n`);
 
-  const { familyId, routing } = await seedFamily(client);
-  await seedMembers(client, familyId, routing);
-  await seedMedications(client, familyId);
-  await seedScheduleItems(client, familyId);
-  await seedMessages(client, familyId);
-  await seedLessons(client, familyId);
-  await seedApprovals(client, familyId);
+  const { careCaseId, userId, userPhone, userName } = await seedCareCaseAndUser(client);
+  await seedMedications(client, careCaseId);
+  await seedScheduleItems(client, careCaseId);
+  await seedMessages(client, careCaseId, userId, userPhone, userName);
+  await seedLessons(client, careCaseId, userId);
 
   console.log("\nSeed complete.");
 }

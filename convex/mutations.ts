@@ -1,30 +1,57 @@
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-import { buildOnboardingContext } from "./lib/promptContent";
-import { canAddMember, getEffectiveTier } from "./lib/enforcement/planEnforcement";
 import {
-  applySectionUpdates,
-  buildDefaultMemberContext,
-} from "./lib/contextUpdates";
+  buildCareCaseContext,
+  buildUserContext,
+  normalizeMemoryCategory,
+  uniqueMemoryUpdates,
+} from "./lib/memory";
 
 const directionValidator = v.union(
   v.literal("inbound"),
   v.literal("outbound"),
 );
 
+const actorTypeValidator = v.union(
+  v.literal("user"),
+  v.literal("assistant"),
+  v.literal("system"),
+);
+
+const entityStatusValidator = v.union(
+  v.literal("onboarding"),
+  v.literal("active"),
+  v.literal("paused"),
+  v.literal("archived"),
+);
+
+const memoryScopeValidator = v.union(
+  v.literal("user"),
+  v.literal("care_case"),
+);
+
+const memoryCategoryValidator = v.union(
+  v.literal("profile"),
+  v.literal("communication_preference"),
+  v.literal("care_preference"),
+  v.literal("care_note"),
+  v.literal("lesson"),
+);
+
 const eventValidator = v.union(
   v.literal("context_load"),
-  v.literal("context_updated"),
   v.literal("response_sent"),
   v.literal("response_blocked"),
-  v.literal("outreach_sent"),
-  v.literal("unknown_number"),
+  v.literal("unknown_user"),
   v.literal("message_failed"),
   v.literal("message_status_update"),
   v.literal("reaction_received"),
   v.literal("participant_changed"),
-  v.literal("member_added"),
-  v.literal("family_created"),
+  v.literal("user_created"),
+  v.literal("care_case_created"),
+  v.literal("user_profile_updated"),
+  v.literal("care_case_updated"),
+  v.literal("memory_saved"),
 );
 
 const detailsValidator = v.object({
@@ -36,53 +63,40 @@ const detailsValidator = v.object({
   leakedTerms: v.optional(v.array(v.string())),
   severity: v.optional(v.string()),
   recipientPhone: v.optional(v.string()),
-  initiatedBy: v.optional(v.string()),
-  sentTo: v.optional(v.object({ phone: v.string(), name: v.string() })),
-  purpose: v.optional(v.string()),
-  phiDisclosed: v.optional(v.boolean()),
   sourceMessageId: v.optional(v.string()),
   failureReason: v.optional(v.string()),
   deliveryStatus: v.optional(v.string()),
   reactionType: v.optional(v.string()),
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
+  savedCategories: v.optional(v.array(v.string())),
 });
 
-const scopeValidator = v.union(v.literal("global"), v.literal("family"));
-const categoryValidator = v.union(
-  v.literal("behavioral"),
-  v.literal("factual"),
-  v.literal("operational"),
+const scheduleTypeValidator = v.union(
+  v.literal("appointment"),
+  v.literal("task"),
+  v.literal("reminder"),
 );
 
-const statusValidator = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
-  v.literal("expired"),
+const scheduleStatusValidator = v.union(
+  v.literal("scheduled"),
+  v.literal("completed"),
+  v.literal("cancelled"),
+  v.literal("active"),
 );
 
-const updateValidator = v.object({
-  section: v.string(),
-  operation: v.string(),
+const medicationStatusValidator = v.union(
+  v.literal("active"),
+  v.literal("held"),
+  v.literal("tapering"),
+  v.literal("discontinued"),
+);
+
+const memoryUpdateValidator = v.object({
+  category: memoryCategoryValidator,
   content: v.string(),
-  oldContent: v.optional(v.string()),
+  source: v.optional(v.string()),
 });
-
-const VALID_ROLES = new Set([
-  "care_recipient",
-  "family_caregiver",
-  "professional_caregiver",
-  "community_supporter",
-]);
-
-const VALID_ACCESS_LEVELS = new Set([
-  "full",
-  "schedule+meds",
-  "schedule",
-  "provider",
-  "limited",
-]);
 
 export function normalizePhone(raw: string): string | null {
   if (!raw) return null;
@@ -95,14 +109,10 @@ export function normalizePhone(raw: string): string | null {
   return null;
 }
 
-export const createMember = internalMutation({
+export const createOnboardingUserAndCareCase = internalMutation({
   args: {
-    familyId: v.id("families"),
     phone: v.string(),
-    name: v.string(),
-    role: v.string(),
-    relationship: v.optional(v.string()),
-    accessLevel: v.optional(v.string()),
+    chatId: v.string(),
   },
   handler: async (ctx, args) => {
     const phone = normalizePhone(args.phone);
@@ -111,54 +121,144 @@ export const createMember = internalMutation({
     }
 
     const existing = await ctx.db
-      .query("members")
-      .withIndex("by_family_phone", (q) =>
-        q.eq("familyId", args.familyId).eq("phone", phone),
-      )
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
       .first();
-    if (existing) return existing._id;
-
-    const family = await ctx.db.get(args.familyId);
-    if (family) {
-      const tier = getEffectiveTier(family.planTier);
-      const activeMembers = await ctx.db
-        .query("members")
-        .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-        .filter((q) => q.eq(q.field("active"), true))
-        .collect();
-      const check = canAddMember(tier, activeMembers.length);
-      if (!check.allowed) {
-        throw new Error("PLAN_LIMIT_REACHED");
-      }
+    if (existing) {
+      throw new Error(`Phone ${phone} already belongs to a user`);
     }
 
-    const role = VALID_ROLES.has(args.role)
-      ? (args.role as "care_recipient" | "family_caregiver" | "professional_caregiver" | "community_supporter")
-      : "family_caregiver";
-    const accessLevel = args.accessLevel && VALID_ACCESS_LEVELS.has(args.accessLevel)
-      ? (args.accessLevel as "full" | "schedule+meds" | "schedule" | "provider" | "limited")
-      : "schedule+meds";
+    const now = Date.now();
+    const careCaseId = await ctx.db.insert("careCases", {
+      title: "New Care Plan",
+      status: "onboarding",
+      timezone: "America/Chicago",
+      createdAt: now,
+      updatedAt: now,
+    });
 
-    return await ctx.db.insert("members", {
-      familyId: args.familyId,
+    const userId = await ctx.db.insert("users", {
       phone,
-      name: args.name,
-      role,
-      accessLevel,
-      isCoordinator: false,
-      isEmergencyContact: false,
-      active: true,
-      relationship: args.relationship,
+      name: "New User",
+      careCaseId,
+      status: "onboarding",
+      chatId: args.chatId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { userId, careCaseId };
+  },
+});
+
+export const getUserByPhone = internalMutation({
+  args: { phone: v.string() },
+  handler: async (ctx, args) => {
+    const normalized = normalizePhone(args.phone) ?? args.phone;
+    return await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", normalized))
+      .first();
+  },
+});
+
+export const getUserById = internalMutation({
+  args: { id: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getUserByCareCase = internalMutation({
+  args: { careCaseId: v.id("careCases") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+      .first();
+  },
+});
+
+export const updateUserChatId = internalMutation({
+  args: {
+    userId: v.id("users"),
+    chatId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, {
+      chatId: args.chatId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const updateUserProfile = internalMutation({
+  args: {
+    userId: v.id("users"),
+    name: v.optional(v.string()),
+    relationshipToRecipient: v.optional(v.string()),
+    status: v.optional(entityStatusValidator),
+  },
+  handler: async (ctx, args) => {
+    const { userId, ...fields } = args;
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined && value !== "") patch[key] = value;
+    }
+    await ctx.db.patch(userId, patch);
+  },
+});
+
+export const updateCareCaseProfile = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    title: v.optional(v.string()),
+    careRecipientName: v.optional(v.string()),
+    relationshipToRecipient: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    status: v.optional(entityStatusValidator),
+  },
+  handler: async (ctx, args) => {
+    const { careCaseId, ...fields } = args;
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined && value !== "") patch[key] = value;
+    }
+    await ctx.db.patch(careCaseId, patch);
+  },
+});
+
+export const syncCareCaseTitle = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const [careCase, user] = await Promise.all([
+      ctx.db.get(args.careCaseId),
+      ctx.db.get(args.userId),
+    ]);
+    if (!careCase || !user) return;
+
+    const recipient = careCase.careRecipientName?.trim();
+    const userName = user.name?.trim();
+    if (!recipient || !userName || userName === "New User") return;
+
+    await ctx.db.patch(args.careCaseId, {
+      title: `${userName} caring for ${recipient}`,
+      updatedAt: Date.now(),
     });
   },
 });
 
 export const logMessage = internalMutation({
   args: {
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
     senderPhone: v.optional(v.string()),
+    actorType: actorTypeValidator,
     direction: directionValidator,
-    memberName: v.optional(v.string()),
+    displayName: v.optional(v.string()),
     body: v.string(),
     timestamp: v.number(),
     linqMessageId: v.optional(v.string()),
@@ -170,11 +270,10 @@ export const logMessage = internalMutation({
 
 export const logAudit = internalMutation({
   args: {
-    familyId: v.optional(v.id("families")),
+    careCaseId: v.optional(v.id("careCases")),
+    userId: v.optional(v.id("users")),
     event: eventValidator,
-    phone: v.string(),
-    accessLevel: v.optional(v.string()),
-    role: v.optional(v.string()),
+    phone: v.optional(v.string()),
     details: detailsValidator,
     timestamp: v.number(),
   },
@@ -183,187 +282,16 @@ export const logAudit = internalMutation({
   },
 });
 
-export const persistLesson = internalMutation({
-  args: {
-    familyId: v.optional(v.id("families")),
-    scope: scopeValidator,
-    category: categoryValidator,
-    text: v.string(),
-    learnedAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("lessons", args);
-  },
-});
-
-export const createApproval = internalMutation({
-  args: {
-    familyId: v.id("families"),
-    status: statusValidator,
-    requesterPhone: v.string(),
-    requesterName: v.string(),
-    approverPhones: v.array(v.string()),
-    description: v.string(),
-    update: updateValidator,
-    createdAt: v.number(),
-    expiresAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("approvals", args);
-  },
-});
-
-export const updateMemberChatId = internalMutation({
-  args: {
-    memberId: v.id("members"),
-    chatId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.memberId, { chatId: args.chatId });
-  },
-});
-
-export const getMemberByPhone = internalMutation({
-  args: { phone: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("members")
-      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
-      .first();
-  },
-});
-
-export const getCoordinators = internalMutation({
-  args: { familyId: v.id("families") },
-  handler: async (ctx, args) => {
-    const members = await ctx.db
-      .query("members")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-      .collect();
-
-    return members.flatMap((member) =>
-      member.isCoordinator && member.phone ? [member.phone] : [],
-    );
-  },
-});
-
-export const getFamilyContext = internalMutation({
-  args: { familyId: v.id("families") },
-  handler: async (ctx, args) => {
-    const family = await ctx.db.get(args.familyId);
-    if (!family) return null;
-    return { context: family.context ?? "[No family context]" };
-  },
-});
-
-export const getFamilyStructuredContext = internalMutation({
-  args: { familyId: v.id("families") },
-  handler: async (ctx, args) => {
-    const [medications, scheduleItems, careTeam, members] = await Promise.all([
-      ctx.db
-        .query("medications")
-        .withIndex("by_family_status", (q) =>
-          q.eq("familyId", args.familyId).eq("status", "active"),
-        )
-        .collect(),
-      ctx.db
-        .query("scheduleItems")
-        .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-        .filter((q) => q.neq(q.field("status"), "cancelled"))
-        .collect(),
-      ctx.db
-        .query("careTeam")
-        .withIndex("by_family_active", (q) =>
-          q.eq("familyId", args.familyId).eq("active", true),
-        )
-        .collect(),
-      ctx.db
-        .query("members")
-        .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-        .filter((q) => q.eq(q.field("active"), true))
-        .collect(),
-    ]);
-
-    const sections: string[] = [];
-
-    if (medications.length > 0) {
-      const medLines = medications.map(
-        (m) => `- ${m.name} ${m.dose} — ${m.schedule}${m.prescriber ? ` (${m.prescriber})` : ""}`,
-      );
-      sections.push(`## Medications\n${medLines.join("\n")}`);
-    }
-
-    if (scheduleItems.length > 0) {
-      const schedLines = scheduleItems.map(
-        (s) =>
-          `- [${s.type}] ${s.title}${s.date ? ` on ${s.date}` : ""}${s.time ? ` at ${s.time}` : ""}${s.assignedTo ? ` (${s.assignedTo})` : ""}`,
-      );
-      sections.push(`## Schedule\n${schedLines.join("\n")}`);
-    }
-
-    if (careTeam.length > 0) {
-      const teamLines = careTeam.map(
-        (c) => `- ${c.name} — ${c.role}${c.phone ? ` (${c.phone})` : ""}`,
-      );
-      sections.push(`## Care Team\n${teamLines.join("\n")}`);
-    }
-
-    if (members.length > 0) {
-      const memberLines = members.map(
-        (m) => `- ${m.name} (${m.role})${m.phone ? ` — ${m.phone}` : ""}`,
-      );
-      sections.push(`## Family Members\n${memberLines.join("\n")}`);
-    }
-
-    return sections.join("\n\n");
-  },
-});
-
-export const getRecentMessages = internalMutation({
-  args: { familyId: v.id("families"), phone: v.string(), limit: v.number() },
+export const getCareCaseRecentMessages = internalMutation({
+  args: { careCaseId: v.id("careCases"), limit: v.number() },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("messages")
-      .withIndex("by_family_sender_phone", (q) =>
-        q.eq("familyId", args.familyId).eq("senderPhone", args.phone),
+      .withIndex("by_care_case_timestamp", (q) =>
+        q.eq("careCaseId", args.careCaseId),
       )
       .order("desc")
       .take(args.limit);
-  },
-});
-
-export const getFamilyRecentMessages = internalMutation({
-  args: { familyId: v.id("families"), limit: v.number() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_family_timestamp", (q) =>
-        q.eq("familyId", args.familyId),
-      )
-      .order("desc")
-      .take(args.limit);
-  },
-});
-
-export const getFamilyLessons = internalMutation({
-  args: { familyId: v.id("families") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("lessons")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-      .collect();
-  },
-});
-
-export const getPendingApprovals = internalMutation({
-  args: { familyId: v.id("families") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("approvals")
-      .withIndex("by_family_status", (q) =>
-        q.eq("familyId", args.familyId).eq("status", "pending"),
-      )
-      .collect();
   },
 });
 
@@ -389,22 +317,6 @@ export const updateMessageLinqId = internalMutation({
   },
 });
 
-export const getLatestOutboundMessage = internalMutation({
-  args: {
-    familyId: v.id("families"),
-    phone: v.string(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_family_sender_phone", (q) =>
-        q.eq("familyId", args.familyId).eq("senderPhone", args.phone),
-      )
-      .order("desc")
-      .first();
-  },
-});
-
 export const updateMessageStatus = internalMutation({
   args: {
     messageId: v.id("messages"),
@@ -424,198 +336,122 @@ export const updateMessageStatus = internalMutation({
   },
 });
 
-export const createOnboardingFamily = internalMutation({
+export const upsertMemoryEntries = internalMutation({
   args: {
-    phone: v.string(),
-    chatId: v.string(),
+    userId: v.id("users"),
+    careCaseId: v.id("careCases"),
+    scope: memoryScopeValidator,
+    updates: v.array(memoryUpdateValidator),
   },
   handler: async (ctx, args) => {
-    const phone = normalizePhone(args.phone);
-    if (!phone) {
-      throw new Error(`Cannot normalize phone: ${args.phone}`);
+    const now = Date.now();
+    const updates = uniqueMemoryUpdates(args.updates);
+    const savedCategories = new Set<string>();
+
+    for (const update of updates) {
+      const existing = await ctx.db
+        .query("memoryEntries")
+        .withIndex("by_care_case_scope_category", (q) =>
+          q
+            .eq("careCaseId", args.careCaseId)
+            .eq("scope", args.scope)
+            .eq("category", update.category),
+        )
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), args.userId),
+            q.eq(q.field("active"), true),
+            q.eq(q.field("content"), update.content),
+          ),
+        )
+        .first();
+
+      if (existing) {
+        continue;
+      }
+
+      await ctx.db.insert("memoryEntries", {
+        careCaseId: args.careCaseId,
+        userId: args.userId,
+        scope: args.scope,
+        category: update.category,
+        content: update.content,
+        source: update.source,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      savedCategories.add(update.category);
     }
 
-    const existing = await ctx.db
-      .query("members")
-      .withIndex("by_phone", (q) => q.eq("phone", phone))
-      .first();
-    if (existing) {
-      throw new Error(`Phone ${phone} already belongs to a family`);
+    return { inserted: savedCategories.size, savedCategories: [...savedCategories] };
+  },
+});
+
+export const getCompiledPromptContext = internalMutation({
+  args: {
+    userId: v.id("users"),
+    careCaseId: v.id("careCases"),
+  },
+  handler: async (ctx, args) => {
+    const [user, careCase, medications, scheduleItems, memoryEntries] = await Promise.all([
+      ctx.db.get(args.userId),
+      ctx.db.get(args.careCaseId),
+      ctx.db
+        .query("medications")
+        .withIndex("by_care_case_status", (q) =>
+          q.eq("careCaseId", args.careCaseId).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("scheduleItems")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+        .filter((q) => q.neq(q.field("status"), "cancelled"))
+        .collect(),
+      ctx.db
+        .query("memoryEntries")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+        .filter((q) => q.eq(q.field("active"), true))
+        .collect(),
+    ]);
+
+    if (!user || !careCase) {
+      return null;
     }
 
-    const now = Date.now();
-    const familyId = await ctx.db.insert("families", {
-      name: "New Care Profile",
-      status: "onboarding",
-      timezone: "America/Chicago",
-      productMode: "solo_beta",
-      context: buildOnboardingContext(phone),
-      createdAt: now,
-      updatedAt: now,
-    });
+    const userMemory = buildUserContext(user, memoryEntries);
+    const careCaseContext = buildCareCaseContext(
+      careCase,
+      medications,
+      scheduleItems,
+      memoryEntries,
+    );
 
-    const memberId = await ctx.db.insert("members", {
-      familyId,
-      phone,
-      name: "New Member",
-      role: "family_caregiver",
-      accessLevel: "full",
-      isCoordinator: true,
-      isEmergencyContact: false,
-      active: true,
-      chatId: args.chatId,
-    });
-
-    return { familyId, memberId };
-  },
-});
-
-export const updateMemberName = internalMutation({
-  args: {
-    memberId: v.id("members"),
-    name: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.memberId, { name: args.name });
-  },
-});
-
-export const getMemberById = internalMutation({
-  args: { id: v.id("members") },
-  handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
-  },
-});
-
-export const getMemberByName = internalMutation({
-  args: { familyId: v.id("families"), name: v.string() },
-  handler: async (ctx, args) => {
-    const members = await ctx.db
-      .query("members")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-      .filter((q) => q.eq(q.field("active"), true))
-      .collect();
-    const nameLower = args.name.toLowerCase();
-    return members.find((m) => m.name.toLowerCase() === nameLower)
-      ?? members.find((m) => m.name.toLowerCase().startsWith(nameLower.split(" ")[0]))
-      ?? null;
-  },
-});
-
-
-export const createOutreachThread = internalMutation({
-  args: {
-    familyId: v.id("families"),
-    initiatorPhone: v.string(),
-    initiatorChatId: v.string(),
-    targetPhone: v.string(),
-    targetName: v.string(),
-    outboundMessageId: v.id("messages"),
-    purpose: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    return await ctx.db.insert("outreachThreads", {
-      ...args,
-      status: "pending",
-      createdAt: now,
-      expiresAt: now + 24 * 60 * 60 * 1000,
-    });
-  },
-});
-
-export const getPendingOutreachForSender = internalMutation({
-  args: { targetPhone: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("outreachThreads")
-      .withIndex("by_target_pending", (q) =>
-        q.eq("targetPhone", args.targetPhone).eq("status", "pending"),
-      )
-      .collect();
-  },
-});
-
-export const updateOutreachThread = internalMutation({
-  args: {
-    threadId: v.id("outreachThreads"),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("responded"),
-      v.literal("expired"),
-      v.literal("closed"),
-    ),
-    respondedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { threadId, ...patch } = args;
-    await ctx.db.patch(threadId, patch);
-  },
-});
-
-export const getExpiredOutreachThreads = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const now = Date.now();
-    const pending = await ctx.db
-      .query("outreachThreads")
-      .filter((q) => q.eq(q.field("status"), "pending"))
-      .collect();
-    return pending.filter((t) => t.expiresAt <= now);
-  },
-});
-
-export const applyContextUpdates = internalMutation({
-  args: {
-    familyId: v.id("families"),
-    updates: v.array(updateValidator),
-  },
-  handler: async (ctx, args) => {
-    const family = await ctx.db.get(args.familyId);
-    if (!family) return;
-
-    const nextContext = applySectionUpdates(family.context ?? "", args.updates);
-    await ctx.db.patch(args.familyId, { context: nextContext });
-  },
-});
-
-export const applyMemberContextUpdates = internalMutation({
-  args: {
-    memberId: v.id("members"),
-    updates: v.array(updateValidator),
-  },
-  handler: async (ctx, args) => {
-    const member = await ctx.db.get(args.memberId);
-    if (!member) return;
-
-    const baseContext = member.context?.trim()
-      ? member.context
-      : buildDefaultMemberContext({
-          name: member.name,
-          phone: member.phone,
-          role: member.role,
-          relationship: member.relationship,
-          accessLevel: member.accessLevel,
-        });
-
-    const nextContext = applySectionUpdates(baseContext, args.updates);
-    await ctx.db.patch(args.memberId, { context: nextContext });
+    return {
+      user,
+      careCase,
+      userContext: userMemory,
+      careCaseContext: careCaseContext.text,
+      contextSections: careCaseContext.sections,
+      lessons: careCaseContext.lessons,
+    };
   },
 });
 
 export const upsertMedication = internalMutation({
   args: {
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
     action: v.union(v.literal("add"), v.literal("update"), v.literal("remove")),
     name: v.string(),
     dose: v.optional(v.string()),
     schedule: v.optional(v.string()),
     prescriber: v.optional(v.string()),
+    notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("medications")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
       .filter((q) => q.eq(q.field("name"), args.name))
       .first();
 
@@ -629,14 +465,16 @@ export const upsertMedication = internalMutation({
       if (args.dose) patch.dose = args.dose;
       if (args.schedule) patch.schedule = args.schedule;
       if (args.prescriber) patch.prescriber = args.prescriber;
+      if (args.notes) patch.notes = args.notes;
       await ctx.db.patch(existing._id, patch);
     } else if (args.action === "add") {
       await ctx.db.insert("medications", {
-        familyId: args.familyId,
+        careCaseId: args.careCaseId,
         name: args.name,
         dose: args.dose ?? "",
         schedule: args.schedule ?? "",
         prescriber: args.prescriber,
+        notes: args.notes,
         status: "active",
       });
     }
@@ -645,24 +483,21 @@ export const upsertMedication = internalMutation({
 
 export const upsertScheduleItem = internalMutation({
   args: {
-    familyId: v.id("families"),
+    careCaseId: v.id("careCases"),
     action: v.union(v.literal("add"), v.literal("update"), v.literal("remove")),
-    type: v.union(
-      v.literal("shift"),
-      v.literal("appointment"),
-      v.literal("task"),
-      v.literal("ride"),
-      v.literal("careTask"),
-    ),
+    type: scheduleTypeValidator,
     title: v.string(),
     date: v.optional(v.string()),
     time: v.optional(v.string()),
-    assignedTo: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    location: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    provider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("scheduleItems")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
       .filter((q) => q.eq(q.field("title"), args.title))
       .first();
 
@@ -675,54 +510,23 @@ export const upsertScheduleItem = internalMutation({
       const patch: Record<string, string> = {};
       if (args.date) patch.date = args.date;
       if (args.time) patch.time = args.time;
-      if (args.assignedTo) patch.assignedTo = args.assignedTo;
+      if (args.endTime) patch.endTime = args.endTime;
+      if (args.location) patch.location = args.location;
+      if (args.notes) patch.notes = args.notes;
+      if (args.provider) patch.provider = args.provider;
       await ctx.db.patch(existing._id, patch);
     } else if (args.action === "add") {
       await ctx.db.insert("scheduleItems", {
-        familyId: args.familyId,
+        careCaseId: args.careCaseId,
         type: args.type,
         title: args.title,
         date: args.date,
         time: args.time,
-        assignedTo: args.assignedTo,
+        endTime: args.endTime,
+        location: args.location,
+        notes: args.notes,
+        provider: args.provider,
         status: "scheduled",
-      });
-    }
-  },
-});
-
-export const upsertCareTeamMember = internalMutation({
-  args: {
-    familyId: v.id("families"),
-    action: v.union(v.literal("add"), v.literal("update"), v.literal("remove")),
-    name: v.string(),
-    role: v.optional(v.string()),
-    phone: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("careTeam")
-      .withIndex("by_family", (q) => q.eq("familyId", args.familyId))
-      .filter((q) => q.eq(q.field("name"), args.name))
-      .first();
-
-    if (args.action === "remove" && existing) {
-      await ctx.db.patch(existing._id, { active: false });
-      return;
-    }
-
-    if (existing) {
-      const patch: Record<string, string> = {};
-      if (args.role) patch.role = args.role;
-      if (args.phone) patch.phone = args.phone;
-      await ctx.db.patch(existing._id, patch);
-    } else if (args.action === "add") {
-      await ctx.db.insert("careTeam", {
-        familyId: args.familyId,
-        name: args.name,
-        role: args.role ?? "other",
-        phone: args.phone,
-        active: true,
       });
     }
   },

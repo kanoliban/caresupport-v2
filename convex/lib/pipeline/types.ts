@@ -1,12 +1,12 @@
+import type { MemoryCategory } from "../memory";
+
 export type RouteTier = "fast" | "reason" | "critical";
 
 export type Intent =
   | "EMERGENCY"
-  | "ESCALATION"
   | "MEDICATION_CHANGE"
   | "ONBOARDING"
-  | "MULTI_MEMBER"
-  | "UPGRADE"
+  | "BILLING"
   | "GENERAL";
 
 export interface RouteResult {
@@ -27,67 +27,59 @@ export interface MessageTurn {
   content: string;
 }
 
-export type FamilyContextMode =
-  | "family_full"
-  | "family_meds"
-  | "family_team";
-
 export interface SystemBlocksInput {
   soulContent: string;
   routingContent: string;
   capabilitiesContent: string;
   skillsContent: string;
   lessonsContent: string;
-  member: {
+  user: {
     name: string;
     phone: string;
-    role: string;
-    accessLevel: string;
-    relationship: string;
+    relationshipToRecipient?: string;
+    status: string;
   };
-  memberContext: string;
-  familyContext: string;
+  userContext: string;
+  careCase: {
+    title: string;
+    careRecipientName?: string;
+    relationshipToRecipient?: string;
+    timezone: string;
+    status: string;
+  };
+  careCaseContext: string;
   intent: Intent | string;
   service: string;
-  toolsActive: boolean;
-  planTier?: string;
-  productMode?: string;
 }
 
-export interface OutreachEntry {
-  name: string;
-  message: string;
-  phone?: string;
-}
-
-export interface FileUpdate {
-  section: string;
-  operation: string;
+export interface MemoryUpdate {
+  category: MemoryCategory;
   content: string;
-  oldContent: string;
+  source?: string;
 }
 
-export interface RoutingUpdate {
-  action: string;
-  phone: string;
-  name: string;
-  role: string;
-  relationship: string;
-  accessLevel: string;
+export interface UserProfileUpdate {
+  name?: string;
+  relationship_to_recipient?: string;
+  status?: "onboarding" | "active" | "paused" | "archived";
+}
+
+export interface CareCaseProfileUpdate {
+  care_recipient_name?: string;
+  relationship_to_recipient?: string;
+  timezone?: string;
+  status?: "onboarding" | "active" | "paused" | "archived";
 }
 
 export interface HandlerResult {
   success: boolean;
   response: string;
   error?: string;
-  approvalHandled?: boolean;
   blocked?: boolean;
-  leakedCategories?: string[];
   routedTier?: string;
   routedIntent?: string;
   lessonsLearned?: number;
-  approvalsCreated?: number;
-  outreachSent?: number;
+  memoriesSaved?: number;
 }
 
 export interface ReactionRequest {
@@ -106,36 +98,31 @@ export interface MedicationUpdate {
   dose?: string;
   schedule?: string;
   prescriber?: string;
+  notes?: string;
 }
 
 export interface ScheduleUpdate {
   action: "add" | "update" | "remove";
-  type: "shift" | "appointment" | "task" | "ride" | "careTask";
+  type: "appointment" | "task" | "reminder";
   title: string;
   date?: string;
   time?: string;
-  assignedTo?: string;
-}
-
-export interface CareTeamUpdate {
-  action: "add" | "update" | "remove";
-  name: string;
-  role?: string;
-  phone?: string;
+  end_time?: string;
+  location?: string;
+  notes?: string;
+  provider?: string;
 }
 
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
-  needsOutreach: OutreachEntry[];
-  familyFileUpdates: FileUpdate[];
+  userProfileUpdate: UserProfileUpdate | null;
+  careCaseProfileUpdate: CareCaseProfileUpdate | null;
+  userMemoryUpdates: MemoryUpdate[];
+  careCaseMemoryUpdates: MemoryUpdate[];
   selfCorrections: string[];
-  memberUpdates: FileUpdate[];
-  routingUpdates: RoutingUpdate[];
   reactions: ReactionRequest[];
   effect: EffectRequest | null;
-  upgradeRequested?: boolean;
   medicationUpdates?: MedicationUpdate[];
   scheduleUpdates?: ScheduleUpdate[];
-  careTeamUpdates?: CareTeamUpdate[];
 }

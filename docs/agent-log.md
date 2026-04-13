@@ -5,6 +5,30 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-04-13 — Codex
+
+### What I did
+- Replaced the active Convex schema and runtime contract with a solo-native core built around `users`, `careCases`, `messages`, `medications`, `scheduleItems`, `memoryEntries`, and `auditLogs`.
+- Removed legacy active-model files and concepts tied to the family/network product path, including `families`, `members`, `approvals`, `careTeam`, `outreachThreads`, product-mode helpers, and enforcement modules that only existed for the multiplayer model.
+- Rewrote the handler, prompt pipeline, admin/reset path, and seed script so CareSupport now reads and writes deterministic solo-care state instead of relying on family-file style updates.
+- Updated the durable docs (`docs/DECISIONS.md`, `docs/design.md`, `docs/ROADMAP.md`) so future agents can see that the active architecture changed, not just the product copy.
+- Re-ran `npx tsc --noEmit` and `npm test`; both passed after closing the final typecheck issues in `convex/handler.ts` and `convex/lib/pipeline/responseParser.ts`.
+
+### State I'm leaving
+- The repo now encodes the solo beta as both the product wedge and the active deterministic foundation.
+- The current runtime no longer depends on legacy family-network entities to onboard, remember context, or persist care records.
+- Verification is green on the local working tree: `npx tsc --noEmit` and `npm test` both pass.
+
+### What the next agent should know
+- Do not reintroduce `families` / `members` compatibility layers unless there is an explicit new product decision in `docs/DECISIONS.md`.
+- The current architectural question has been answered in code: the active system is `user + careCase + messages + care records + memory + audit`.
+- If future work extends memory or care records, extend the current deterministic core directly rather than rebuilding a markdown context blob abstraction.
+
+### Concerns
+- This was a hard cutover of the active model. Any deployment/reset should be treated as a schema-changing operational event and validated on dev before prod, even though prod was previously emptied.
+
+---
+
 ## 2026-03-05 — Claude
 
 ### What I did

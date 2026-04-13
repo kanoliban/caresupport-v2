@@ -12,33 +12,21 @@ import {
   buildMessages,
   extractJson,
 } from "./lib/pipeline";
-import type { AgentResponse, HandlerResult } from "./lib/pipeline";
-import {
-  filterFamilyContext,
-  getFilteredSections,
-  checkOutboundMessage,
-  classifyUpdates,
-  detectApprovalResponse,
-  buildContextLoadEvent,
-  buildResponseSentEvent,
-  buildResponseBlockedEvent,
-  buildUnknownNumberEvent,
-  buildOutreachSentEvent,
-  EXPIRY_HOURS,
-  isAccessLevel,
-} from "./lib/enforcement";
-import type { AccessLevel } from "./lib/enforcement";
+import type {
+  AgentResponse,
+  HandlerResult,
+  Intent,
+  MemoryUpdate,
+} from "./lib/pipeline";
 import { normalizePhone } from "./mutations";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
   sendMessage,
   sendMessageSequence,
   splitIntoBubbles,
-  createChat,
   markAsRead,
   startTyping,
   sendReaction,
-  shareContactCard,
 } from "./lib/linqClient";
 import type { MessageEffect } from "./lib/linqClient";
 import {
@@ -47,61 +35,30 @@ import {
   CAPABILITIES_CONTENT,
   SKILLS_CONTENT,
 } from "./lib/promptContent";
-import { getEffectiveProductMode } from "./lib/productMode";
+import { normalizeMemoryCategory } from "./lib/memory";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
 const MAX_RESPONSE_MS = 6_000;
 const MAX_REPLY_QUOTE_LENGTH = 200;
 
-const BLOCKED_RESPONSE =
-  "I'm sorry, I can't share that information with your access level. " +
-  "Please contact the person coordinating this care if you need more details.";
-
-const UNKNOWN_NUMBER_RESPONSE =
-  "Hi! Welcome to CareSupport — I help you manage a loved one's care over text.\n\n" +
-  "To get started: what's your name, and who are you caring for?";
+const UNKNOWN_USER_RESPONSE =
+  "Hey! I'm CareSupport — I help you manage a loved one's care over text. No app needed.\nWhat's your name?";
 
 const SOLO_BETA_MULTIPLAYER_RESPONSE =
-  "Right now CareSupport is focused on helping you manage one loved one's care directly. I can't add family members or message other people yet, but I can keep the plan, meds, appointments, and reminders organized for you here.";
+  "Right now CareSupport is focused on helping you directly in this thread. I can't add family members or message other people yet, but I can keep the plan, meds, appointments, and reminders organized here.";
 
-const VALID_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
+const PROFILE_SAVE_PATTERNS = [
+  /^\s*please save this to my profile(?: for future messages)?[:\s,-]*(.+)$/i,
+  /^\s*(?:please )?(?:save|add|put) (?:this )?(?:to|in) my profile(?: for future messages)?[:\s,-]*(.+)$/i,
+  /^\s*(?:please )?remember (?:this )?about me(?: for future messages)?[:\s,-]*(.+)$/i,
+  /^\s*for future reference[:,]?\s*(.+)$/i,
+];
 
-export function parseCategory(text: string): {
-  category: "behavioral" | "factual" | "operational";
-  cleanText: string;
-} {
-  const match = text.match(/^\[(behavioral|factual|operational)]\s*/i);
-  if (match) {
-    return {
-      category: match[1].toLowerCase() as "behavioral" | "factual" | "operational",
-      cleanText: text.slice(match[0].length),
-    };
-  }
-  return { category: "behavioral", cleanText: text };
-}
+const SOLO_BOUNDARY_PATTERN =
+  /\b(add|invite|include|loop in|bring in|text|message|call|reach out to|contact)\b.*\b(sister|brother|mom|mother|dad|father|family|caregiver|doctor|provider|nurse|someone|team|friend|aunt|uncle)\b/i;
 
-export function formatConversationLog(
-  records: Array<{
-    direction: "inbound" | "outbound";
-    body: string;
-    timestamp: number;
-    memberName?: string;
-    senderPhone?: string;
-  }>,
-): string {
-  if (records.length === 0) return "[No conversation history]";
-  return records
-    .map((r) => {
-      const date = new Date(r.timestamp);
-      const ts = date.toISOString().replace("T", " ").replace(/\.\d{3}Z/, " UTC");
-      const attribution = r.direction === "inbound"
-        ? `INBOUND from ${r.memberName ?? r.senderPhone ?? "unknown"}`
-        : `OUTBOUND to ${r.memberName ?? r.senderPhone ?? "unknown"}`;
-      return `[${ts}] [${attribution}] ${r.body}`;
-    })
-    .join("\n");
-}
+const VALID_LESSON_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
 
 export function stripMarkdown(text: string): string {
   const withoutLinePrefixes = text
@@ -118,144 +75,6 @@ export function stripMarkdown(text: string): string {
     .replace(/(^|[\s([{"'])\*\*(?=\S)(.+?\S)\*\*(?=$|[\s)\]}.,!?;:'"])/g, "$1$2")
     .replace(/(^|[\s([{"'])__(?=\S)(.+?\S)__(?=$|[\s)\]}.,!?;:'"])/g, "$1$2")
     .replace(/(^|[\s([{"'])\*(?=\S)(.+?\S)\*(?=$|[\s)\]}.,!?;:'"])/g, "$1$2");
-}
-
-const PROFILE_SAVE_PATTERNS = [
-  /^\s*please save this to my profile(?: for future messages)?[:\s,-]*(.+)$/i,
-  /^\s*(?:please )?(?:save|add|put) (?:this )?(?:to|in) my profile(?: for future messages)?[:\s,-]*(.+)$/i,
-  /^\s*(?:please )?remember (?:this )?about me(?: for future messages)?[:\s,-]*(.+)$/i,
-  /^\s*for future reference[:,]?\s*(.+)$/i,
-];
-
-function inferMemberProfileSection(note: string): string {
-  return /\b(text|texts|call|calls|message|messages|update|updates|sms|imessage|phone)\b/i
-    .test(note)
-    ? "Communication Preferences"
-    : "Personal Context";
-}
-
-export function inferExplicitMemberProfileUpdate(
-  message: string,
-): { section: string; operation: string; content: string; oldContent: string } | null {
-  for (const pattern of PROFILE_SAVE_PATTERNS) {
-    const match = pattern.exec(message);
-    const rawNote = match?.[1]?.trim();
-    if (!rawNote) {
-      continue;
-    }
-
-    const note = rawNote
-      .replace(/^["']+|["']+$/g, "")
-      .trim();
-
-    if (!note || note.includes("?")) {
-      return null;
-    }
-
-    return {
-      section: inferMemberProfileSection(note),
-      operation: "append",
-      content: note.startsWith("-") ? note : `- ${note}`,
-      oldContent: "",
-    };
-  }
-
-  return null;
-}
-
-export function ensureExplicitMemberProfileUpdate(
-  updates: Array<{ section: string; operation: string; content: string; oldContent: string }>,
-  message: string,
-  existingContext: string | undefined,
-): Array<{ section: string; operation: string; content: string; oldContent: string }> {
-  const inferredUpdate = inferExplicitMemberProfileUpdate(message);
-  if (!inferredUpdate) {
-    return updates;
-  }
-
-  if ((existingContext ?? "").includes(inferredUpdate.content)) {
-    return updates;
-  }
-
-  const alreadyPresent = updates.some(
-    (update) =>
-      update.section === inferredUpdate.section &&
-      update.operation === inferredUpdate.operation &&
-      update.content.trim() === inferredUpdate.content.trim(),
-  );
-
-  if (alreadyPresent) {
-    return updates;
-  }
-
-  return [...updates, inferredUpdate];
-}
-
-export function isSoloBetaMultiplayerRequest(
-  args: {
-    senderPhone: string;
-    intent: string;
-    parsed: AgentResponse;
-  },
-): boolean {
-  const normalizedSender = normalizePhone(args.senderPhone) ?? args.senderPhone;
-  const hasUnsupportedRouting = args.parsed.routingUpdates.some((routing) => {
-    const normalizedTarget = normalizePhone(routing.phone) ?? routing.phone;
-    return routing.action !== "update" || normalizedTarget !== normalizedSender;
-  });
-
-  return (
-    args.intent === "MULTI_MEMBER" ||
-    args.parsed.needsOutreach.length > 0 ||
-    hasUnsupportedRouting ||
-    Boolean(args.parsed.careTeamUpdates?.length)
-  );
-}
-
-export function applySoloBetaProductBoundary(
-  args: {
-    senderPhone: string;
-    intent: string;
-    parsed: AgentResponse;
-    smsResponse: string;
-  },
-): { blocked: boolean; parsed: AgentResponse; smsResponse: string } {
-  const blocked = isSoloBetaMultiplayerRequest({
-    senderPhone: args.senderPhone,
-    intent: args.intent,
-    parsed: args.parsed,
-  });
-
-  if (!blocked) {
-    return {
-      blocked: false,
-      parsed: args.parsed,
-      smsResponse: args.smsResponse,
-    };
-  }
-
-  const normalizedSender = normalizePhone(args.senderPhone) ?? args.senderPhone;
-
-  return {
-    blocked: true,
-    smsResponse: SOLO_BETA_MULTIPLAYER_RESPONSE,
-    parsed: {
-      ...args.parsed,
-      needsOutreach: [],
-      familyFileUpdates: [],
-      memberUpdates: [],
-      routingUpdates: args.parsed.routingUpdates.filter((routing) => {
-        const normalizedTarget = normalizePhone(routing.phone) ?? routing.phone;
-        return routing.action === "update" && normalizedTarget === normalizedSender;
-      }),
-      reactions: [],
-      effect: null,
-      upgradeRequested: false,
-      medicationUpdates: [],
-      scheduleUpdates: [],
-      careTeamUpdates: [],
-    },
-  };
 }
 
 function truncateReplyQuote(text: string): string {
@@ -278,6 +97,99 @@ function getInitialResponseDelayMs(bubbleCount: number): number {
   );
 }
 
+export function formatConversationLog(
+  records: Array<{
+    direction: "inbound" | "outbound";
+    body: string;
+    timestamp: number;
+    displayName?: string;
+    senderPhone?: string;
+  }>,
+): string {
+  if (records.length === 0) return "[No conversation history]";
+  return records
+    .map((record) => {
+      const date = new Date(record.timestamp);
+      const ts = date.toISOString().replace("T", " ").replace(/\.\d{3}Z/, " UTC");
+      const attribution = record.direction === "inbound"
+        ? `INBOUND from ${record.displayName ?? record.senderPhone ?? "unknown"}`
+        : `OUTBOUND to ${record.displayName ?? record.senderPhone ?? "unknown"}`;
+      return `[${ts}] [${attribution}] ${record.body}`;
+    })
+    .join("\n");
+}
+
+export function inferExplicitUserMemoryUpdate(message: string): MemoryUpdate | null {
+  for (const pattern of PROFILE_SAVE_PATTERNS) {
+    const match = pattern.exec(message);
+    const rawNote = match?.[1]?.trim();
+    if (!rawNote) continue;
+
+    const content = rawNote.replace(/^["']+|["']+$/g, "").trim();
+    if (!content || content.includes("?")) {
+      return null;
+    }
+
+    const category = /\b(text|texts|call|calls|message|messages|update|updates|sms|imessage|phone)\b/i
+      .test(content)
+      ? "communication_preference"
+      : "profile";
+
+    return { category, content };
+  }
+
+  return null;
+}
+
+export function ensureExplicitUserMemoryUpdate(
+  updates: MemoryUpdate[],
+  message: string,
+  existingContext: string,
+): MemoryUpdate[] {
+  const inferred = inferExplicitUserMemoryUpdate(message);
+  if (!inferred) {
+    return updates;
+  }
+
+  if (existingContext.includes(inferred.content)) {
+    return updates;
+  }
+
+  const present = updates.some(
+    (update) =>
+      normalizeMemoryCategory(update.category) === inferred.category &&
+      update.content.trim() === inferred.content,
+  );
+
+  if (present) {
+    return updates;
+  }
+
+  return [...updates, inferred];
+}
+
+export function isSoloExpansionRequest(message: string): boolean {
+  return SOLO_BOUNDARY_PATTERN.test(message);
+}
+
+export function parseLesson(text: string): { category: string; cleanText: string } {
+  const match = text.match(/^\[(behavioral|factual|operational)]\s*/i);
+  if (match) {
+    return {
+      category: match[1].toLowerCase(),
+      cleanText: text.slice(match[0].length).trim(),
+    };
+  }
+  return { category: "behavioral", cleanText: text.trim() };
+}
+
+function buildIntent(careCaseStatus: string, messageBody: string): Intent {
+  if (careCaseStatus === "onboarding") {
+    return "ONBOARDING";
+  }
+  return route(messageBody).intent;
+}
+
 export const handleMessage = internalAction({
   args: {
     senderPhone: v.string(),
@@ -288,193 +200,115 @@ export const handleMessage = internalAction({
     replyToMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<HandlerResult> => {
-    const handlerStart = Date.now();
-    const now = handlerStart;
+    const startedAt = Date.now();
+    const now = startedAt;
     const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
-    console.log(`[CS] Handler start — sender=${senderPhone} len=${messageBody.length}`);
 
-    // Step 1: Resolve member by phone
-    let member = await ctx.runMutation(internal.mutations.getMemberByPhone, {
+    let user = await ctx.runMutation(internal.mutations.getUserByPhone, {
       phone: senderPhone,
-    }) as Doc<"members"> | null;
+    }) as Doc<"users"> | null;
 
-    if (!member) {
+    if (!user) {
       const result = await ctx.runMutation(
-        internal.mutations.createOnboardingFamily,
+        internal.mutations.createOnboardingUserAndCareCase,
         { phone: senderPhone, chatId },
       );
 
-      member = await ctx.runMutation(
-        internal.mutations.getMemberById,
-        { id: result.memberId },
-      ) as Doc<"members">;
+      user = await ctx.runMutation(
+        internal.mutations.getUserById,
+        { id: result.userId },
+      ) as Doc<"users"> | null;
 
       await ctx.runMutation(internal.mutations.logAudit, {
-        familyId: result.familyId,
-        event: "family_created" as const,
+        careCaseId: result.careCaseId,
+        userId: result.userId,
+        event: "user_created",
         phone: senderPhone,
-        details: { initiatedBy: senderPhone, purpose: "self-service onboarding" },
+        details: { triggerMessage: "self-service onboarding" },
         timestamp: now,
       });
     }
 
-    const familyId = member.familyId;
-
-    // Step 1c: Check for pending outreach threads where this sender is the target
-    const pendingThreads = await ctx.runMutation(
-      internal.mutations.getPendingOutreachForSender,
-      { targetPhone: senderPhone },
-    ) as Doc<"outreachThreads">[];
-
-    const rawAccessLevel = member.accessLevel;
-    const hasValidAccessLevel = isAccessLevel(rawAccessLevel);
-    const accessLevel: AccessLevel = hasValidAccessLevel ? rawAccessLevel : "limited";
-    const memberName = member.name;
-
-    if (!hasValidAccessLevel) {
-      await ctx.runMutation(internal.mutations.logAudit, {
-        familyId,
-        event: "response_blocked",
-        phone: senderPhone,
-        accessLevel: String(rawAccessLevel),
-        role: member.role,
-        details: {
-          severity: "HIGH",
-          recipientPhone: senderPhone,
-          failureReason: `Invalid member access level: ${String(rawAccessLevel)}`,
-        },
-        timestamp: now,
-      });
+    if (!user) {
+      throw new Error("Unable to resolve or create user");
     }
 
-    // Step 2: Update chatId if not set
-    if (!member.chatId && chatId) {
-      await ctx.runMutation(internal.mutations.updateMemberChatId, {
-        memberId: member._id,
+    let activeUser: Doc<"users"> = user;
+    const careCaseId = activeUser.careCaseId;
+    const userId = activeUser._id;
+
+    if (!activeUser.chatId && chatId) {
+      await ctx.runMutation(internal.mutations.updateUserChatId, {
+        userId,
         chatId,
       });
+      const refreshedUser = await ctx.runMutation(internal.mutations.getUserById, {
+        id: userId,
+      }) as Doc<"users"> | null;
+      if (refreshedUser) {
+        activeUser = refreshedUser;
+      }
     }
 
-    // Step 2b: Read receipt + typing indicator (human feel)
-    const pacingStart = Date.now();
     const envVarsEarly = env();
     if (chatId && envVarsEarly.linqApiToken) {
       try {
         await markAsRead(chatId, envVarsEarly.linqApiToken);
         await startTyping(chatId, envVarsEarly.linqApiToken);
       } catch {
-        // best-effort — don't block the pipeline
+        // best effort
       }
     }
 
-    // Step 3: Log inbound message
     await ctx.runMutation(internal.mutations.logMessage, {
-      familyId,
+      careCaseId,
+      userId,
       senderPhone,
+      actorType: "user",
       direction: "inbound",
-      memberName,
+      displayName: activeUser.name,
       body: messageBody,
       timestamp: now,
       linqMessageId: args.sourceMessageId,
     });
 
-    // Step 4: Check if this is an approval response (early return)
-    const approvalCheck = detectApprovalResponse(messageBody);
-    if (approvalCheck.decision !== null) {
-      const approvalResult = await ctx.runMutation(
-        internal.approvals.resolveFromReply,
-        {
-          familyId,
-          status: approvalCheck.decision,
-          resolvedBy: senderPhone,
-          approvalId: approvalCheck.approvalId ?? undefined,
-        },
-      );
-
-      let response: string | null = null;
-      if (approvalResult.action === "approved") {
-        await ctx.runMutation(internal.mutations.logAudit, {
-          familyId,
-          event: "context_updated",
-          phone: senderPhone,
-          accessLevel,
-          role: member.role,
-          details: {
-            triggerMessage: messageBody.slice(0, 120),
-            sectionsLoaded: approvalResult.update
-              ? [approvalResult.update.section]
-              : undefined,
-          },
-          timestamp: now,
-        });
-        response = `Approved: ${approvalResult.description.slice(0, 150)}. Change applied.`;
-      } else if (approvalResult.action === "rejected") {
-        response = `Rejected: ${approvalResult.description.slice(0, 150)}. No changes made.`;
-      } else if (approvalResult.action === "ambiguous") {
-        response =
-          "I found more than one pending approval. Reply YES <ref> or NO <ref> using the reference from the approval message.";
-      } else if (approvalResult.action === "expired") {
-        response =
-          "That approval has expired. Please resend the request if you still want to make that change.";
-      } else if (approvalResult.action === "unauthorized") {
-        response = "I can't accept that approval from this phone number.";
-      } else if (approvalResult.action === "not_found") {
-        response =
-          "I couldn't find a matching pending approval. Reply YES <ref> or NO <ref> from the approval message if there are multiple requests open.";
-      }
-
-      if (response) {
-        await logOutbound(ctx, familyId, senderPhone, memberName, response, now);
-        await sendResponse(chatId, response, env());
-        return { success: true, response, approvalHandled: true };
-      }
+    const compiledContext = await ctx.runMutation(
+      internal.mutations.getCompiledPromptContext,
+      { userId, careCaseId },
+    );
+    if (!compiledContext) {
+      throw new Error("Unable to compile prompt context");
     }
 
-    // Step 5: Load context (family-wide conversation awareness)
-    const [familyCtx, recentConvos, lessons, structuredCtx] = await Promise.all([
-      ctx.runMutation(internal.mutations.getFamilyContext, { familyId }),
-      ctx.runMutation(internal.mutations.getFamilyRecentMessages, {
-        familyId,
-        limit: 80,
-      }),
-      ctx.runMutation(internal.mutations.getFamilyLessons, { familyId }),
-      ctx.runMutation(internal.mutations.getFamilyStructuredContext, { familyId }),
-    ]);
-
-    const rawNotes = familyCtx?.context ?? "";
-    const rawFamilyContext = structuredCtx
-      ? `${structuredCtx}\n\n## Notes\n${rawNotes}`
-      : rawNotes || "[No family context]";
-    const conversationLog = formatConversationLog(
-      recentConvos.reverse().map((c) => ({
-        direction: c.direction,
-        body: c.body,
-        timestamp: c.timestamp,
-        memberName: c.memberName ?? undefined,
-        senderPhone: c.senderPhone ?? undefined,
-      })),
+    const recentMessages = await ctx.runMutation(
+      internal.mutations.getCareCaseRecentMessages,
+      { careCaseId, limit: 80 },
     );
-    const lessonsText = lessons
-      .map((l) => `- [${l.category}] ${l.text}`)
-      .join("\n");
+    const conversationLog = formatConversationLog(
+      recentMessages
+        .reverse()
+        .map((message) => ({
+          direction: message.direction,
+          body: message.body,
+          timestamp: message.timestamp,
+          displayName: message.displayName ?? undefined,
+          senderPhone: message.senderPhone ?? undefined,
+        })),
+    );
 
-    // Step 6: Pre-filter context by access level
-    const filteredContext = filterFamilyContext(rawFamilyContext, accessLevel);
-    const visibleSections = getFilteredSections(accessLevel);
-
-    // Step 7: Log PHI access (context load audit)
-    const contextLoadEvent = buildContextLoadEvent({
-      familyId,
-      accessorPhone: senderPhone,
-      accessorRole: member.role,
-      accessLevel,
-      sectionsLoaded: visibleSections,
-      triggerMessage: messageBody,
+    await ctx.runMutation(internal.mutations.logAudit, {
+      careCaseId,
+      userId,
+      event: "context_load",
+      phone: senderPhone,
+      details: {
+        sectionsLoaded: compiledContext.contextSections,
+        triggerMessage: messageBody.slice(0, 200),
+      },
+      timestamp: now,
     });
-    await ctx.runMutation(internal.mutations.logAudit, contextLoadEvent);
 
-    // Step 7b: Load quoted reply context when available
-    let messageForClaude = messageBody;
+    let messageForModel = messageBody;
     if (replyToMessageId) {
       const repliedToMessage = await ctx.runMutation(
         internal.mutations.getMessageByLinqId,
@@ -482,43 +316,39 @@ export const handleMessage = internalAction({
       );
       const quotedBody = repliedToMessage?.body ?? "";
       if (quotedBody.trim()) {
-        messageForClaude = prependReplyContext(messageBody, quotedBody);
+        messageForModel = prependReplyContext(messageBody, quotedBody);
       }
     }
 
-    // Step 8: Route intent
-    const routeResult = route(messageForClaude);
+    const routeResult = route(messageForModel);
+    const intent = buildIntent(compiledContext.careCase.status, messageForModel);
 
-    // Step 8b: Load family for plan tier
-    const family = await ctx.runQuery(internal.queries.getFamily, { familyId });
-    const planTier = family?.planTier ?? "free";
-    const productMode = getEffectiveProductMode(family?.productMode);
-
-    // Step 9: Build system prompt
     const systemBlocks = buildSystemBlocks({
       soulContent: SOUL_CONTENT,
       routingContent: ROUTING_CONTENT,
       capabilitiesContent: CAPABILITIES_CONTENT,
       skillsContent: SKILLS_CONTENT,
-      lessonsContent: lessonsText,
-      member: {
-        name: memberName,
-        phone: senderPhone,
-        role: member.role,
-        accessLevel,
-        relationship: member.relationship ?? "",
+      lessonsContent: compiledContext.lessons.map((lesson) => `- ${lesson}`).join("\n"),
+      user: {
+        name: compiledContext.user.name,
+        phone: compiledContext.user.phone,
+        relationshipToRecipient: compiledContext.user.relationshipToRecipient,
+        status: compiledContext.user.status,
       },
-      memberContext: member.context ?? "",
-      familyContext: filteredContext,
-      intent: routeResult.intent,
+      userContext: compiledContext.userContext,
+      careCase: {
+        title: compiledContext.careCase.title,
+        careRecipientName: compiledContext.careCase.careRecipientName,
+        relationshipToRecipient: compiledContext.careCase.relationshipToRecipient,
+        timezone: compiledContext.careCase.timezone,
+        status: compiledContext.careCase.status,
+      },
+      careCaseContext: compiledContext.careCaseContext,
+      intent,
       service,
-      toolsActive: false,
-      planTier,
-      productMode,
     });
-    const messages = buildMessages(messageForClaude, conversationLog);
+    const messages = buildMessages(messageForModel, conversationLog);
 
-    // Step 10: Call AI
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error("ANTHROPIC_API_KEY environment variable is not set");
@@ -526,272 +356,188 @@ export const handleMessage = internalAction({
 
     let parsed: AgentResponse;
     try {
-      const aiStart = Date.now();
       const aiResult = await callAnthropic({
         systemBlocks,
         messages,
         model: routeResult.model,
         apiKey,
       });
-      console.log(`[CS] AI call — model=${routeResult.model} ms=${Date.now() - aiStart}`);
-
       parsed = extractJson(aiResult.text);
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      console.error("[CS] AI call failed:", errMsg);
-      if (err instanceof Error && err.stack) {
-        console.error("[handleMessage] Stack:", err.stack.slice(0, 500));
-      }
-      const fallbackMsg = `Sorry ${memberName}, I wasn't able to process that. Can you send it again?`;
-      await logOutbound(ctx, familyId, senderPhone, memberName, fallbackMsg, now);
-      await sendResponse(chatId, fallbackMsg, env());
-      return { success: false, response: fallbackMsg, error: errMsg };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      const fallback =
+        `Sorry ${compiledContext.user.name}, I wasn't able to process that. Can you send it again?`;
+      await logOutbound(ctx, careCaseId, userId, senderPhone, compiledContext.user.name, fallback, now);
+      await sendResponse(chatId, fallback, env());
+      return { success: false, response: fallback, error: errorMessage };
     }
 
     let smsResponse = stripMarkdown(parsed.smsResponse);
+    if (isSoloExpansionRequest(messageBody)) {
+      smsResponse = SOLO_BETA_MULTIPLAYER_RESPONSE;
+      parsed.userProfileUpdate = null;
+      parsed.careCaseProfileUpdate = null;
+      parsed.userMemoryUpdates = [];
+      parsed.careCaseMemoryUpdates = [];
+      parsed.medicationUpdates = [];
+      parsed.scheduleUpdates = [];
+      parsed.reactions = [];
+      parsed.effect = null;
+    }
 
-    const soloBetaBoundary =
-      productMode === "solo_beta"
-        ? applySoloBetaProductBoundary({
-            senderPhone,
-            intent: routeResult.intent,
-            parsed,
-            smsResponse,
-          })
-        : { blocked: false, parsed, smsResponse };
+    const userMemoryUpdates = ensureExplicitUserMemoryUpdate(
+      parsed.userMemoryUpdates,
+      messageBody,
+      compiledContext.userContext,
+    );
 
-    parsed = soloBetaBoundary.parsed;
-    smsResponse = soloBetaBoundary.smsResponse;
-    const blockedForSoloBeta = soloBetaBoundary.blocked;
-
-    if (blockedForSoloBeta) {
-      await ctx.runMutation(internal.mutations.logAudit, {
-        familyId,
-        event: "response_blocked",
-        phone: senderPhone,
-        accessLevel,
-        role: member.role,
-        details: {
-          severity: "LOW",
-          recipientPhone: senderPhone,
-          failureReason: "solo_beta_multiplayer_request",
-          triggerMessage: messageBody.slice(0, 200),
-        },
-        timestamp: now,
+    if (parsed.userProfileUpdate) {
+      await ctx.runMutation(internal.mutations.updateUserProfile, {
+        userId,
+        name: parsed.userProfileUpdate.name || undefined,
+        relationshipToRecipient:
+          parsed.userProfileUpdate.relationship_to_recipient || undefined,
+        status: parsed.userProfileUpdate.status || undefined,
       });
     }
 
-    // Step 11: Post-check outbound for leakage
-    const leakage = checkOutboundMessage(smsResponse, accessLevel);
-
-    if (!leakage.isClean) {
-      const blockedEvent = buildResponseBlockedEvent({
-        familyId,
-        recipientPhone: senderPhone,
-        accessLevel,
-        leakedCategories: leakage.leakedCategories,
-        leakedTerms: leakage.leakedTerms,
+    if (parsed.careCaseProfileUpdate) {
+      await ctx.runMutation(internal.mutations.updateCareCaseProfile, {
+        careCaseId,
+        careRecipientName:
+          parsed.careCaseProfileUpdate.care_recipient_name || undefined,
+        relationshipToRecipient:
+          parsed.careCaseProfileUpdate.relationship_to_recipient || undefined,
+        timezone: parsed.careCaseProfileUpdate.timezone || undefined,
+        status: parsed.careCaseProfileUpdate.status || undefined,
       });
-      await ctx.runMutation(internal.mutations.logAudit, blockedEvent);
-      await logOutbound(ctx, familyId, senderPhone, memberName, BLOCKED_RESPONSE, now);
-      await sendResponse(chatId, BLOCKED_RESPONSE, env());
-      return {
-        success: true,
-        response: BLOCKED_RESPONSE,
-        blocked: true,
-        leakedCategories: leakage.leakedCategories,
-      };
     }
 
-    // Step 12: Log clean response audit
-    const responseSentEvent = buildResponseSentEvent({
-      familyId,
-      recipientPhone: senderPhone,
-      recipientRole: member.role,
-      accessLevel,
-      responseLength: smsResponse.length,
-      leakageCheckPassed: true,
+    await ctx.runMutation(internal.mutations.syncCareCaseTitle, {
+      careCaseId,
+      userId,
     });
-    await ctx.runMutation(internal.mutations.logAudit, responseSentEvent);
 
-    // Step 13: Classify updates and create approvals
-    const updates = parsed.familyFileUpdates.map((u) => ({
-      section: u.section,
-      operation: u.operation,
-      content: u.content,
-      oldContent: u.oldContent,
-    }));
-    const classified = classifyUpdates(updates);
+    let memoriesSaved = 0;
 
-    if (classified.autoApply.length > 0) {
-      await ctx.runMutation(internal.mutations.applyContextUpdates, {
-        familyId,
-        updates: classified.autoApply,
+    if (userMemoryUpdates.length > 0) {
+      const result = await ctx.runMutation(internal.mutations.upsertMemoryEntries, {
+        userId,
+        careCaseId,
+        scope: "user",
+        updates: userMemoryUpdates,
       });
-      await ctx.runMutation(internal.mutations.logAudit, {
-        familyId,
-        event: "context_updated",
-        phone: senderPhone,
-        accessLevel,
-        role: member.role,
-        details: {
-          triggerMessage: messageBody.slice(0, 120),
-          sectionsLoaded: classified.autoApply.map((u: { section: string }) => u.section),
-        },
-        timestamp: now,
-      });
-    }
-
-    if (classified.needsApproval.length > 0) {
-      const approverPhones = await ctx.runMutation(
-        internal.mutations.getCoordinators,
-        { familyId },
-      );
-
-      for (const { update: upd, reason } of classified.needsApproval) {
-        await ctx.runMutation(internal.mutations.createApproval, {
-          familyId,
-          status: "pending",
-          requesterPhone: senderPhone,
-          requesterName: memberName,
-          approverPhones,
-          description: `${reason}: ${upd.content.slice(0, 120)}`,
-          update: upd,
-          createdAt: now,
-          expiresAt: now + EXPIRY_HOURS * 60 * 60 * 1000,
+      memoriesSaved += result.inserted;
+      if (result.inserted > 0) {
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId,
+          userId,
+          event: "memory_saved",
+          phone: senderPhone,
+          details: { savedCategories: result.savedCategories },
+          timestamp: Date.now(),
         });
       }
     }
 
-    // Step 13b: Process structured table updates (if present)
+    if (parsed.careCaseMemoryUpdates.length > 0) {
+      const result = await ctx.runMutation(internal.mutations.upsertMemoryEntries, {
+        userId,
+        careCaseId,
+        scope: "care_case",
+        updates: parsed.careCaseMemoryUpdates,
+      });
+      memoriesSaved += result.inserted;
+      if (result.inserted > 0) {
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId,
+          userId,
+          event: "memory_saved",
+          phone: senderPhone,
+          details: { savedCategories: result.savedCategories },
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    if (parsed.selfCorrections.length > 0) {
+      const lessonUpdates = parsed.selfCorrections.flatMap((correction) => {
+        const { category, cleanText } = parseLesson(correction);
+        if (!VALID_LESSON_CATEGORIES.has(category) || !cleanText) {
+          return [];
+        }
+        return [{ category: "lesson" as const, content: `[${category}] ${cleanText}` }];
+      });
+
+      if (lessonUpdates.length > 0) {
+        const result = await ctx.runMutation(internal.mutations.upsertMemoryEntries, {
+          userId,
+          careCaseId,
+          scope: "care_case",
+          updates: lessonUpdates,
+        });
+        memoriesSaved += result.inserted;
+      }
+    }
+
     if (parsed.medicationUpdates?.length) {
-      for (const med of parsed.medicationUpdates) {
+      for (const medication of parsed.medicationUpdates) {
         await ctx.runMutation(internal.mutations.upsertMedication, {
-          familyId,
-          action: med.action,
-          name: med.name,
-          dose: med.dose,
-          schedule: med.schedule,
-          prescriber: med.prescriber,
+          careCaseId,
+          action: medication.action,
+          name: medication.name,
+          dose: medication.dose,
+          schedule: medication.schedule,
+          prescriber: medication.prescriber,
+          notes: medication.notes,
         });
       }
     }
 
     if (parsed.scheduleUpdates?.length) {
-      for (const sched of parsed.scheduleUpdates) {
-        const raw = sched as unknown as Record<string, string>;
+      for (const schedule of parsed.scheduleUpdates) {
         await ctx.runMutation(internal.mutations.upsertScheduleItem, {
-          familyId,
-          action: sched.action,
-          type: sched.type,
-          title: sched.title,
-          date: sched.date,
-          time: sched.time,
-          assignedTo: sched.assignedTo ?? raw["assigned_to"],
+          careCaseId,
+          action: schedule.action,
+          type: schedule.type,
+          title: schedule.title,
+          date: schedule.date,
+          time: schedule.time,
+          endTime: schedule.end_time,
+          location: schedule.location,
+          notes: schedule.notes,
+          provider: schedule.provider,
         });
       }
     }
 
-    if (parsed.careTeamUpdates?.length) {
-      for (const ct of parsed.careTeamUpdates) {
-        await ctx.runMutation(internal.mutations.upsertCareTeamMember, {
-          familyId,
-          action: ct.action,
-          name: ct.name,
-          role: ct.role,
-          phone: ct.phone,
-        });
-      }
-    }
+    await ctx.runMutation(internal.mutations.logAudit, {
+      careCaseId,
+      userId,
+      event: "response_sent",
+      phone: senderPhone,
+      details: {
+        responseLength: smsResponse.length,
+        leakageCheckPassed: true,
+      },
+      timestamp: now,
+    });
 
-    // Step 14: Persist lessons
-    for (const correction of parsed.selfCorrections) {
-      const { category, cleanText } = parseCategory(correction);
-      if (VALID_CATEGORIES.has(category)) {
-        await ctx.runMutation(internal.mutations.persistLesson, {
-          familyId,
-          scope: "family",
-          category,
-          text: cleanText,
-          learnedAt: now,
-        });
-      }
-    }
+    const effectForSend: MessageEffect | null = parsed.effect
+      ? { type: parsed.effect.type, name: parsed.effect.name }
+      : null;
 
-    // Step 14b: Process routing updates (member registration)
-    for (const routing of parsed.routingUpdates) {
-      if (routing.action === "add" && routing.phone && routing.name) {
-        try {
-          await ctx.runMutation(internal.mutations.createMember, {
-            familyId,
-            phone: routing.phone,
-            name: routing.name,
-            role: routing.role || "family_caregiver",
-            relationship: routing.relationship || undefined,
-            accessLevel: routing.accessLevel || "schedule+meds",
-          });
-          await ctx.runMutation(internal.mutations.logAudit, {
-            familyId,
-            event: "member_added",
-            phone: routing.phone,
-            details: {
-              recipientPhone: routing.phone,
-              initiatedBy: senderPhone,
-            },
-            timestamp: Date.now(),
-          });
-        } catch (err: unknown) {
-          if (err instanceof Error && err.message === "PLAN_LIMIT_REACHED") {
-            // AI response already sent — this is handled via the AI's sms_response
-            // which should explain the limit and offer to upgrade
-            console.log(`[CS] Plan limit reached adding ${routing.name} — AI should have explained this`);
-          }
-        }
-      }
-
-      if (routing.action === "update" && routing.phone && routing.name) {
-        try {
-          const targetMember = await ctx.runMutation(
-            internal.mutations.getMemberByPhone,
-            { phone: routing.phone },
-          );
-          if (targetMember && targetMember.familyId === familyId) {
-            await ctx.runMutation(internal.mutations.updateMemberName, {
-              memberId: targetMember._id,
-              name: routing.name,
-            });
-          }
-        } catch {
-          // member update is best-effort — don't block the response
-        }
-      }
-    }
-
-    const memberUpdates = ensureExplicitMemberProfileUpdate(
-      parsed.memberUpdates.map((update) => ({
-        section: update.section,
-        operation: update.operation,
-        content: update.content,
-        oldContent: update.oldContent,
-      })),
-      messageBody,
-      member.context,
+    const outboundMessageId = await logOutbound(
+      ctx,
+      careCaseId,
+      userId,
+      senderPhone,
+      compiledContext.user.name,
+      smsResponse,
+      now,
     );
-
-    if (memberUpdates.length > 0) {
-      await ctx.runMutation(internal.mutations.applyMemberContextUpdates, {
-        memberId: member._id,
-        updates: memberUpdates,
-      });
-    }
-
-    // Step 15: Pace response + log outbound + send
-    const effectForSend: MessageEffect | null =
-      parsed.effect
-        ? { type: parsed.effect.type, name: parsed.effect.name }
-        : null;
-    const outboundMessageId = await logOutbound(ctx, familyId, senderPhone, memberName, smsResponse, now);
-    const linqMessageIds = await sendResponse(chatId, smsResponse, env(), pacingStart, effectForSend);
+    const linqMessageIds = await sendResponse(chatId, smsResponse, env(), startedAt, effectForSend);
     if (linqMessageIds.length > 0) {
       await ctx.runMutation(internal.mutations.updateMessageLinqId, {
         messageId: outboundMessageId,
@@ -799,38 +545,7 @@ export const handleMessage = internalAction({
       });
     }
 
-    // Step 15b: Generate checkout link if AI signaled upgrade intent
-    if (
-      parsed.upgradeRequested &&
-      productMode !== "solo_beta" &&
-      planTier === "free" &&
-      accessLevel === "full"
-    ) {
-      const priceId = process.env.FAMILY_MONTHLY_PRICE_ID;
-      if (priceId) {
-        try {
-          const session = await ctx.runAction(internal.stripe.createFamilyCheckout, {
-            familyId,
-            priceId,
-          });
-          if (session.url) {
-            const checkoutMsg = `Here's your upgrade link:\n\n${session.url}`;
-            await logOutbound(ctx, familyId, senderPhone, memberName, checkoutMsg, Date.now());
-            await sendMessage(chatId, checkoutMsg, env().linqApiToken);
-          }
-        } catch (err: unknown) {
-          const errDetail = err instanceof Error ? err.message : String(err);
-          console.error("[CS] Stripe checkout failed:", errDetail);
-          const failMsg =
-            "Something went wrong generating your upgrade link. Please try again in a bit, or email support@caresupport.ai if it keeps happening.";
-          await logOutbound(ctx, familyId, senderPhone, memberName, failMsg, Date.now());
-          await sendMessage(chatId, failMsg, env().linqApiToken);
-        }
-      }
-    }
-
-    // Step 15c: Send reactions
-    const envVarsForReaction = env();
+    const envVars = env();
     for (const reaction of parsed.reactions) {
       if (reaction.targetMessage === "last_inbound" && args.sourceMessageId) {
         try {
@@ -838,244 +553,22 @@ export const handleMessage = internalAction({
             args.sourceMessageId,
             "add",
             reaction.type,
-            envVarsForReaction.linqApiToken,
-          );
-        } catch {
-          // reactions are best-effort
-        }
-      }
-    }
-
-    // Step 15c: Notify coordinators about outreach responses
-    if (pendingThreads.length > 0) {
-      const envVarsForNotify = env();
-      for (const thread of pendingThreads) {
-        if (thread.initiatorChatId && envVarsForNotify.linqApiToken) {
-          const summary = `${memberName} responded: "${messageBody.length > 200 ? messageBody.slice(0, 200) + "..." : messageBody}"`;
-          try {
-            const initiatorMember = await ctx.runMutation(
-              internal.mutations.getMemberByPhone,
-              { phone: thread.initiatorPhone },
-            ) as Doc<"members"> | null;
-            const initiatorName = initiatorMember?.name ?? "Coordinator";
-            const notifyMsgId = await logOutbound(
-              ctx,
-              thread.familyId,
-              thread.initiatorPhone,
-              initiatorName,
-              summary,
-              Date.now(),
-            );
-            const notifyResult = await sendMessage(
-              thread.initiatorChatId,
-              summary,
-              envVarsForNotify.linqApiToken,
-            );
-            if (notifyResult.messageId) {
-              await ctx.runMutation(internal.mutations.updateMessageLinqId, {
-                messageId: notifyMsgId,
-                linqMessageId: notifyResult.messageId,
-              });
-            }
-          } catch {
-            // coordinator notification is best-effort
-          }
-        }
-        await ctx.runMutation(internal.mutations.updateOutreachThread, {
-          threadId: thread._id,
-          status: "responded",
-          respondedAt: Date.now(),
-        });
-      }
-    }
-
-    // Step 16: Process outreach
-    const envVars = env();
-    const outreachResults: Array<{ name: string; success: boolean; message?: string }> = [];
-    for (const entry of parsed.needsOutreach) {
-      try {
-        // Resolve phone from name within family — server-side, no agent guessing
-        const targetMemberByName = await ctx.runMutation(
-          internal.mutations.getMemberByName,
-          { familyId, name: entry.name },
-        ) as Doc<"members"> | null;
-
-        const normalizedPhone = targetMemberByName?.phone ?? "";
-        const resolvedName = targetMemberByName?.name ?? entry.name;
-
-        if (targetMemberByName) {
-          console.log(`[CS] Outreach resolved: "${entry.name}" → ${resolvedName} (${normalizedPhone})`);
-        }
-
-        if (!normalizedPhone) {
-          console.log(`[CS] Skipping outreach — no phone resolved for ${resolvedName}`);
-          outreachResults.push({ name: resolvedName, success: false });
-          continue;
-        }
-
-        if (normalizedPhone === senderPhone) {
-          console.log(`[CS] Skipping outreach to sender's own phone: ${normalizedPhone}`);
-          continue;
-        }
-
-        const outreachEvent = buildOutreachSentEvent({
-          familyId,
-          initiatedBy: senderPhone,
-          sentToPhone: normalizedPhone,
-          sentToName: resolvedName,
-          purpose: entry.message.slice(0, 200),
-        });
-        await ctx.runMutation(internal.mutations.logAudit, outreachEvent);
-
-        const targetMember = await ctx.runMutation(
-          internal.mutations.getMemberByPhone,
-          { phone: normalizedPhone },
-        );
-
-        if (!targetMember) {
-          await ctx.runMutation(internal.mutations.logAudit, {
-            familyId,
-            event: "message_failed",
-            phone: normalizedPhone,
-            details: {
-              recipientPhone: normalizedPhone,
-              failureReason: "outreach target not found",
-            },
-            timestamp: Date.now(),
-          });
-          outreachResults.push({ name: resolvedName, success: false, message: entry.message });
-          continue;
-        }
-
-        if (targetMember.familyId !== familyId) {
-          await ctx.runMutation(internal.mutations.logAudit, {
-            familyId,
-            event: "message_failed",
-            phone: normalizedPhone,
-            details: {
-              recipientPhone: normalizedPhone,
-              failureReason: "recipient not in family",
-            },
-            timestamp: Date.now(),
-          });
-          outreachResults.push({ name: resolvedName, success: false, message: entry.message });
-          continue;
-        }
-
-        let sendSuccess = false;
-        let linqMessageId: string | undefined;
-        if (targetMember.chatId) {
-          const sendResult = await sendMessage(targetMember.chatId, entry.message, envVars.linqApiToken);
-          sendSuccess = sendResult.success;
-          linqMessageId = sendResult.messageId;
-        } else {
-          const result = await createChat(
-            normalizedPhone,
-            entry.message,
-            envVars.linqPhoneNumber,
             envVars.linqApiToken,
           );
-          sendSuccess = result.success;
-          linqMessageId = result.messageId;
-          if (result.success && result.chatId) {
-            await ctx.runMutation(internal.mutations.updateMemberChatId, {
-              memberId: targetMember._id,
-              chatId: result.chatId,
-            });
-            try {
-              await shareContactCard(result.chatId, envVars.linqApiToken);
-            } catch {
-              // contact card sharing is best-effort
-            }
-          }
-        }
-
-        if (sendSuccess) {
-          const msgId = await logOutbound(ctx, familyId, normalizedPhone, resolvedName, entry.message, Date.now());
-          if (linqMessageId) {
-            await ctx.runMutation(internal.mutations.updateMessageLinqId, {
-              messageId: msgId,
-              linqMessageId,
-            });
-          }
-
-          // Step 16b: Create outreach thread for feedback loop
-          if (chatId) {
-            await ctx.runMutation(internal.mutations.createOutreachThread, {
-              familyId,
-              initiatorPhone: senderPhone,
-              initiatorChatId: chatId,
-              targetPhone: normalizedPhone,
-              targetName: resolvedName,
-              outboundMessageId: msgId,
-              purpose: entry.message.slice(0, 200),
-            });
-          }
-        }
-
-        outreachResults.push({ name: resolvedName, success: sendSuccess, message: entry.message });
-      } catch {
-        outreachResults.push({ name: entry.name, success: false });
-      }
-    }
-
-    // Step 16b: Honest cc confirmation to coordinator
-    if (outreachResults.length > 0 && chatId && envVars.linqApiToken) {
-      const sent = outreachResults.filter((r) => r.success);
-      const failed = outreachResults.filter((r) => !r.success);
-      const lines: string[] = [];
-
-      for (const r of sent) {
-        const preview =
-          r.message && r.message.length > 80
-            ? r.message.slice(0, 80) + "..."
-            : (r.message ?? "");
-        lines.push(
-          `Just texted ${r.name}: "${preview}"\nI'll let you know when they respond.`,
-        );
-      }
-
-      for (const r of failed) {
-        lines.push(`Couldn't reach ${r.name} — want me to try again?`);
-      }
-
-      if (lines.length > 0) {
-        const confirmation = lines.join("\n\n");
-        try {
-          const ccMsgId = await logOutbound(
-            ctx,
-            familyId,
-            senderPhone,
-            memberName,
-            confirmation,
-            Date.now(),
-          );
-          const ccResult = await sendMessage(
-            chatId,
-            confirmation,
-            envVars.linqApiToken,
-          );
-          if (ccResult.messageId) {
-            await ctx.runMutation(internal.mutations.updateMessageLinqId, {
-              messageId: ccMsgId,
-              linqMessageId: ccResult.messageId,
-            });
-          }
         } catch {
-          // cc confirmation is best-effort
+          // best effort
         }
       }
     }
 
-    console.log(`[CS] Handler done — ms=${Date.now() - handlerStart} intent=${routeResult.intent} outreach=${parsed.needsOutreach.length}`);
     return {
       success: true,
       response: smsResponse,
       routedTier: routeResult.tier,
-      routedIntent: routeResult.intent,
+      routedIntent: intent,
       lessonsLearned: parsed.selfCorrections.length,
-      approvalsCreated: classified.needsApproval.length,
-      outreachSent: parsed.needsOutreach.length,
+      memoriesSaved,
+      blocked: isSoloExpansionRequest(messageBody),
     };
   },
 });
@@ -1089,17 +582,20 @@ function env(): { linqApiToken: string; linqPhoneNumber: string } {
 
 async function logOutbound(
   ctx: ActionCtx,
-  familyId: Id<"families">,
+  careCaseId: Id<"careCases">,
+  userId: Id<"users">,
   phone: string,
-  memberName: string,
+  displayName: string,
   body: string,
   timestamp: number,
 ): Promise<Id<"messages">> {
   return await ctx.runMutation(internal.mutations.logMessage, {
-    familyId,
+    careCaseId,
+    userId,
     senderPhone: phone,
-    direction: "outbound" as const,
-    memberName,
+    actorType: "assistant",
+    direction: "outbound",
+    displayName,
     body,
     timestamp,
   });
@@ -1112,49 +608,28 @@ async function sendResponse(
   pacingStart = Date.now(),
   effect: MessageEffect | null = null,
 ): Promise<string[]> {
-  if (!envVars.linqApiToken) {
-    console.error("[sendResponse] No LINQ_API_TOKEN — skipping send");
+  if (!envVars.linqApiToken || !chatId) {
     return [];
   }
-  if (!chatId) {
-    console.error("[sendResponse] No chatId — cannot send");
-    return [];
-  }
+
   const bubbles = splitIntoBubbles(text);
   const initialDelayMs = getInitialResponseDelayMs(bubbles.length);
   const elapsed = Date.now() - pacingStart;
   if (elapsed < initialDelayMs) {
     await new Promise((resolve) => setTimeout(resolve, initialDelayMs - elapsed));
   }
-  console.log(
-    `[sendResponse] Sending to chatId=${chatId}, text length=${text.length}, bubbles=${bubbles.length}`,
-  );
-  const allResults: { success: boolean; messageId?: string; error?: unknown }[] = [];
+
+  const results: { success: boolean; messageId?: string }[] = [];
   if (effect && bubbles.length > 0) {
-    const firstResult = await sendMessage(chatId, bubbles[0], envVars.linqApiToken, effect);
-    allResults.push(firstResult);
-    if (!firstResult.success) {
-      console.error("[sendResponse] Send failed:", JSON.stringify(firstResult.error));
-    }
+    results.push(await sendMessage(chatId, bubbles[0], envVars.linqApiToken, effect));
     if (bubbles.length > 1) {
-      const remaining = await sendMessageSequence(chatId, bubbles.slice(1), envVars.linqApiToken);
-      for (const r of remaining) {
-        allResults.push(r);
-        if (!r.success) {
-          console.error("[sendResponse] Send failed:", JSON.stringify(r.error));
-        }
-      }
+      results.push(...await sendMessageSequence(chatId, bubbles.slice(1), envVars.linqApiToken));
     }
   } else {
-    const results = await sendMessageSequence(chatId, bubbles, envVars.linqApiToken);
-    for (const r of results) {
-      allResults.push(r);
-      if (!r.success) {
-        console.error("[sendResponse] Send failed:", JSON.stringify(r.error));
-      }
-    }
+    results.push(...await sendMessageSequence(chatId, bubbles, envVars.linqApiToken));
   }
-  return allResults
-    .filter((r) => r.success && r.messageId)
-    .map((r) => r.messageId as string);
+
+  return results
+    .filter((result) => result.success && result.messageId)
+    .map((result) => result.messageId as string);
 }

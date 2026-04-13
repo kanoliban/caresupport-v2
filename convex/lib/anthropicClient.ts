@@ -11,15 +11,23 @@ import type { SystemBlock } from "./pipeline/types";
 const MAX_TOKENS = 16_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 
-const FILE_UPDATE_SCHEMA = {
+const MEMORY_UPDATE_SCHEMA = {
   type: "object",
-  required: ["section", "operation", "content"],
+  required: ["category", "content"],
   additionalProperties: false,
   properties: {
-    section: { type: "string" },
-    operation: { type: "string" },
+    category: {
+      type: "string",
+      enum: [
+        "profile",
+        "communication_preference",
+        "care_preference",
+        "care_note",
+        "lesson",
+      ],
+    },
     content: { type: "string" },
-    old_content: { type: "string" },
+    source: { type: "string" },
   },
 } as const;
 
@@ -31,48 +39,55 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
     required: [
       "sms_response",
       "internal_notes",
-      "needs_outreach",
-      "family_file_updates",
+      "user_profile_update",
+      "care_case_profile_update",
+      "user_memory_updates",
+      "care_case_memory_updates",
       "self_corrections",
-      "member_updates",
-      "routing_updates",
       "reactions",
       "effect",
     ],
     properties: {
       sms_response: { type: "string" },
       internal_notes: { type: "string" },
-      needs_outreach: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["name", "message"],
-          additionalProperties: false,
-          properties: {
-            name: { type: "string" },
-            message: { type: "string" },
+      user_profile_update: {
+        anyOf: [
+          {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              relationship_to_recipient: { type: "string" },
+              status: {
+                type: "string",
+                enum: ["onboarding", "active", "paused", "archived"],
+              },
+            },
           },
-        },
+          { type: "null" },
+        ],
       },
-      family_file_updates: { type: "array", items: FILE_UPDATE_SCHEMA },
+      care_case_profile_update: {
+        anyOf: [
+          {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              care_recipient_name: { type: "string" },
+              relationship_to_recipient: { type: "string" },
+              timezone: { type: "string" },
+              status: {
+                type: "string",
+                enum: ["onboarding", "active", "paused", "archived"],
+              },
+            },
+          },
+          { type: "null" },
+        ],
+      },
+      user_memory_updates: { type: "array", items: MEMORY_UPDATE_SCHEMA },
+      care_case_memory_updates: { type: "array", items: MEMORY_UPDATE_SCHEMA },
       self_corrections: { type: "array", items: { type: "string" } },
-      member_updates: { type: "array", items: FILE_UPDATE_SCHEMA },
-      routing_updates: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["action", "phone", "name", "role", "relationship", "access_level"],
-          additionalProperties: false,
-          properties: {
-            action: { type: "string" },
-            phone: { type: "string" },
-            name: { type: "string" },
-            role: { type: "string" },
-            relationship: { type: "string" },
-            access_level: { type: "string" },
-          },
-        },
-      },
       reactions: {
         type: "array",
         items: {
@@ -99,7 +114,6 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
           { type: "null" },
         ],
       },
-      upgrade_requested: { type: "boolean" },
       medication_updates: {
         type: "array",
         items: {
@@ -112,6 +126,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
             dose: { type: "string" },
             schedule: { type: "string" },
             prescriber: { type: "string" },
+            notes: { type: "string" },
           },
         },
       },
@@ -123,25 +138,14 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
           additionalProperties: false,
           properties: {
             action: { type: "string", enum: ["add", "update", "remove"] },
-            type: { type: "string", enum: ["shift", "appointment", "task", "ride", "careTask"] },
+            type: { type: "string", enum: ["appointment", "task", "reminder"] },
             title: { type: "string" },
             date: { type: "string" },
             time: { type: "string" },
-            assigned_to: { type: "string" },
-          },
-        },
-      },
-      care_team_updates: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["action", "name"],
-          additionalProperties: false,
-          properties: {
-            action: { type: "string", enum: ["add", "update", "remove"] },
-            name: { type: "string" },
-            role: { type: "string" },
-            phone: { type: "string" },
+            end_time: { type: "string" },
+            location: { type: "string" },
+            notes: { type: "string" },
+            provider: { type: "string" },
           },
         },
       },

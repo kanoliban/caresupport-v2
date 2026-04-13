@@ -23,7 +23,7 @@ The product is optimized for a solo caregiver who needs help staying on top of:
 ## Design Principles
 
 1. **Lower friction beats broader scope.** One useful 1:1 thread is better than a half-working team product.
-2. **The care plan is the source of truth.** Structured tables plus context fields should make the next message better.
+2. **The care plan is the source of truth.** Structured care records plus durable memory should make the next message better.
 3. **Act for the user directly.** The product should reduce mental load, not create coordination overhead.
 4. **Single-user first.** Team coordination, invites, outreach, and permissions are deferred product paths.
 5. **Memory matters.** CareSupport should remember preferences, routines, and care details over time.
@@ -39,15 +39,40 @@ In the active solo beta, CareSupport does not:
 
 If users ask for those things, the system should explain the current single-user boundary and keep helping them directly in-thread.
 
-## Data Model Direction
+## Deterministic Foundation
 
-The backend still uses the existing family-oriented tables, but the active product semantics are:
-- one account created in `solo_beta` mode
-- one primary user/coordinator record
-- one care recipient context
-- no multiplayer behavior in the runtime path
+The active application layer is now intentionally small and solo-native:
+- `users` for the texting account owner
+- `careCases` for the loved one / care situation being managed
+- `messages` for the 1:1 thread with CareSupport
+- `medications` and `scheduleItems` for structured care records
+- `memoryEntries` for durable user and care-case memory
+- `auditLogs` for traceability
 
-The family-coordination architecture remains in code as dormant capability, not as the active product.
+This is the substrate the runtime should trust. CareSupport should not depend on a mutable family-file markdown blob or dormant multiplayer entities to do its core work.
+
+## Harness Direction
+
+The runtime harness should stay thin:
+1. load the user, care case, recent messages, care records, and relevant memory
+2. route the incoming message
+3. call the model with the right care procedure
+4. validate the response
+5. persist typed updates
+6. send and log the reply
+
+Judgment lives in the prompt/procedure layer. Reliability lives in deterministic tools and storage.
+
+## Deferred Architecture
+
+The active product does not use:
+- family/network entities
+- coordinator/access-tier semantics
+- approval pipelines
+- outreach threads
+- upgrade/member-limit enforcement
+
+Those are deferred expansion concepts, not part of the current deterministic core.
 
 ## What This Phase Must Prove
 

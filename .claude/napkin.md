@@ -33,6 +33,7 @@
 - On this machine, `convex run` is reliable only when targeting deployments explicitly by `--deployment-name`; the `--env-file` path can still fail with `MissingAccessToken` even right after a successful `convex dev --once` login.
 - For destructive resets here, prefer an internal `admin:clearAppData` mutation plus `npx convex run ... --deployment-name ...` over `convex import --replace`; the latter was not operationally reliable in this environment.
 - Explicit "save this to my profile" requests need a mechanical merge step, not just a prompt instruction. If the model returns unrelated or malformed `member_updates`, append the inferred explicit update anyway unless the exact content already exists.
+- When the shipped product changes fundamentally and prod is empty, replace the active deterministic substrate to match the shipped truth instead of preserving legacy tables for convenience. Future agents should be able to infer the real product model from schema + docs alone.
 
 ## Patterns That Don't Work
 - `npm test` is not hermetic here; `tests/seed.test.ts` can hit a real Convex deployment because importing `scripts/seed-from-files.ts` runs `main()`.
