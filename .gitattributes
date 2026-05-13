@@ -1,0 +1,2 @@
+docs/research/poppy-ios/_originals/*.PNG filter=lfs diff=lfs merge=lfs -text
+docs/research/poppy-ios/*/*.png filter=lfs diff=lfs merge=lfs -text
