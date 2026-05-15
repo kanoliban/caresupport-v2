@@ -46,7 +46,10 @@ const UNKNOWN_USER_RESPONSE =
   "Hey! I'm CareSupport — I help you manage a loved one's care over text. No app needed.\nWhat's your name?";
 
 const SOLO_BETA_MULTIPLAYER_RESPONSE =
-  "Right now CareSupport is focused on helping you directly in this thread. I can't add family members or message other people yet, but I can keep the plan, meds, appointments, and reminders organized here.";
+  "Right now CareSupport is focused on helping you directly in this thread — I can't add family or message other people. If you want, I can draft a message you can copy and send them yourself. Want me to put one together?";
+
+const SOLO_BOUNDARY_OUTBOUND_MARKER = "CareSupport is focused on helping you directly";
+const SOLO_BOUNDARY_RECENT_HISTORY_WINDOW = 5;
 
 const PROFILE_SAVE_PATTERNS = [
   /^\s*please save this to my profile(?: for future messages)?[:\s,-]*(.+)$/i,
@@ -170,6 +173,21 @@ export function ensureExplicitUserMemoryUpdate(
 
 export function isSoloExpansionRequest(message: string): boolean {
   return SOLO_BOUNDARY_PATTERN.test(message);
+}
+
+export function shouldFireSoloBoundaryOverride(
+  messageBody: string,
+  recentMessages: Array<{ direction: "inbound" | "outbound"; body: string }>,
+): boolean {
+  if (!isSoloExpansionRequest(messageBody)) return false;
+  const recentOutboundContainsBoundary = recentMessages
+    .slice(-SOLO_BOUNDARY_RECENT_HISTORY_WINDOW)
+    .some(
+      (message) =>
+        message.direction === "outbound" &&
+        message.body.includes(SOLO_BOUNDARY_OUTBOUND_MARKER),
+    );
+  return !recentOutboundContainsBoundary;
 }
 
 export function parseLesson(text: string): { category: string; cleanText: string } {
@@ -387,7 +405,7 @@ export const handleMessage = internalAction({
     }
 
     let smsResponse = stripMarkdown(parsed.smsResponse);
-    if (isSoloExpansionRequest(messageBody)) {
+    if (shouldFireSoloBoundaryOverride(messageBody, recentMessages)) {
       smsResponse = SOLO_BETA_MULTIPLAYER_RESPONSE;
       parsed.userProfileUpdate = null;
       parsed.careCaseProfileUpdate = null;
@@ -581,7 +599,7 @@ export const handleMessage = internalAction({
       routedIntent: intent,
       lessonsLearned: parsed.selfCorrections.length,
       memoriesSaved,
-      blocked: isSoloExpansionRequest(messageBody),
+      blocked: shouldFireSoloBoundaryOverride(messageBody, recentMessages),
     };
   },
 });

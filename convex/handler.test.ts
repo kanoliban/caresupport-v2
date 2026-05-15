@@ -5,6 +5,7 @@ import {
   inferExplicitUserMemoryUpdate,
   isSoloExpansionRequest,
   parseLesson,
+  shouldFireSoloBoundaryOverride,
   stripMarkdown,
 } from "./handler";
 
@@ -132,5 +133,73 @@ describe("isSoloExpansionRequest", () => {
 
   it("does not flag ordinary care-management requests", () => {
     expect(isSoloExpansionRequest("Please remind me about Sam's appointment tomorrow.")).toBe(false);
+  });
+});
+
+describe("shouldFireSoloBoundaryOverride", () => {
+  const boundaryReply = {
+    direction: "outbound" as const,
+    body: "Right now CareSupport is focused on helping you directly in this thread.",
+  };
+  const ordinaryOutbound = {
+    direction: "outbound" as const,
+    body: "Got it — saved Sam's appointment for tomorrow.",
+  };
+
+  it("fires on the first boundary hit when recent outbound is clean", () => {
+    // #given the user asks to add someone for the first time
+    // #when no recent outbound contains the boundary marker
+    const recent = [
+      { direction: "inbound" as const, body: "Hi" },
+      ordinaryOutbound,
+    ];
+
+    // #then the override fires
+    expect(
+      shouldFireSoloBoundaryOverride("Add my sister Maya to this plan", recent),
+    ).toBe(true);
+  });
+
+  it("does not fire when the boundary was already explained in recent outbound", () => {
+    // #given the boundary was already explained in the last few outbound messages
+    const recent = [
+      { direction: "inbound" as const, body: "Add my brother" },
+      boundaryReply,
+      { direction: "inbound" as const, body: "Yes, draft something" },
+      { direction: "outbound" as const, body: "Here's a draft you can send..." },
+    ];
+
+    // #when the user asks again with similar phrasing
+    // #then the override does NOT fire — LLM handles naturally
+    expect(
+      shouldFireSoloBoundaryOverride("Text my sister too", recent),
+    ).toBe(false);
+  });
+
+  it("does not fire on messages that are not solo-expansion requests", () => {
+    // #given a clean history
+    const recent = [ordinaryOutbound];
+
+    // #when the message is ordinary care content
+    // #then the override does NOT fire
+    expect(
+      shouldFireSoloBoundaryOverride(
+        "Sam takes Lipitor at bedtime",
+        recent,
+      ),
+    ).toBe(false);
+  });
+
+  it("only inspects the last 5 messages for the boundary marker", () => {
+    // #given the boundary was explained 6+ messages ago (out of the window)
+    const oldBoundary = { ...boundaryReply };
+    const padding = Array.from({ length: 5 }, () => ordinaryOutbound);
+    const recent = [oldBoundary, ...padding];
+
+    // #when the user makes a fresh solo-expansion request
+    // #then the override fires again because the recent window is clean
+    expect(
+      shouldFireSoloBoundaryOverride("Add my aunt to the plan", recent),
+    ).toBe(true);
   });
 });
