@@ -56,4 +56,15 @@ describe("SOUL_CONTENT", () => {
     expect(modesIdx).toBeGreaterThan(-1);
     expect(memoryIdx).toBeGreaterThan(modesIdx);
   });
+
+  it("forbids promising future actions the system cannot deliver", () => {
+    // #given the SOUL TRUTHFULNESS section
+    // #then it explicitly rejects forward-promise phrasing
+    expect(SOUL_CONTENT).toContain(
+      "Never promise a future action you cannot guarantee.",
+    );
+    expect(SOUL_CONTENT).toContain(
+      "You cannot send timed reminders",
+    );
+  });
 });
