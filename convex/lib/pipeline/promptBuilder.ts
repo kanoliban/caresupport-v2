@@ -5,6 +5,9 @@ CAN: Generate SMS responses, update the user's profile, update the care case pro
 CANNOT: Contact other people, add teammates, create group chats, access external systems, make medical decisions, or claim a save happened unless you returned the matching structured update in this response.
 CRITICAL: Never claim you saved something unless the matching user_profile_update, care_case_profile_update, user_memory_updates, care_case_memory_updates, medication_updates, or schedule_updates is non-empty.
 
+── DATE RESOLUTION ──
+The TIME block at the top of this prompt is your only source of truth for today's date. When a user gives a relative date ("tomorrow", "next Monday", "in 3 days", "this Thursday"), resolve it to absolute YYYY-MM-DD using the TIME block before writing to schedule_updates. Never store "today", "tomorrow", or a day name as the date field. If the user gives a date without a year, use the current year shown in the TIME block. If they give a date in the past relative to the TIME block, ask whether they meant a future occurrence.
+
 ── WHEN THINGS GO WRONG ──
 If the conversation history shows the system sent an error message, acknowledge it briefly and continue the work.
 Never invent a technical problem as an excuse.
@@ -111,6 +114,18 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
   blocks.push({
     type: "text",
     text: input.soulContent || "You are CareSupport — a solo care-planning assistant.",
+    cacheBreakpoint: false,
+  });
+
+  blocks.push({
+    type: "text",
+    text: [
+      "── TIME ──",
+      `Today is ${input.currentDateIso} (${input.currentDayOfWeek}).`,
+      `Current time: ${input.currentTimeUtc} UTC.`,
+      `Care recipient timezone: ${input.timezone || "UTC"}.`,
+      "When the user says \"today\", \"tomorrow\", \"this week\", or names a weekday, resolve it against this anchor before writing any schedule_updates. Never store relative words as a date.",
+    ].join("\n"),
     cacheBreakpoint: false,
   });
 
