@@ -5,6 +5,29 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-05-15 — Claude
+
+### What I did
+- Pulled 7 days of prod data from `keen-raccoon-606` (13 care cases, full transcripts) and audited the live agent against three Daisy-identified failure modes; surfaced three more from the data.
+- Wrote `docs/research/2026-05-15-7day-prod-review.md` — six findings, prioritized fix list, prod evidence per finding.
+- Filed parent tracking issue [#29](https://github.com/kanoliban/caresupport-v2/issues/29) and nine Codex-ready child issues [#30](https://github.com/kanoliban/caresupport-v2/issues/30)–[#38](https://github.com/kanoliban/caresupport-v2/issues/38) with a strict template: Context · Current behavior (file:line + prod evidence) · Desired behavior · Implementation plan · Acceptance criteria · Out of scope · Dependencies · Verification.
+- Added labels: `priority:p0/p1/p2`, `codex-ready`, `area:prompt/cron/schema/onboarding/safety`, `tracking`.
+
+### State I'm leaving
+- No code changed. Report and issues are the only artifacts.
+- Cross-links between the 9 children are correct (verified by spot-check on #34). Each issue's "Out of scope" section is anchored to `AGENTS.md` non-goals so Codex doesn't re-expand toward multiplayer.
+
+### What the next agent should know
+- **Start with #30 and #31** — both are prompt-only with no code dependencies, and they unblock everything else.
+- **Do not ship #34 (cron) before #30, #32, and #33 land** — the cron query depends on date-injected ISO output and clean validated/backfilled data. The tracking issue (#29) has the dependency graph drawn out.
+- Two critical findings worth re-reading the report for: (a) the model has **no current-date awareness** in the prompt at all, which is the root cause of half the other bugs; (b) `scheduleItems.date` is a free string with literal values like `"today"`, `"Monday"`, and wrong-year ISO dates from the model's 2025 training-data prior.
+
+### Concerns
+- The Apr 28 Minnebar cohort (29 care cases stuck in onboarding) is dead weight in the metrics. Consider archiving them before re-baselining onboarding completion rate after #36 ships.
+- #33 (backfill) assumes we want to interpret `_creationTime` as the anchor for "today"/"tomorrow"/"Monday" resolution. That's the right call for most rows but could be wrong if a user said "next Monday" 5 days before the next Monday. The fix is "good enough"; perfect is the enemy.
+
+---
+
 ## 2026-04-13 — Codex
 
 ### What I did
