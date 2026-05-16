@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CAPABILITIES_CONTENT, SKILLS_CONTENT, SOUL_CONTENT } from "./promptContent";
+import {
+  CAPABILITIES_CONTENT,
+  ROUTING_CONTENT,
+  SKILLS_CONTENT,
+  SOUL_CONTENT,
+} from "./promptContent";
 
 describe("SOUL_CONTENT", () => {
   it("does not reference inactive v1 lookup tools", () => {
@@ -100,5 +105,33 @@ describe("SOUL_CONTENT", () => {
     expect(SKILLS_CONTENT).toContain("do NOT wrap the draft in quote marks");
     expect(SKILLS_CONTENT).toContain("Want me to adjust the tone or length?");
     expect(SKILLS_CONTENT).toContain("You never send the message yourself");
+  });
+
+  it("instructs the model to extract all onboarding slots from one message when possible", () => {
+    // #given the SKILLS_CONTENT Onboarding block
+    // #then it tells the model to extract multiple slots at once
+    expect(SKILLS_CONTENT).toContain(
+      "EXTRACT ALL THREE FROM A SINGLE MESSAGE WHEN POSSIBLE",
+    );
+    expect(SKILLS_CONTENT).toContain(
+      "Do not re-ask for slots the user already gave",
+    );
+  });
+
+  it("tells the model to flip care case status to active once onboarding slots are filled", () => {
+    // #given the prompt contents
+    // #then both ROUTING and SKILLS reflect the slot→active transition
+    expect(SKILLS_CONTENT).toContain(
+      'set care_case_profile_update.status = "active"',
+    );
+    expect(SKILLS_CONTENT).toContain(
+      "do not ask onboarding-style questions again",
+    );
+  });
+
+  it("excludes the 'New User' placeholder from being treated as a real name in routing", () => {
+    // #given the ROUTING_CONTENT
+    // #then the placeholder is explicitly called out so the agent doesn't think onboarding is done
+    expect(ROUTING_CONTENT).toContain('the user\'s name (not "New User" placeholder)');
   });
 });
