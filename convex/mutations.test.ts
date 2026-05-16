@@ -192,7 +192,7 @@ describe("getCompiledPromptContext", () => {
       type: "appointment",
       title: "Cardiology visit",
       date: "2026-05-01",
-      time: "10:00 AM",
+      time: "10:00",
     });
 
     const compiled = await t.mutation(internal.mutations.getCompiledPromptContext, {
@@ -204,5 +204,77 @@ describe("getCompiledPromptContext", () => {
     expect(compiled?.careCaseContext).toContain("Sam uses a cane.");
     expect(compiled?.careCaseContext).toContain("Lisinopril 10mg");
     expect(compiled?.careCaseContext).toContain("Cardiology visit");
+  });
+});
+
+describe("upsertScheduleItem validation", () => {
+  it("rejects relative date words at the mutation boundary", async () => {
+    // #given a care case
+    const t = convexTest(schema, modules);
+    const { careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16517037981", chatId: "chat-validate" },
+    );
+
+    // #when the agent tries to save a schedule item with date "today"
+    // #then the mutation throws and nothing is written
+    await expect(
+      t.mutation(internal.mutations.upsertScheduleItem, {
+        careCaseId,
+        action: "add",
+        type: "reminder",
+        title: "Bad date item",
+        date: "today",
+      }),
+    ).rejects.toThrow('Invalid date format: "today"');
+  });
+
+  it("rejects 12-hour time formats", async () => {
+    // #given a care case
+    const t = convexTest(schema, modules);
+    const { careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16517037982", chatId: "chat-validate-2" },
+    );
+
+    // #when time is sent in 12-hour with am/pm
+    // #then the mutation throws
+    await expect(
+      t.mutation(internal.mutations.upsertScheduleItem, {
+        careCaseId,
+        action: "add",
+        type: "appointment",
+        title: "Bad time item",
+        date: "2026-05-15",
+        time: "2:00 PM",
+      }),
+    ).rejects.toThrow("Invalid time format");
+  });
+
+  it("accepts well-formed ISO date + 24h time + recurrence", async () => {
+    // #given a care case
+    const t = convexTest(schema, modules);
+    const { careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16517037983", chatId: "chat-validate-3" },
+    );
+
+    // #when all fields are valid
+    // #then the mutation succeeds
+    await t.mutation(internal.mutations.upsertScheduleItem, {
+      careCaseId,
+      action: "add",
+      type: "reminder",
+      title: "Morning meds",
+      time: "08:00",
+      recurrence: "daily",
+    });
+
+    // sanity: the row exists
+    const compiled = await t.mutation(internal.mutations.getCompiledPromptContext, {
+      userId: (await t.query(api.users.getByPhone, { phone: "+16517037983" }))!._id,
+      careCaseId,
+    });
+    expect(compiled?.careCaseContext).toContain("Morning meds");
   });
 });

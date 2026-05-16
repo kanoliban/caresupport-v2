@@ -497,18 +497,33 @@ export const handleMessage = internalAction({
 
     if (parsed.scheduleUpdates?.length) {
       for (const schedule of parsed.scheduleUpdates) {
-        await ctx.runMutation(internal.mutations.upsertScheduleItem, {
-          careCaseId,
-          action: schedule.action,
-          type: schedule.type,
-          title: schedule.title,
-          date: schedule.date,
-          time: schedule.time,
-          endTime: schedule.end_time,
-          location: schedule.location,
-          notes: schedule.notes,
-          provider: schedule.provider,
-        });
+        try {
+          await ctx.runMutation(internal.mutations.upsertScheduleItem, {
+            careCaseId,
+            action: schedule.action,
+            type: schedule.type,
+            title: schedule.title,
+            date: schedule.date,
+            time: schedule.time,
+            endTime: schedule.end_time,
+            location: schedule.location,
+            notes: schedule.notes,
+            provider: schedule.provider,
+          });
+        } catch (err) {
+          const failureReason =
+            err instanceof Error ? err.message : String(err);
+          await ctx.runMutation(internal.mutations.logAudit, {
+            careCaseId,
+            userId,
+            event: "message_failed",
+            phone: senderPhone,
+            details: {
+              failureReason: `Invalid schedule_update for "${schedule.title}": ${failureReason}`,
+            },
+            timestamp: Date.now(),
+          });
+        }
       }
     }
 
