@@ -91,4 +91,14 @@ describe("SOUL_CONTENT", () => {
       "Do not save scheduleItems, medications, or memory entries",
     );
   });
+
+  it("teaches the model to draft messages the user can copy-paste", () => {
+    // #given SKILLS_CONTENT
+    // #then it includes guidance for drafting third-party messages
+    expect(SKILLS_CONTENT).toContain("## Drafting messages for the user to send");
+    expect(SKILLS_CONTENT).toContain("write the draft inline in your reply");
+    expect(SKILLS_CONTENT).toContain("do NOT wrap the draft in quote marks");
+    expect(SKILLS_CONTENT).toContain("Want me to adjust the tone or length?");
+    expect(SKILLS_CONTENT).toContain("You never send the message yourself");
+  });
 });
