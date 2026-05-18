@@ -31,6 +31,10 @@ function makeInput(overrides: Partial<SystemBlocksInput> = {}): SystemBlocksInpu
     careCaseContext: "## Care Case\n- Care recipient: Sam",
     intent: "GENERAL",
     service: "SMS",
+    currentDateIso: "2026-05-15",
+    currentDayOfWeek: "Friday",
+    currentTimeUtc: "09:14",
+    timezone: "America/Chicago",
     ...overrides,
   };
 }
@@ -86,6 +90,52 @@ describe("buildSystemBlocks", () => {
 
     expect(careCaseBlock).toBeDefined();
     expect(careCaseBlock?.text).toContain("Care recipient: Sam");
+  });
+
+  it("emits a TIME block as the second block with the injected date", () => {
+    // #given the input has a fixed date
+    const input = makeInput({
+      currentDateIso: "2026-05-15",
+      currentDayOfWeek: "Friday",
+      currentTimeUtc: "09:14",
+      timezone: "America/Chicago",
+    });
+
+    // #when system blocks are built
+    const blocks = buildSystemBlocks(input);
+
+    // #then the second block is the TIME anchor
+    expect(blocks[1].text).toContain("── TIME ──");
+    expect(blocks[1].text).toContain("Today is 2026-05-15 (Friday).");
+    expect(blocks[1].text).toContain("Current time: 09:14 UTC.");
+    expect(blocks[1].text).toContain("Care recipient timezone: America/Chicago.");
+    expect(blocks[1].cacheBreakpoint).toBe(false);
+  });
+
+  it("falls back to UTC when timezone is empty", () => {
+    // #given an input with no timezone
+    const input = makeInput({ timezone: "" });
+
+    // #when system blocks are built
+    const blocks = buildSystemBlocks(input);
+
+    // #then the TIME block falls back to UTC for the recipient timezone
+    expect(blocks[1].text).toContain("Care recipient timezone: UTC.");
+  });
+
+  it("instructs the model not to store relative date words", () => {
+    // #given a default input
+    // #when the response format is rendered into a block
+    const blocks = buildSystemBlocks(makeInput());
+    const responseFormatBlock = blocks.find((block) =>
+      block.text.includes("RESPONSE FORMAT"),
+    );
+
+    // #then date-resolution guidance is present
+    expect(responseFormatBlock?.text).toContain("── DATE RESOLUTION ──");
+    expect(responseFormatBlock?.text).toContain(
+      'Never store "today", "tomorrow", or a day name as the date field',
+    );
   });
 });
 

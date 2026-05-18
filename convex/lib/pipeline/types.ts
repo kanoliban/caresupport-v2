@@ -50,6 +50,10 @@ export interface SystemBlocksInput {
   careCaseContext: string;
   intent: Intent | string;
   service: string;
+  currentDateIso: string;
+  currentDayOfWeek: string;
+  currentTimeUtc: string;
+  timezone: string;
 }
 
 export interface MemoryUpdate {

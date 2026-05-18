@@ -323,6 +323,15 @@ export const handleMessage = internalAction({
     const routeResult = route(messageForModel);
     const intent = buildIntent(compiledContext.careCase.status, messageForModel);
 
+    const nowDate = new Date(now);
+    const currentDateIso = nowDate.toISOString().slice(0, 10);
+    const currentDayOfWeek = nowDate.toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: "UTC",
+    });
+    const currentTimeUtc = nowDate.toISOString().slice(11, 16);
+    const timezone = compiledContext.careCase.timezone || "UTC";
+
     const systemBlocks = buildSystemBlocks({
       soulContent: SOUL_CONTENT,
       routingContent: ROUTING_CONTENT,
@@ -346,6 +355,10 @@ export const handleMessage = internalAction({
       careCaseContext: compiledContext.careCaseContext,
       intent,
       service,
+      currentDateIso,
+      currentDayOfWeek,
+      currentTimeUtc,
+      timezone,
     });
     const messages = buildMessages(messageForModel, conversationLog);
 
