@@ -1,5 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  validateIsoDate,
+  validateRecurrence,
+  validateTime24h,
+} from "./lib/dateValidation";
 
 const typeValidator = v.union(
   v.literal("appointment"),
@@ -54,7 +59,13 @@ export const create = mutation({
     provider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("scheduleItems", args);
+    return await ctx.db.insert("scheduleItems", {
+      ...args,
+      date: validateIsoDate(args.date),
+      time: validateTime24h(args.time),
+      endTime: validateTime24h(args.endTime),
+      recurrence: validateRecurrence(args.recurrence),
+    });
   },
 });
 
@@ -73,6 +84,15 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const { id, ...fields } = args;
-    await ctx.db.patch(id, fields);
+    const patch: Partial<typeof fields> = { ...fields };
+
+    if ("date" in fields) patch.date = validateIsoDate(fields.date);
+    if ("time" in fields) patch.time = validateTime24h(fields.time);
+    if ("endTime" in fields) patch.endTime = validateTime24h(fields.endTime);
+    if ("recurrence" in fields) {
+      patch.recurrence = validateRecurrence(fields.recurrence);
+    }
+
+    await ctx.db.patch(id, patch);
   },
 });

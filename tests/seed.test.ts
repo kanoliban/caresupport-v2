@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
+  dayNameToWeeklyRecurrence,
   parseMarkdownTableRows,
   parseTimelineLogLine,
   parseConversationLogLine,
   parseLessonLine,
+  time12hTo24h,
 } from "../scripts/seed-from-files.js";
 
 describe("parseMarkdownTableRows", () => {
@@ -125,5 +127,55 @@ describe("parseLessonLine", () => {
     expect(parseLessonLine("# Lessons")).toBeNull();
     expect(parseLessonLine("<!-- comment -->")).toBeNull();
     expect(parseLessonLine("")).toBeNull();
+  });
+});
+
+describe("dayNameToWeeklyRecurrence", () => {
+  it("converts full day names to weekly:<short>", () => {
+    expect(dayNameToWeeklyRecurrence("Monday")).toBe("weekly:mon");
+    expect(dayNameToWeeklyRecurrence("friday")).toBe("weekly:fri");
+    expect(dayNameToWeeklyRecurrence("SUNDAY")).toBe("weekly:sun");
+  });
+
+  it("accepts short forms", () => {
+    expect(dayNameToWeeklyRecurrence("Mon")).toBe("weekly:mon");
+    expect(dayNameToWeeklyRecurrence("Tue")).toBe("weekly:tue");
+    expect(dayNameToWeeklyRecurrence("Thurs")).toBe("weekly:thu");
+  });
+
+  it("throws on garbage input", () => {
+    expect(() => dayNameToWeeklyRecurrence("Funday")).toThrow(
+      'Cannot convert day name "Funday"',
+    );
+  });
+});
+
+describe("time12hTo24h", () => {
+  it("converts 12-hour AM/PM to 24-hour HH:MM", () => {
+    expect(time12hTo24h("7:30 AM")).toBe("07:30");
+    expect(time12hTo24h("4:30 PM")).toBe("16:30");
+    expect(time12hTo24h("12:00 PM")).toBe("12:00");
+    expect(time12hTo24h("12:00 AM")).toBe("00:00");
+  });
+
+  it("passes through valid 24-hour time unchanged", () => {
+    expect(time12hTo24h("14:30")).toBe("14:30");
+    expect(time12hTo24h("00:00")).toBe("00:00");
+  });
+
+  it("returns undefined for empty / missing input", () => {
+    expect(time12hTo24h(undefined)).toBeUndefined();
+    expect(time12hTo24h("")).toBeUndefined();
+    expect(time12hTo24h("   ")).toBeUndefined();
+  });
+
+  it("handles minutes omitted with AM/PM", () => {
+    expect(time12hTo24h("9 AM")).toBe("09:00");
+    expect(time12hTo24h("11 PM")).toBe("23:00");
+  });
+
+  it("throws on unparseable input", () => {
+    expect(() => time12hTo24h("noon")).toThrow("Cannot convert time");
+    expect(() => time12hTo24h("13:30 PM")).toThrow();
   });
 });

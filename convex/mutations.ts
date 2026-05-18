@@ -1,6 +1,11 @@
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  validateIsoDate,
+  validateRecurrence,
+  validateTime24h,
+} from "./lib/dateValidation";
+import {
   buildCareCaseContext,
   buildUserContext,
   normalizeMemoryCategory,
@@ -497,11 +502,17 @@ export const upsertScheduleItem = internalMutation({
     date: v.optional(v.string()),
     time: v.optional(v.string()),
     endTime: v.optional(v.string()),
+    recurrence: v.optional(v.string()),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     provider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const date = validateIsoDate(args.date);
+    const time = validateTime24h(args.time);
+    const endTime = validateTime24h(args.endTime);
+    const recurrence = validateRecurrence(args.recurrence);
+
     const existing = await ctx.db
       .query("scheduleItems")
       .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
@@ -515,9 +526,10 @@ export const upsertScheduleItem = internalMutation({
 
     if (existing) {
       const patch: Record<string, string> = {};
-      if (args.date) patch.date = args.date;
-      if (args.time) patch.time = args.time;
-      if (args.endTime) patch.endTime = args.endTime;
+      if (date) patch.date = date;
+      if (time) patch.time = time;
+      if (endTime) patch.endTime = endTime;
+      if (recurrence) patch.recurrence = recurrence;
       if (args.location) patch.location = args.location;
       if (args.notes) patch.notes = args.notes;
       if (args.provider) patch.provider = args.provider;
@@ -527,9 +539,10 @@ export const upsertScheduleItem = internalMutation({
         careCaseId: args.careCaseId,
         type: args.type,
         title: args.title,
-        date: args.date,
-        time: args.time,
-        endTime: args.endTime,
+        date,
+        time,
+        endTime,
+        recurrence,
         location: args.location,
         notes: args.notes,
         provider: args.provider,
