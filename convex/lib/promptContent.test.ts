@@ -67,4 +67,28 @@ describe("SOUL_CONTENT", () => {
       "You cannot send timed reminders",
     );
   });
+
+  it("sets a high bar for 988 / crisis-line referrals", () => {
+    // #given the SOUL_CONTENT CRISIS SENSITIVITY block
+    // #then 988 is gated on explicit harm intent, not single ambiguous words
+    expect(SOUL_CONTENT).toContain("CRISIS SENSITIVITY:");
+    expect(SOUL_CONTENT).toContain(
+      "ONLY when the user states explicit, first-person intent to hurt themselves",
+    );
+    expect(SOUL_CONTENT).toContain("\"cutters\"");
+    expect(SOUL_CONTENT).toContain("ask ONE calibrating question");
+  });
+
+  it("rejects tracking clearly out-of-scope content as care items", () => {
+    // #given the SKILLS_CONTENT Scope check block
+    // #then it explicitly redirects firearms/hobbies/work content
+    expect(SKILLS_CONTENT).toContain("## Scope check");
+    expect(SKILLS_CONTENT).toContain("firearms");
+    expect(SKILLS_CONTENT).toContain(
+      "do NOT offer to \"track\" it as a care item",
+    );
+    expect(SKILLS_CONTENT).toContain(
+      "Do not save scheduleItems, medications, or memory entries",
+    );
+  });
 });

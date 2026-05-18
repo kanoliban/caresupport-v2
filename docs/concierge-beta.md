@@ -36,6 +36,7 @@ By the end of onboarding, the thread should know:
 - first-value completion rate
 - number of saved medications, appointments, and tasks
 - blocked multiplayer requests
+- **crisis-line (988) mentions in outbound messages** — until #37 has been in prod for 2 weeks, scan daily: `npx convex data messages --prod | grep -i 988`. Confirm each 988 referral was preceded by explicit first-person harm intent from the user. False positives (model fired on an ambiguous word) should be logged and used to seed self-corrections.
 
 ## Convex reset
 
