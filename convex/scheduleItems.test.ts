@@ -132,4 +132,31 @@ describe("scheduleItems.update validation (public mutation)", () => {
     expect(row?.date).toBe("2026-06-11");
     expect(row?.time).toBe("09:30");
   });
+
+  it("preserves existing schedule fields when omitted from update", async () => {
+    const t = convexTest(schema, modules);
+    const careCaseId = await makeCareCase(t, "+16515551500", "chat-public-mutation");
+    const id = await t.mutation(api.scheduleItems.create, {
+      careCaseId,
+      type: "appointment",
+      title: "Dr. Parke",
+      date: "2026-06-10",
+      time: "07:20",
+      endTime: "08:00",
+      recurrence: "weekly:wed",
+      status: "active",
+    });
+
+    await t.mutation(api.scheduleItems.update, {
+      id,
+      notes: "Bring insurance card.",
+    });
+
+    const row = await t.run(async (ctx) => await ctx.db.get(id));
+    expect(row?.date).toBe("2026-06-10");
+    expect(row?.time).toBe("07:20");
+    expect(row?.endTime).toBe("08:00");
+    expect(row?.recurrence).toBe("weekly:wed");
+    expect(row?.notes).toBe("Bring insurance card.");
+  });
 });

@@ -84,12 +84,15 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const { id, ...fields } = args;
-    await ctx.db.patch(id, {
-      ...fields,
-      date: validateIsoDate(fields.date),
-      time: validateTime24h(fields.time),
-      endTime: validateTime24h(fields.endTime),
-      recurrence: validateRecurrence(fields.recurrence),
-    });
+    const patch: Partial<typeof fields> = { ...fields };
+
+    if ("date" in fields) patch.date = validateIsoDate(fields.date);
+    if ("time" in fields) patch.time = validateTime24h(fields.time);
+    if ("endTime" in fields) patch.endTime = validateTime24h(fields.endTime);
+    if ("recurrence" in fields) {
+      patch.recurrence = validateRecurrence(fields.recurrence);
+    }
+
+    await ctx.db.patch(id, patch);
   },
 });
