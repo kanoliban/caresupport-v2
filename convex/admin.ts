@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { migrateScheduleRow } from "./lib/scheduleBackfill";
 
 export const listCareCases = internalQuery({
   args: {},
@@ -110,6 +111,51 @@ export const tableCounts = internalQuery({
       counts[table] = rows.length;
     }
     return counts;
+  },
+});
+
+export const backfillScheduleDates = internalMutation({
+  args: { dryRun: v.boolean() },
+  handler: async (ctx, { dryRun }) => {
+    const rows = await ctx.db.query("scheduleItems").collect();
+
+    const report = {
+      total: rows.length,
+      updated: 0,
+      skipped: 0,
+      warnings: [] as Array<{ id: string; oldValue: string; reason: string }>,
+    };
+
+    for (const row of rows) {
+      const result = migrateScheduleRow({
+        date: row.date,
+        recurrence: row.recurrence,
+        notes: row.notes,
+        title: row.title,
+        _creationTime: row._creationTime,
+      });
+
+      if (result.action === "skip") {
+        report.skipped += 1;
+        continue;
+      }
+
+      if (result.action === "warn") {
+        report.warnings.push({
+          id: row._id,
+          oldValue: row.date ?? "",
+          reason: result.reason,
+        });
+        continue;
+      }
+
+      report.updated += 1;
+      if (!dryRun) {
+        await ctx.db.patch(row._id, result.patch);
+      }
+    }
+
+    return report;
   },
 });
 
