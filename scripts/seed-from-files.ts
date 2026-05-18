@@ -214,6 +214,56 @@ async function seedMedications(
   console.log(`  Medications: ${count}`);
 }
 
+const WEEKDAY_SHORT_BY_NAME: Record<string, string> = {
+  sun: "sun",
+  sunday: "sun",
+  mon: "mon",
+  monday: "mon",
+  tue: "tue",
+  tues: "tue",
+  tuesday: "tue",
+  wed: "wed",
+  wednesday: "wed",
+  thu: "thu",
+  thur: "thu",
+  thurs: "thu",
+  thursday: "thu",
+  fri: "fri",
+  friday: "fri",
+  sat: "sat",
+  saturday: "sat",
+};
+
+export function dayNameToWeeklyRecurrence(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  const short = WEEKDAY_SHORT_BY_NAME[key];
+  if (!short) {
+    throw new Error(`Cannot convert day name "${raw}" to weekly recurrence.`);
+  }
+  return `weekly:${short}`;
+}
+
+export function time12hTo24h(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  // Already 24-hour HH:MM — pass through.
+  if (/^\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*([AaPp])\.?[Mm]\.?$/);
+  if (!match) {
+    throw new Error(`Cannot convert time "${raw}" to 24-hour HH:MM.`);
+  }
+  const hour12 = parseInt(match[1], 10);
+  const minute = match[2] ? parseInt(match[2], 10) : 0;
+  const isPm = match[3].toLowerCase() === "p";
+  if (hour12 < 1 || hour12 > 12 || minute > 59) {
+    throw new Error(`Invalid 12-hour time "${raw}".`);
+  }
+  let hour24 = hour12 % 12;
+  if (isPm) hour24 += 12;
+  return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 async function seedScheduleItems(
   client: ConvexHttpClient,
   careCaseId: Id<"careCases">,
@@ -224,13 +274,14 @@ async function seedScheduleItems(
   const rideRows = parseMarkdownTableRows(content, "### Rides");
   for (const row of rideRows) {
     const [day, amDriver, pmDriver, notes] = row;
+    const recurrence = dayNameToWeeklyRecurrence(day);
     if (amDriver && amDriver !== "—") {
       await client.mutation(api.scheduleItems.create, {
         careCaseId,
         type: "task",
         title: "AM ride to work",
-        date: day,
-        time: "7:30 AM",
+        recurrence,
+        time: time12hTo24h("7:30 AM"),
         notes: notes || undefined,
         status: "active",
       });
@@ -241,8 +292,8 @@ async function seedScheduleItems(
         careCaseId,
         type: "task",
         title: "PM ride from work",
-        date: day,
-        time: "4:30 PM",
+        recurrence,
+        time: time12hTo24h("4:30 PM"),
         notes: notes || undefined,
         status: "active",
       });
@@ -257,8 +308,8 @@ async function seedScheduleItems(
       careCaseId,
       type: "reminder",
       title: `${task}${assigned ? ` (${assigned})` : ""}`,
-      date: day,
-      time,
+      recurrence: dayNameToWeeklyRecurrence(day),
+      time: time12hTo24h(time),
       notes: notes || undefined,
       status: "active",
     });
@@ -274,7 +325,7 @@ async function seedScheduleItems(
       type: "appointment",
       title: type,
       date,
-      time,
+      time: time12hTo24h(time),
       provider: provider === "—" ? undefined : provider,
       location: location === "—" ? undefined : location,
       notes: noteParts.length > 0 ? noteParts.join(" | ") : undefined,
