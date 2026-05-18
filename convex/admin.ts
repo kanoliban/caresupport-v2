@@ -1,4 +1,5 @@
 import { internalMutation, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { migrateScheduleRow } from "./lib/scheduleBackfill";
 
@@ -156,6 +157,90 @@ export const backfillScheduleDates = internalMutation({
     }
 
     return report;
+  },
+});
+
+export const listActiveCareCasesForDigest = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const careCases = await ctx.db.query("careCases").collect();
+
+    const results: Array<{
+      careCaseId: Id<"careCases">;
+      timezone: string;
+      userId: Id<"users">;
+      userName: string;
+      chatId: string | null;
+    }> = [];
+
+    for (const careCase of careCases) {
+      if (careCase.status === "archived") continue;
+
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .first();
+      if (!user) continue;
+      if (!user.chatId) continue;
+
+      const lastInbound = await ctx.db
+        .query("messages")
+        .withIndex("by_care_case_timestamp", (q) =>
+          q.eq("careCaseId", careCase._id),
+        )
+        .order("desc")
+        .filter((q) => q.eq(q.field("direction"), "inbound"))
+        .first();
+
+      if (!lastInbound || lastInbound.timestamp < fourteenDaysAgo) continue;
+
+      results.push({
+        careCaseId: careCase._id,
+        timezone: careCase.timezone || "UTC",
+        userId: user._id,
+        userName: user.name,
+        chatId: user.chatId,
+      });
+    }
+
+    return results;
+  },
+});
+
+export const getCareCaseDigestData = internalQuery({
+  args: {
+    careCaseId: v.id("careCases"),
+    todayLocalIso: v.string(),
+    sinceMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const [scheduleItems, recentDigestAudits] = await Promise.all([
+      ctx.db
+        .query("scheduleItems")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+        .filter((q) => q.eq(q.field("status"), "scheduled"))
+        .collect(),
+      ctx.db
+        .query("auditLogs")
+        .withIndex("by_care_case_timestamp", (q) =>
+          q.eq("careCaseId", args.careCaseId),
+        )
+        .filter((q) =>
+          q.and(
+            q.gte(q.field("timestamp"), args.sinceMs),
+            q.eq(q.field("event"), "response_sent"),
+          ),
+        )
+        .collect(),
+    ]);
+
+    return {
+      scheduleItems,
+      recentDigestAudits: recentDigestAudits.filter(
+        (audit) => audit.details.triggerMessage === "scheduled_digest",
+      ),
+    };
   },
 });
 
