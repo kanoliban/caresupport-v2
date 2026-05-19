@@ -138,22 +138,6 @@ describe("buildSystemBlocks", () => {
     );
   });
 
-  it("forbids phantom-reminder language in the response format", () => {
-    // #given the default system blocks
-    // #when the response format block is found
-    const blocks = buildSystemBlocks(makeInput());
-    const responseFormatBlock = blocks.find((block) =>
-      block.text.includes("── REMINDER LANGUAGE ──"),
-    );
-
-    // #then the model is explicitly told not to use the forbidden phrasings
-    expect(responseFormatBlock).toBeDefined();
-    expect(responseFormatBlock?.text).toContain("\"I'll remind you\"");
-    expect(responseFormatBlock?.text).toContain("\"I'll text you\"");
-    expect(responseFormatBlock?.text).toContain("\"I'll check in\"");
-    expect(responseFormatBlock?.text).toContain("\"I'll follow up\"");
-    expect(responseFormatBlock?.text).toContain("Push reminders aren't on yet");
-  });
 });
 
 describe("systemBlocksToString", () => {
