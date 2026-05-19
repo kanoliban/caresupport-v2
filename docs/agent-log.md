@@ -642,3 +642,41 @@ Read the last 2-3 entries before starting work.
 
 ### Concerns
 - The next implementation tranche should add tool action lifecycle and permission primitives before any assistant copy claims calendar changes, caregiver outreach, or autonomous follow-up.
+
+---
+
+## 2026-05-19 — Codex
+
+### What I did
+- Synced merged `main` to the dev Convex deployment after PR #53 merged.
+- Reconfigured this checkout to the existing Convex project and dev deployment `valiant-tortoise-962`; Convex wrote a local ignored `.env.local`.
+- The first sync attempt failed because stale dev rows still had legacy schema fields (`auditLogs.accessLevel`).
+- Cleared dev app data with `admin:clearAppData` on `valiant-tortoise-962`; no prod command was run.
+- Re-ran `npx convex dev --once --typecheck disable`; sync succeeded.
+- Ran live dev smoke tests through Convex:
+  - `admin:tableCounts` confirmed dev started empty after reset.
+  - `handler:handleMessage` with a synthetic phone/chat created an onboarding care case for Liban caring for Degitu.
+  - Created a smoke `careContacts` record for Angela.
+  - Created an open `coordinationEvents` coverage gap referencing Angela.
+  - Verified `mutations:getCompiledPromptContext` includes both `care_contacts` and `coordination_events`.
+  - Asked the handler to text caregiver Angela; it returned the truthful boundary response and `blocked: true`.
+
+### State I'm leaving
+- Dev Convex deployment `valiant-tortoise-962` is on merged `main`.
+- Dev contains smoke data only:
+  - 1 care case
+  - 1 user
+  - 4 messages
+  - 1 care contact
+  - 1 coordination event
+  - 5 audit logs
+- Local `main` matches `origin/main` except for this agent-log note and the pre-existing untracked duplicate/archive files.
+
+### What the next agent should know
+- The runtime substrate is deployable and works in dev.
+- The prompt context correctly reveals active care contacts and open coordination events.
+- Unsupported third-party outreach is still blocked at runtime copy: CareSupport says it cannot add/message them yet and can draft/track instead.
+
+### Concerns
+- This was a synthetic Convex function smoke, not a real inbound Linq webhook/iMessage test.
+- Dev had to be cleared because stale data blocked schema validation. Treat prod separately; do not reset or deploy prod without an explicit production decision.
