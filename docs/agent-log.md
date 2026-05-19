@@ -5,6 +5,53 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-05-19 - Codex
+
+### What I did
+- Reviewed issue #52, the canonical docs, the newer Rob/product/tool docs, and the current open PR list (#50 agent-log only, #28 Claude workflow only).
+- Realigned the active docs around CareSupport as a multiplayer, one-to-many family care coordination runtime with the solo thread as the current wedge, not the final identity.
+- Updated `README.md`, `CLAUDE.md`, `SOUL.md`, `docs/design.md`, `AGENTS.md`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/onboarding.md`, `docs/concierge-beta.md`, and `docs/product-specs/sms-care-coordination.md`.
+- Added missing architecture notes for `docs/integrations-and-tool-bearing-agent.md` and `docs/research-integration-architecture.md`.
+- Updated archive banners in `docs/ARCHIVE.md`, `docs/PRODUCT_STRATEGY.md`, and `docs/VISION.md` so old docs are stale for dashboard/network/family.md assumptions, not because family coordination is no longer active direction.
+
+### State I'm leaving
+- This is a documentation/architecture alignment pass only. No runtime code or tests were changed.
+- `git diff --check` passes.
+- The current runtime still enforces a solo-thread boundary in prompts and handler behavior.
+
+### What the next agent should know
+- Product direction is now explicit: family care agent, text-native coordination runtime, one-to-many orchestration, tool-bearing assistant.
+- Current implementation remains `users` + `careCases` + `messages` + care records + memory + audit logs.
+- Future code should introduce `careContacts`, `coordinationEvents`, `toolActions`, `connectedAccounts`, `externalRefs`, and `userToolPermissions` only behind concrete product loops and tests.
+
+### Concerns
+- `convex/lib/promptContent.ts`, `convex/lib/pipeline/promptBuilder.ts`, and `convex/handler.ts` still contain solo-only product language and blocking behavior. That is acceptable for the current runtime, but it is now the main runtime/doc mismatch to address when implementation moves beyond the wedge.
+- Do not ship outbound outreach or tools by prompt copy alone. The runtime needs permission checks, persisted action state, provider adapters, failure handling, and audit logs first.
+
+---
+
+## 2026-05-18 — Codex
+
+### What I did
+- Pulled `main` forward to `5d3139e` after repairing local corrupted remote refs (`origin/main 2` and duplicate `*.lock` remote-ref files were moved aside under `/tmp/caresupport-git-ref-backup`).
+- Read the updated canonical direction (`AGENTS.md`, `docs/DECISIONS.md`, `docs/design.md`, `docs/product-thesis.md`) and the new Rob/family-care planning docs.
+- Reviewed recent merged PRs #39-#47, open PR #50, and open issue #49 via GitHub CLI.
+
+### State I'm leaving
+- Local `main` matches `origin/main` at `5d3139e`.
+- `docs/agent-log.md` has this session note appended per repo convention.
+- A previous local stash named `codex-agent-log-before-pull` still exists with older Poke/OpenPoke research log entries from before the pull; it was not reapplied because the upstream agent log has moved on.
+
+### What the next agent should know
+- The active runtime remains solo beta by repo instruction, but current product thinking now distinguishes the solo beta from the broader family-care assistant thesis.
+- The Rob docs define the real long-term target as operational, one-to-many coordination that reduces Rob's physical interaction burden, with future primitives like `careContacts`, `coordinationEvents`, permissioned playbooks, and closed-loop coverage-gap handling.
+- Immediate implementation pressure is issue #49: the daily digest cron shipped, but time-precise one-off reminders via `ctx.scheduler.runAt` are still missing.
+
+### Concerns
+- The pulled repo contains a live strategic tension: `AGENTS.md` still says do not re-center active implementation around multiplayer, while the new Rob/product docs make clear that multiplayer coordination is the deeper product direction. Treat that as sequencing, not contradiction: do not ship outreach without an explicit decision, but design current primitives so they can grow toward coordination.
+
+---
+
 ## 2026-05-15 — Claude
 
 ### What I did

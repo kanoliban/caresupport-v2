@@ -1,57 +1,147 @@
-# CLAUDE.md — CareSupport v2
+# CLAUDE.md
 
-## What This Is
+This file orients Claude and other coding agents working in this repo.
 
-CareSupport is a care coordination agent that texts with family members 1:1 and in group chats via iMessage/SMS. Convex is the backend. Linq is the iMessage gateway. Claude is the LLM.
+CareSupport is a multiplayer family care agent: a text-native operational
+coordination runtime for one care situation and the people around it.
 
-For the full design document → `docs/design.md`
+The current implementation is still a solo-thread wedge. That means one trusted
+person texts CareSupport first, builds memory, and starts the care record. Do
+not confuse that wedge with the long-term product identity.
 
-## How It Works
+## North Star
 
+CareSupport should reduce the operational coordination burden in family care.
+For Rob, that means fewer nose-driven interactions to chase caregivers,
+agencies, schedule gaps, reminders, handoffs, and status updates.
+
+The test for a major feature is:
+
+> Does this reduce the number of times Rob has to use his nose to chase care coordination?
+
+If the answer is no, the feature is probably not central.
+
+## Current Runtime Contract
+
+The active Convex schema is intentionally small:
+
+- `users`
+- `careCases`
+- `messages`
+- `medications`
+- `scheduleItems`
+- `memoryEntries`
+- `auditLogs`
+
+The current prompt/runtime can:
+
+- reply over text
+- remember user and care-case facts
+- persist medication and schedule records
+- record self-corrections
+- keep an audit trail
+
+The current prompt/runtime cannot yet:
+
+- contact other people
+- invite a care team
+- operate group chats as a multiplayer runtime
+- execute external tools
+- sync calendars or email
+- autonomously resolve coverage gaps
+
+Those limitations are implementation status, not product philosophy.
+
+## Direction Of Travel
+
+Future multiplayer/runtime concepts are expected to include:
+
+- `careContacts`
+- `coordinationEvents`
+- `toolActions`
+- `connectedAccounts`
+- `externalRefs`
+- `userToolPermissions`
+
+Likely code organization:
+
+- `convex/lib/tools/`
+- `convex/lib/providers/`
+- `convex/lib/coordination/`
+- `convex/lib/knowledge/`
+
+Add these only when a concrete product loop needs them. The first serious loop
+should be coverage-gap coordination: detect the gap, identify possible coverage,
+ask permission, perform outreach, track replies, escalate when needed, and close
+the loop with minimal user interaction.
+
+## Safety Rules
+
+Safety must be enforced mechanically, not only by model instruction.
+
+- No outbound outreach without an explicit permission model.
+- No tool execution without a persisted `toolAction`-style audit trail.
+- No future family-scoped or care-case-scoped query should read broad state and
+  filter in memory.
+- Phone-only lookup is acceptable only as an identity-resolution step for an
+  inbound message or verified provider callback.
+- When multiplayer tables exist, queries must scope by `careCaseId` or
+  `familyId`, depending on the chosen schema boundary.
+- Do not revive the old `families`/`members`/access-tier schema by accident.
+  Reintroduce multiplayer primitives through an explicit product decision and a
+  current schema design.
+
+## Prompt And Parser Contract
+
+Current structured response fields are:
+
+- `smsResponse`
+- `internalNotes`
+- `userProfileUpdate`
+- `careCaseProfileUpdate`
+- `userMemoryUpdates`
+- `careCaseMemoryUpdates`
+- `selfCorrections`
+- `reactions`
+- `effect`
+- `medicationUpdates`
+- `scheduleUpdates`
+
+Do not use retired v1 fields such as `familyFileUpdates`, `memberUpdates`,
+`needsOutreach`, or `routingUpdates` in current prompts.
+
+When adding tool-bearing behavior, update the prompt, parser, schema, handler,
+and tests together. Do not let the assistant claim it performed an action unless
+the runtime has persisted and executed that action.
+
+## Product Language
+
+Use:
+
+- family care agent
+- text-native care coordination runtime
+- one-to-many care orchestration
+- tool-bearing assistant
+- solo-thread wedge
+- trusted narrator
+- operational coordination
+
+Avoid as product identity:
+
+- solo caregiver app
+- reminder bot
+- dashboard
+- care journal
+- generic personal assistant
+
+## Verification
+
+Common checks:
+
+```bash
+npx convex dev
+npx tsc --noEmit
+npm test
 ```
-iMessage arrives via Linq webhook
-  → convex/http.ts verifies signature, resolves chat → family
-  → handler.ts: route sender → build prompt → call Claude
-  → structured output: sms response + table updates (meds, schedules, context)
-  → enforcement: access control, PHI filtering, approval gates
-  → response sent via Linq API
-```
 
-## Build/Lint/Test Commands
-
-- **Type-check:** `npx tsc --noEmit`
-- **Test:** `npm test` (vitest)
-- **Convex dev:** `npx convex dev`
-- **Seed:** `npm run seed` (populate Convex with pilot family data)
-- **Deploy:** `npx convex deploy`
-
-## Key Rules
-
-1. Safety enforcement is mechanical (code in `convex/lib/enforcement/`), not just prompt-level
-2. All state mutations go through Convex mutations — no direct file edits
-3. Five access levels: `full`, `schedule+meds`, `schedule`, `provider`, `limited` — enforced per-membership
-4. Medication changes always require coordinator approval (hardcoded safety rule)
-5. Medical info is 1:1 only — never shared in group chats
-6. Agent writes to `context` fields on families and members — no markdown blob round-trips
-7. Every DB query on family-scoped data must filter by `familyId` — phone-only lookups are for member resolution only
-
-## Schema Overview
-
-| Table | Purpose |
-|-------|---------|
-| `families` | Family/network info + agent-written context |
-| `members` | People in families, roles, access levels, agent-written context |
-| `messages` | Conversation history plus Linq message tracking |
-| `medications` | Structured med records (access-controlled) |
-| `scheduleItems` | Shifts, appointments, tasks, rides |
-| `approvals` | Pending coordinator confirmations |
-| `auditLogs` | Audit trail |
-| `lessons` | Agent corrections and learned patterns |
-
-## Transitional State
-
-The agent currently outputs both freeform context updates (`familyFileUpdates`, `memberUpdates`) and v2 structured fields (`medicationUpdates`, `scheduleUpdates`, `careTeamUpdates`). Both are processed — typed updates go to typed tables, while freeform updates still go to `families.context` and `members.context`. The prompt is assembled from typed tables first, with `families.context` appended as notes and the current sender's `members.context` included when present.
-
-## Multi-Agent Setup
-
-See `AGENTS.md` for shared state between Claude (architecture/reasoning) and Codex (execution/deployment). Codex handoff context is in `docs/codex-handoff.md`.
+If `_generated/` is missing, run `npx convex dev` before typechecking.

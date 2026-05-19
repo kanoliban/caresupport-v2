@@ -1,69 +1,132 @@
 # Product Roadmap
 
-Last updated: 2026-04-13
+Last updated: 2026-05-19
 
 ## Current State
 
-CareSupport is pivoting from family coordination to a solo-caregiver concierge beta.
+CareSupport is a family care agent currently implemented through a solo-thread
+wedge.
 
 The active product path is:
-- one user
-- one loved one's care context
-- free beta
-- weekly retention as the north star
 
-## Phase 0 — Solo Beta Reset
+- one trusted user
+- one care case
+- one persistent text thread
+- memory, medications, schedule items, and audit logs
+- no outbound outreach or external tool execution yet
 
-Reset the product and infrastructure around the single-user wedge.
+The product direction is:
+
+- multiplayer family care coordination
+- one-to-many care orchestration
+- permissioned tools
+- push-not-pull operational updates
+- coverage-gap and handoff coordination
+
+## Phase 0 - Direction Alignment
+
+Make the repo internally consistent so future work does not inherit the stale
+"solo caregiver app" identity.
 
 ### Required outcomes
-- Runtime defaults new accounts to `solo_beta`
-- Onboarding is for one user managing one loved one's care
-- Multiplayer actions are blocked in the active product path
-- Billing and family-plan upsell are removed from the primary experience
-- Convex data reset procedure exists for dev and prod
 
-## Phase 0.5 — Schema Alignment
+- README, CLAUDE, SOUL, and design docs describe CareSupport as a family care
+  agent
+- solo-thread behavior is framed as the wedge and active implementation mode
+- docs name future runtime primitives without overbuilding code
+- runtime limits remain honest: no outreach/tools until permissions and audits
+  exist
 
-Replace the old family-network substrate with a solo-native deterministic core while prod is still empty.
+## Phase 1 - Core First-Thread Loop
 
-### Required outcomes
-- Active schema is centered on `users`, `careCases`, `messages`, `medications`, `scheduleItems`, `memoryEntries`, and `auditLogs`
-- Legacy multiplayer entities are removed from the active runtime contract
-- Prompt context is assembled from structured records plus explicit memory entries
-- Tests enforce that CareSupport does not claim a save/action unless it persisted deterministically
-- Future agents can infer the real product model from code and docs without reading chat history
-
-## Phase 1 — Core Solo Loop
-
-Prove that solo caregivers return because the product is genuinely useful.
+Keep proving that one trusted thread can learn the care situation and become
+useful quickly.
 
 ### Must be great at
+
+- onboarding into a care case
 - capturing medications
-- tracking appointments
-- tracking tasks and rides
-- reminder-friendly scheduling
+- tracking appointments, tasks, rides, and routines
 - remembering personal care context and communication preferences
+- showing what it knows when it matters
+- correcting memory cheaply
 
 ### Success metrics
+
+- first-value completion
 - weekly retained users
-- activation to first saved care item
 - messages per retained user
-- percentage of users with at least one medication, appointment, or task saved
+- percentage of users with at least one medication, appointment, task, or memory
+  saved
+- number and shape of requests for outreach, scheduling, or multiplayer help
 
-## Phase 2 — Concierge Beta Expansion
+## Phase 2 - Contact And Coordination Substrate
 
-Run a 20–50 user concierge beta and learn fast.
+Prepare for multiplayer without yet automating outreach.
 
-### Operator goals
-- onboard users manually or semi-manually
-- observe where people return vs. churn
-- capture repeated requests for multiplayer features
-- refine onboarding and reminder behavior weekly
+### Required outcomes
 
-## Phase 3 — Decide on Expansion
+- care-contact model is designed around a care case
+- coordination-event model is designed around open operational work
+- prompt language can identify coverage gaps and handoffs without claiming it
+  contacted anyone
+- status summaries can describe what is known, missing, and still open
+- tests prevent false claims of completed outreach or tool work
 
-Once the solo loop is strong, decide whether to:
-- keep deepening solo caregiving
-- reintroduce multiplayer coordination as an expansion path
-- layer billing back in after retention is proven
+Candidate primitives:
+
+- `careContacts`
+- `coordinationEvents`
+- `externalRefs`
+
+## Phase 3 - Permissioned Tools
+
+Add tool-bearing behavior behind explicit permission and audit state.
+
+### First likely tools
+
+- internal reminders
+- Google Calendar read/write
+- Linq-backed outbound outreach to approved contacts
+- operational status summaries for open coordination events
+
+### Required outcomes
+
+- `toolActions` or equivalent persisted action lifecycle
+- `userToolPermissions` or equivalent permission model
+- provider adapters with failure handling
+- audit records for user-visible and external actions
+- no assistant claim of tool success unless the tool actually succeeded
+
+## Phase 4 - Coverage Gap Coordination
+
+Build the first true multiplayer loop.
+
+### Target loop
+
+1. User reports a cancellation or uncovered shift.
+2. CareSupport identifies the affected time window.
+3. CareSupport uses known contacts and fallback order.
+4. CareSupport asks permission to start outreach.
+5. CareSupport contacts approved people or agencies.
+6. CareSupport tracks pending, declined, partial, and confirmed replies.
+7. CareSupport escalates when needed.
+8. CareSupport pushes short status updates.
+9. CareSupport records the resolution.
+
+This phase proves CareSupport can coordinate work, not only remember it.
+
+## Phase 5 - Broader Family Runtime
+
+Expand from one trusted thread into family and professional caregiver
+coordination.
+
+Likely work:
+
+- group chat handling
+- family and professional caregiver roles
+- access and visibility rules
+- reusable playbooks
+- exception-only interruption
+- richer connected accounts
+- Gmail support if it reduces operational coordination burden

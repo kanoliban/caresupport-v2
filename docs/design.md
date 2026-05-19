@@ -1,82 +1,214 @@
-# CareSupport v2 — Solo Beta Design
+# CareSupport v2 Design
 
-## What CareSupport Is
+CareSupport is a text-native, tool-bearing family care coordination runtime.
 
-CareSupport is an iMessage-based care planning and reminders assistant for one person managing a loved one's care.
+The product begins in one trusted text thread, but it is designed for
+multiplayer care: one care situation, many people, many organizations, many
+handoffs, and one agent responsible for reducing the coordination burden.
 
-The active product is 1:1:
-- one user
-- one care context
-- one persistent thread with CareSupport
+## Product Frame
 
-There is no app or dashboard. iMessage is the interface.
+CareSupport is not a generic personal assistant, reminder bot, or care journal.
+It is a family care agent that learns how care is coordinated and helps carry
+that work through conversation and permissioned tools.
 
-## Current Product Wedge
+The current solo-thread experience remains important. It is:
 
-The product is optimized for a solo caregiver who needs help staying on top of:
-- medications
-- appointments
-- tasks and rides
-- reminders
-- care notes and preferences
+- the first relationship
+- the onboarding wedge
+- the trusted narrator
+- the initial memory-building surface
+- the safest way to prove the core loop
 
-## Design Principles
+It is not the final product identity.
 
-1. **Lower friction beats broader scope.** One useful 1:1 thread is better than a half-working team product.
-2. **The care plan is the source of truth.** Structured care records plus durable memory should make the next message better.
-3. **Act for the user directly.** The product should reduce mental load, not create coordination overhead.
-4. **Single-user first.** Team coordination, invites, outreach, and permissions are deferred product paths.
-5. **Memory matters.** CareSupport should remember preferences, routines, and care details over time.
-6. **Free beta, retention-focused.** The current phase optimizes learning and weekly retention, not billing.
+## Primary User Model
 
-## Product Boundaries
+Rob is the clearest stress test.
 
-In the active solo beta, CareSupport does not:
-- add family members or caregivers
-- text other people on the user's behalf
-- operate group chats
-- pitch upgrades or paid plans
+Rob is quadriplegic and uses his nose to operate his iPhone. He coordinates 12
+people himself:
 
-If users ask for those things, the system should explain the current single-user boundary and keep helping them directly in-thread.
+- 9 professional caregivers
+- 3 family members
+- caregivers spread across 3 disconnected agencies
 
-## Deterministic Foundation
+Rob becomes the communication bridge, dispatcher, historian, escalation path,
+and schedule operator for his own care. Every unnecessary interaction has
+physical cost.
 
-The active application layer is now intentionally small and solo-native:
-- `users` for the texting account owner
-- `careCases` for the loved one / care situation being managed
-- `messages` for the 1:1 thread with CareSupport
-- `medications` and `scheduleItems` for structured care records
-- `memoryEntries` for durable user and care-case memory
-- `auditLogs` for traceability
+The product heuristic is:
 
-This is the substrate the runtime should trust. CareSupport should not depend on a mutable family-file markdown blob or dormant multiplayer entities to do its core work.
+> Does this reduce the number of times Rob has to use his nose to chase care coordination?
 
-## Harness Direction
+If a capability does not reduce Rob's coordination burden, it is not central.
 
-The runtime harness should stay thin:
-1. load the user, care case, recent messages, care records, and relevant memory
-2. route the incoming message
-3. call the model with the right care procedure
-4. validate the response
-5. persist typed updates
-6. send and log the reply
+## Families We Serve
 
-Judgment lives in the prompt/procedure layer. Reliability lives in deterministic tools and storage.
+The pilot families exercise different parts of the system:
 
-## Deferred Architecture
+- **Family A - Kano:** small, tight-knit family where Liban coordinates care for
+  Degitu.
+- **Family B - Rob:** Rob is both care recipient and coordinator, with a large
+  mixed team of professional caregivers and family members across disconnected
+  organizations.
+- **Family C - Amanti:** distributed siblings coordinating care for their mother,
+  where group communication and remote visibility matter.
 
-The active product does not use:
-- family/network entities
-- coordinator/access-tier semantics
-- approval pipelines
-- outreach threads
-- upgrade/member-limit enforcement
+The runtime should stay grounded in these families. Schema and product choices
+should make sense for at least one of them.
 
-Those are deferred expansion concepts, not part of the current deterministic core.
+## Current Active Runtime
 
-## What This Phase Must Prove
+The active implementation is still intentionally narrow:
 
-1. Users can onboard quickly with a solo care context.
-2. Users return weekly because CareSupport helps them stay organized.
-3. The core loop is strong enough without requiring multi-member setup.
-4. Requests for multiplayer features are captured as product demand, not treated as the main wedge.
+- one texting user
+- one care case
+- one persistent thread
+- memory extraction and correction
+- medications and schedule items
+- audit logging
+- Linq iMessage/SMS transport
+- Claude structured-response loop
+
+Current tables:
+
+- `users`
+- `careCases`
+- `messages`
+- `medications`
+- `scheduleItems`
+- `memoryEntries`
+- `auditLogs`
+
+This deterministic core should remain stable while the product direction is
+being clarified. Do not rebuild the old v1 family schema just to make the docs
+sound multiplayer again.
+
+## Current Product Boundary
+
+In the active runtime, CareSupport does not yet:
+
+- contact other people
+- add or invite care-team members
+- execute external tools
+- sync Google Calendar or Gmail
+- run group chats as the main coordination surface
+- autonomously resolve coverage gaps
+
+These are current implementation boundaries, not product non-goals.
+
+The assistant should be honest about them:
+
+> I cannot text Angela for you yet. I can draft the message and keep track of the coverage gap here.
+
+The assistant should not imply that multiplayer coordination is outside
+CareSupport's purpose.
+
+## Long-Term Runtime Direction
+
+CareSupport should evolve into a one-to-many coordination runtime with these
+core primitives:
+
+- `careContacts`
+- `coordinationEvents`
+- `toolActions`
+- `connectedAccounts`
+- `externalRefs`
+- `userToolPermissions`
+
+These primitives support a future where CareSupport can:
+
+- know who is involved in care
+- understand availability, roles, agencies, and fallback order
+- track unresolved coordination work
+- ask permission before outreach or tool use
+- send approved messages
+- update schedules and reminders
+- track replies and failures
+- escalate when a care need remains unresolved
+- close the loop with a short operational update
+
+## First Multiplayer Loop
+
+The first true multiplayer loop should be coverage-gap coordination.
+
+Example:
+
+1. Rob texts that tonight's caregiver cancelled.
+2. CareSupport identifies the uncovered time window.
+3. CareSupport checks known contacts, preferences, and fallback order.
+4. CareSupport asks Rob for permission to begin outreach.
+5. CareSupport texts approved contacts or agencies.
+6. CareSupport tracks pending, declined, partial, and confirmed replies.
+7. CareSupport escalates only when needed.
+8. CareSupport updates Rob with the smallest useful status message.
+9. CareSupport records the resolution and relevant schedule changes.
+
+This is the product loop that proves CareSupport is more than a memory surface.
+
+## Tool-Bearing Architecture
+
+Conversation is the interface. Tools are how work gets done.
+
+Likely runtime organization:
+
+- `convex/lib/tools/` - registry, tool plans, tool action lifecycle
+- `convex/lib/providers/` - Google Calendar, Linq, reminders, email, and other
+  external adapters
+- `convex/lib/coordination/` - coordination events, escalation, fallback order,
+  status summaries, closure logic
+- `convex/lib/knowledge/` - memory retrieval, correction, contextual knowledge
+  visibility
+
+Tool-bearing behavior must include:
+
+- explicit permission checks
+- persisted execution state
+- provider request/response records where useful
+- audit logs for user-visible and external actions
+- failure handling that does not pretend work succeeded
+
+## Knowledge Visibility
+
+CareSupport should reveal knowledge in context rather than forcing users into a
+dashboard.
+
+The agent should naturally say things like:
+
+- "I have Angela as your first evening coverage fallback."
+- "I do not have Marcus's phone number yet."
+- "I am assuming this is for tonight's 6-10 gap."
+- "Here is what is still open."
+
+The goal is trust through situated explanation, not a giant profile screen.
+
+## Push, Not Pull
+
+CareSupport should avoid making Rob ask for status repeatedly.
+
+The agent should proactively push operational updates when:
+
+- a coordination event changes state
+- someone confirms, declines, or partially accepts
+- the fallback path is exhausted
+- Rob must choose between real options
+- time pressure changes the situation
+
+Low-value chatter should be avoided. The right update is the shortest message
+that changes what the user needs to know or do.
+
+## Implementation Stance
+
+Do not overbuild.
+
+The right order is:
+
+1. Keep the current solo-thread runtime reliable.
+2. Make docs and prompts honest that this is the wedge, not the identity.
+3. Add contact and coordination primitives only when needed by a concrete loop.
+4. Add tools behind permissions and audit records.
+5. Expand from one trusted thread into one-to-many coordination.
+
+This preserves the working Convex runtime while making the product direction
+clear.

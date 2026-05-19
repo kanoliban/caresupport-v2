@@ -1,8 +1,14 @@
 # CLAUDE.md - CareSupport 2.0 — Complete Strategic & Architectural Understanding Project Guidelines
 
-> Archived for active product decisions — 2026-04-13:
-> This document describes the longer-term multi-network and family-coordination vision. It is not the active product definition.
-> For current implementation and rollout decisions, use [DECISIONS.md](/Users/libankano/caresupport-v2/docs/DECISIONS.md), [design.md](/Users/libankano/caresupport-v2/docs/design.md), [ROADMAP.md](/Users/libankano/caresupport-v2/docs/ROADMAP.md), [concierge-beta.md](/Users/libankano/caresupport-v2/docs/concierge-beta.md), and [sms-care-coordination.md](/Users/libankano/caresupport-v2/docs/product-specs/sms-care-coordination.md).
+> Archived for active product decisions - updated 2026-05-19:
+> This document contains useful older family-care and network strategy, but its
+> multi-network packaging, dashboard assumptions, and legacy runtime model are
+> not the active product definition. For current implementation and rollout
+> decisions, use [DECISIONS.md](/Users/libankano/caresupport-v2/docs/DECISIONS.md),
+> [design.md](/Users/libankano/caresupport-v2/docs/design.md),
+> [ROADMAP.md](/Users/libankano/caresupport-v2/docs/ROADMAP.md),
+> [product-thesis.md](/Users/libankano/caresupport-v2/docs/product-thesis.md),
+> and [rob-care-operations-model.md](/Users/libankano/caresupport-v2/docs/rob-care-operations-model.md).
 
 ## Build/Lint/Test Commands
 - Build: `npm run build` (tsc -b && vite build)

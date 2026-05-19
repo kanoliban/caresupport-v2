@@ -1,43 +1,69 @@
-# Product Spec: Solo CareSupport Beta
+# Product Spec: SMS Family Care Coordination
 
-## What it is
+## What It Is
 
-CareSupport is an iMessage-based care planning and reminders assistant for one person managing a loved one's care.
+CareSupport is an iMessage/SMS-based family care agent.
 
-There is no app, dashboard, or team workspace in the active beta. The product is a direct 1:1 thread between CareSupport and the user.
+The active runtime is a direct thread between CareSupport and one trusted user,
+but the product direction is one-to-many coordination around a care situation.
+The first thread helps CareSupport learn the care context before it expands into
+permissioned multiplayer coordination.
 
-## Who it's for
+## Who It Is For
 
-The primary user is a solo caregiver coordinating day-to-day care for a parent or loved one.
+The primary user is the person carrying coordination load.
 
-## Core promise
+That may be:
 
-The user can text CareSupport to keep one care plan organized:
-- medications
-- appointments
-- tasks and rides
-- reminders
-- persistent care notes and preferences
+- a care recipient coordinating their own care, like Rob
+- a family caregiver coordinating for a parent or loved one
+- a distributed sibling trying to keep everyone aligned
+- eventually a professional caregiver or agency contact participating in a
+  bounded coordination event
 
-## How it should feel
+## Core Promise
 
-The user should feel like they have one reliable place to offload care logistics over text.
+The user can text CareSupport to keep care coordination moving:
 
-CareSupport should:
+- remember important care facts
+- capture medications, appointments, routines, tasks, and rides
+- track unresolved coordination issues
+- draft or eventually send permissioned outreach
+- push useful status updates
+- reduce repeated manual follow-up
+
+## How It Should Feel
+
+CareSupport should feel like one reliable operational thread for care.
+
+It should:
+
 - remember what matters
-- keep the plan current
-- reduce the chance of forgetting
-- make the next step obvious
+- make the current state easy to understand
+- keep open loops visible
+- ask permission before acting outside the current trust boundary
+- reduce the number of interactions required to resolve a care need
 
-## Out of scope for the active beta
+For Rob, the product should reduce nose-driven status checks and follow-ups.
 
-- adding family members or caregivers
-- contacting other people on the user's behalf
-- team coordination and group chats
-- member permissions and role management as part of the user-facing product
+## Current Runtime Boundary
 
-Those capabilities may return later, but they are not the active product path.
+Today, CareSupport does not yet:
+
+- contact other people
+- run a group chat as a coordination workspace
+- execute external tool actions
+- sync calendars or email
+- autonomously resolve coverage gaps
+
+Those are implementation boundaries. They should be treated as future runtime
+work, not as evidence that CareSupport is a solo-only product.
 
 ## Success
 
-The next phase succeeds when solo caregivers keep coming back weekly because CareSupport is genuinely useful for managing care in real life.
+The current phase succeeds when one trusted thread reliably creates value and
+captures the care context needed for later coordination.
+
+The next phase succeeds when CareSupport begins closing real coordination loops,
+starting with contacts, coordination events, permissioned tools, and coverage-gap
+workflows.
