@@ -150,4 +150,36 @@ describe("SOUL_CONTENT", () => {
     // #then the placeholder is explicitly called out so the agent doesn't think onboarding is done
     expect(ROUTING_CONTENT).toContain('the user\'s name (not "New User" placeholder)');
   });
+
+  it("teaches the knowledge-disclosure phrasings with an in-flow invocation rule, not a dashboard", () => {
+    // #given SKILLS_CONTENT Knowledge disclosure section
+    expect(SKILLS_CONTENT).toContain("## Knowledge disclosure");
+
+    // #then the seven action-time phrasings are taught
+    expect(SKILLS_CONTENT).toContain('"I have…"');
+    expect(SKILLS_CONTENT).toContain('"I know…"');
+    expect(SKILLS_CONTENT).toContain('"I don\'t have…"');
+    expect(SKILLS_CONTENT).toContain('"I\'m assuming…"');
+    expect(SKILLS_CONTENT).toContain('"Correct me if…"');
+    expect(SKILLS_CONTENT).toContain('"Here\'s what I\'m using…"');
+    expect(SKILLS_CONTENT).toContain('"Still open…"');
+
+    // #and the invocation rule says NOT to recite on every turn
+    expect(SKILLS_CONTENT).toContain("do NOT recite on every turn");
+  });
+
+  it("answers meta commands without exposing memory as a database", () => {
+    // #given SKILLS_CONTENT Meta commands section
+    expect(SKILLS_CONTENT).toContain("## Meta commands");
+
+    // #then the canonical meta questions are named
+    expect(SKILLS_CONTENT).toContain("what do you know?");
+    expect(SKILLS_CONTENT).toContain("what are you tracking?");
+    expect(SKILLS_CONTENT).toContain("what do you need from me?");
+    expect(SKILLS_CONTENT).toContain('"why did you do X?"');
+
+    // #and the answer style is "calm operational picture, not transparency for its own sake"
+    expect(SKILLS_CONTENT).toContain("calm operational picture");
+    expect(SKILLS_CONTENT).toContain("NOT a dump of every memory");
+  });
 });
