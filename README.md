@@ -27,6 +27,7 @@ direction. Today it supports:
 - one care case
 - one persistent text thread
 - durable messages, memory, medications, schedule items, and audit logs
+- scoped care contacts and coordination events as prompt-readable substrate
 - Claude-generated structured updates parsed into typed Convex records
 - Linq-backed iMessage/SMS ingress and egress
 
@@ -38,11 +39,15 @@ Current active tables:
 - `medications`
 - `scheduleItems`
 - `memoryEntries`
+- `careContacts`
+- `coordinationEvents`
 - `auditLogs`
 
 This solo-thread runtime is the onboarding wedge and first memory-building
 surface. It should stay simple until the core loop is reliable, but it should no
-longer be described as the final product category.
+longer be described as the final product category. `careContacts` and
+`coordinationEvents` exist as inert coordination substrate; the assistant does
+not yet create them from conversation or perform outreach.
 
 ## Product Direction
 
@@ -57,11 +62,14 @@ CareSupport should grow into a one-to-many care orchestration system where:
   possible
 - coordination stays open until the care need is actually resolved
 
-Emerging runtime primitives:
+Runtime primitives now started:
 
 - `careContacts` - people and organizations involved in a care case
 - `coordinationEvents` - coverage gaps, schedule changes, handoffs, unresolved
   tasks, escalations, and closures
+
+Still-emerging runtime primitives:
+
 - `toolActions` - attempted, approved, executed, failed, and reverted tool work
 - `connectedAccounts` - user-authorized integrations such as calendars or email
 - `externalRefs` - links to provider-side IDs in calendars, messaging, email, or

@@ -64,6 +64,11 @@ useful quickly.
 
 Prepare for multiplayer without yet automating outreach.
 
+Initial substrate exists as of the runtime alignment pass: `careContacts` and
+`coordinationEvents` are in schema, scoped by care case, covered by tests, and
+loaded into prompt context when present. Remaining Phase 2 work is model-write
+path, summaries, and product-loop hardening.
+
 ### Required outcomes
 
 - care-contact model is designed around a care case
@@ -73,10 +78,13 @@ Prepare for multiplayer without yet automating outreach.
 - status summaries can describe what is known, missing, and still open
 - tests prevent false claims of completed outreach or tool work
 
-Candidate primitives:
+Started primitives:
 
 - `careContacts`
 - `coordinationEvents`
+
+Still candidate:
+
 - `externalRefs`
 
 ## Phase 3 - Permissioned Tools

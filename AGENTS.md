@@ -47,20 +47,27 @@ The active Convex runtime is still intentionally small:
 - `medications`
 - `scheduleItems`
 - `memoryEntries`
+- `careContacts`
+- `coordinationEvents`
 - `auditLogs`
 
 The current prompt/runtime can text one user, build memory, save medication and
-schedule records, and audit the exchange. It does not yet contact other people,
-sync external tools, execute outreach, or run true group coordination.
+schedule records, load active care contacts and open coordination events into
+prompt context, and audit the exchange. It does not yet contact other people,
+sync external tools, execute outreach, create contacts/events from model output,
+or run true group coordination.
 
 Those are implementation boundaries, not product non-goals.
 
 ## Emerging Runtime Concepts
 
-Expected future primitives:
+Started substrate:
 
 - `careContacts`
 - `coordinationEvents`
+
+Expected future primitives:
+
 - `toolActions`
 - `connectedAccounts`
 - `externalRefs`

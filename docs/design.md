@@ -67,6 +67,7 @@ The active implementation is still intentionally narrow:
 - one persistent thread
 - memory extraction and correction
 - medications and schedule items
+- active care contacts and open coordination events loaded into prompt context
 - audit logging
 - Linq iMessage/SMS transport
 - Claude structured-response loop
@@ -79,11 +80,14 @@ Current tables:
 - `medications`
 - `scheduleItems`
 - `memoryEntries`
+- `careContacts`
+- `coordinationEvents`
 - `auditLogs`
 
 This deterministic core should remain stable while the product direction is
 being clarified. Do not rebuild the old v1 family schema just to make the docs
-sound multiplayer again.
+sound multiplayer again. The contact/event tables are substrate only: the model
+does not yet create them from conversation, and no outreach is executed.
 
 ## Current Product Boundary
 
@@ -91,6 +95,7 @@ In the active runtime, CareSupport does not yet:
 
 - contact other people
 - add or invite care-team members
+- create care contacts or coordination events from model output
 - execute external tools
 - sync Google Calendar or Gmail
 - run group chats as the main coordination surface
@@ -108,10 +113,13 @@ CareSupport's purpose.
 ## Long-Term Runtime Direction
 
 CareSupport should evolve into a one-to-many coordination runtime with these
-core primitives:
+core primitives. Two of them now exist as early substrate:
 
 - `careContacts`
 - `coordinationEvents`
+
+The remaining tool-bearing primitives are still future work:
+
 - `toolActions`
 - `connectedAccounts`
 - `externalRefs`

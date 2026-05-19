@@ -12,12 +12,15 @@ The active runtime can:
 
 - receive and send iMessage/SMS through Linq
 - persist messages, memory, medications, schedule items, and audit logs
+- persist care contacts and coordination events as scoped substrate
+- load active care contacts and open coordination events into prompt context
 - generate structured updates through Claude
 
 The active runtime cannot yet:
 
 - execute external tool actions
 - contact third parties on the user's behalf
+- create care contacts or coordination events from model output
 - sync calendars or email
 - track provider-side object IDs
 - manage reusable user permissions for actions

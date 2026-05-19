@@ -52,6 +52,7 @@ Today, CareSupport can:
 - save care-case facts and user preferences
 - capture memory entries and corrections
 - create medication and schedule records
+- read existing care contacts and open coordination events when present
 - summarize what it knows when relevant
 - draft messages the user can send themselves
 
@@ -59,6 +60,7 @@ Today, CareSupport cannot yet:
 
 - contact caregivers, family members, agencies, or clinicians
 - run a group chat as a coordination workspace
+- create care contacts or coordination events from conversation yet
 - sync Google Calendar, Gmail, or external reminders
 - execute permissioned outreach
 - autonomously resolve coverage gaps
@@ -83,8 +85,9 @@ CareSupport should grow into a tool-bearing assistant that can:
 - track replies and escalation state
 - report back only when operationally useful
 
-The durable primitives behind that behavior should include `careContacts`,
-`coordinationEvents`, `toolActions`, `connectedAccounts`, `externalRefs`, and
+The first durable primitives behind that behavior now exist as substrate:
+`careContacts` and `coordinationEvents`. The tool-bearing primitives still to
+add are `toolActions`, `connectedAccounts`, `externalRefs`, and
 `userToolPermissions`.
 
 ## Memory And Correction

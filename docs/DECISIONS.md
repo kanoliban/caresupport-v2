@@ -52,13 +52,21 @@ The current schema remains the active implementation foundation:
 - `medications`
 - `scheduleItems`
 - `memoryEntries`
+- `careContacts`
+- `coordinationEvents`
 - `auditLogs`
 
-Future multiplayer/tool-bearing work should extend from this foundation with
-deliberate primitives such as:
+The first multiplayer substrate now exists:
 
 - `careContacts`
 - `coordinationEvents`
+
+Those tables are prompt-readable but not yet model-writable and do not execute
+outreach.
+
+Future tool-bearing work should extend from this foundation with deliberate
+primitives such as:
+
 - `toolActions`
 - `connectedAccounts`
 - `externalRefs`
@@ -73,7 +81,7 @@ boundary explicitly and enforce care-case or family isolation mechanically.
 Docs, prompts, and future architecture should distinguish:
 
 - **active now:** one trusted text thread, memory, medications, schedule items,
-  audit logs
+  care contacts, coordination events, and audit logs
 - **wedge:** solo relationship that teaches CareSupport the care situation
 - **direction:** permissioned one-to-many coordination and tool action
 

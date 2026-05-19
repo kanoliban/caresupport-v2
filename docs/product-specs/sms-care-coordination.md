@@ -28,6 +28,7 @@ The user can text CareSupport to keep care coordination moving:
 - remember important care facts
 - capture medications, appointments, routines, tasks, and rides
 - track unresolved coordination issues
+- maintain care contacts and coordination events once captured
 - draft or eventually send permissioned outreach
 - push useful status updates
 - reduce repeated manual follow-up
@@ -52,6 +53,7 @@ Today, CareSupport does not yet:
 
 - contact other people
 - run a group chat as a coordination workspace
+- create care contacts or coordination events from model output
 - execute external tool actions
 - sync calendars or email
 - autonomously resolve coverage gaps

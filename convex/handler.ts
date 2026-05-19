@@ -45,11 +45,12 @@ const MAX_REPLY_QUOTE_LENGTH = 200;
 const UNKNOWN_USER_RESPONSE =
   "Hey! I'm CareSupport — I help you manage a loved one's care over text. No app needed.\nWhat's your name?";
 
-const SOLO_BETA_MULTIPLAYER_RESPONSE =
-  "Right now CareSupport is focused on helping you directly in this thread — I can't add family or message other people. If you want, I can draft a message you can copy and send them yourself. Want me to put one together?";
+const COORDINATION_BOUNDARY_RESPONSE =
+  "I can't add them or message them for you yet. I can draft the message and keep track of the coordination issue here. Want me to put one together?";
 
-const SOLO_BOUNDARY_OUTBOUND_MARKER = "CareSupport is focused on helping you directly";
-const SOLO_BOUNDARY_RECENT_HISTORY_WINDOW = 5;
+const COORDINATION_BOUNDARY_OUTBOUND_MARKER =
+  "I can't add them or message them for you yet";
+const COORDINATION_BOUNDARY_RECENT_HISTORY_WINDOW = 5;
 
 const PROFILE_SAVE_PATTERNS = [
   /^\s*please save this to my profile(?: for future messages)?[:\s,-]*(.+)$/i,
@@ -58,7 +59,7 @@ const PROFILE_SAVE_PATTERNS = [
   /^\s*for future reference[:,]?\s*(.+)$/i,
 ];
 
-const SOLO_BOUNDARY_PATTERN =
+const COORDINATION_REQUEST_PATTERN =
   /\b(add|invite|include|loop in|bring in|text|message|call|reach out to|contact)\b.*\b(sister|brother|mom|mother|dad|father|family|caregiver|doctor|provider|nurse|someone|team|friend|aunt|uncle)\b/i;
 
 const VALID_LESSON_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
@@ -171,21 +172,21 @@ export function ensureExplicitUserMemoryUpdate(
   return [...updates, inferred];
 }
 
-export function isSoloExpansionRequest(message: string): boolean {
-  return SOLO_BOUNDARY_PATTERN.test(message);
+export function isUnsupportedCoordinationRequest(message: string): boolean {
+  return COORDINATION_REQUEST_PATTERN.test(message);
 }
 
-export function shouldFireSoloBoundaryOverride(
+export function shouldFireCoordinationBoundaryOverride(
   messageBody: string,
   recentMessages: Array<{ direction: "inbound" | "outbound"; body: string }>,
 ): boolean {
-  if (!isSoloExpansionRequest(messageBody)) return false;
+  if (!isUnsupportedCoordinationRequest(messageBody)) return false;
   const recentOutboundContainsBoundary = recentMessages
-    .slice(-SOLO_BOUNDARY_RECENT_HISTORY_WINDOW)
+    .slice(-COORDINATION_BOUNDARY_RECENT_HISTORY_WINDOW)
     .some(
       (message) =>
         message.direction === "outbound" &&
-        message.body.includes(SOLO_BOUNDARY_OUTBOUND_MARKER),
+        message.body.includes(COORDINATION_BOUNDARY_OUTBOUND_MARKER),
     );
   return !recentOutboundContainsBoundary;
 }
@@ -405,8 +406,8 @@ export const handleMessage = internalAction({
     }
 
     let smsResponse = stripMarkdown(parsed.smsResponse);
-    if (shouldFireSoloBoundaryOverride(messageBody, recentMessages)) {
-      smsResponse = SOLO_BETA_MULTIPLAYER_RESPONSE;
+    if (shouldFireCoordinationBoundaryOverride(messageBody, recentMessages)) {
+      smsResponse = COORDINATION_BOUNDARY_RESPONSE;
       parsed.userProfileUpdate = null;
       parsed.careCaseProfileUpdate = null;
       parsed.userMemoryUpdates = [];
@@ -614,7 +615,7 @@ export const handleMessage = internalAction({
       routedIntent: intent,
       lessonsLearned: parsed.selfCorrections.length,
       memoriesSaved,
-      blocked: shouldFireSoloBoundaryOverride(messageBody, recentMessages),
+      blocked: shouldFireCoordinationBoundaryOverride(messageBody, recentMessages),
     };
   },
 });

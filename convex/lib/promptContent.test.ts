@@ -13,9 +13,9 @@ describe("SOUL_CONTENT", () => {
     expect(SOUL_CONTENT).not.toContain("check_schedule");
   });
 
-  it("frames the product as a solo care planning assistant", () => {
-    expect(SOUL_CONTENT).toContain("one person manage one loved one's care");
-    expect(CAPABILITIES_CONTENT).toContain("one user, one loved one, one thread");
+  it("frames the product as a family care agent in the first-thread runtime", () => {
+    expect(SOUL_CONTENT).toContain("family care agent starting in one trusted text thread");
+    expect(CAPABILITIES_CONTENT).toContain("one trusted user, one care situation, one thread");
     expect(CAPABILITIES_CONTENT).toContain("CareSupport is free during the concierge beta");
   });
 
@@ -105,6 +105,12 @@ describe("SOUL_CONTENT", () => {
     expect(SKILLS_CONTENT).toContain("do NOT wrap the draft in quote marks");
     expect(SKILLS_CONTENT).toContain("Want me to adjust the tone or length?");
     expect(SKILLS_CONTENT).toContain("You never send the message yourself");
+  });
+
+  it("keeps third-party coordination as a current runtime boundary, not a product non-goal", () => {
+    expect(SKILLS_CONTENT).toContain("## Current coordination boundary");
+    expect(SKILLS_CONTENT).toContain("CareSupport cannot do that yet");
+    expect(SKILLS_CONTENT).toContain("Do not imply multiplayer coordination is outside CareSupport's purpose");
   });
 
   it("instructs the model to extract all onboarding slots from one message when possible", () => {

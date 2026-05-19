@@ -31,6 +31,8 @@ The active Convex schema is intentionally small:
 - `medications`
 - `scheduleItems`
 - `memoryEntries`
+- `careContacts`
+- `coordinationEvents`
 - `auditLogs`
 
 The current prompt/runtime can:
@@ -38,6 +40,7 @@ The current prompt/runtime can:
 - reply over text
 - remember user and care-case facts
 - persist medication and schedule records
+- load active care contacts and open coordination events into prompt context
 - record self-corrections
 - keep an audit trail
 
@@ -46,6 +49,7 @@ The current prompt/runtime cannot yet:
 - contact other people
 - invite a care team
 - operate group chats as a multiplayer runtime
+- create care contacts or coordination events from model output
 - execute external tools
 - sync calendars or email
 - autonomously resolve coverage gaps
@@ -54,10 +58,11 @@ Those limitations are implementation status, not product philosophy.
 
 ## Direction Of Travel
 
+The first multiplayer substrate now exists in schema as `careContacts` and
+`coordinationEvents`. It is not yet wired into model output or outreach.
+
 Future multiplayer/runtime concepts are expected to include:
 
-- `careContacts`
-- `coordinationEvents`
 - `toolActions`
 - `connectedAccounts`
 - `externalRefs`
