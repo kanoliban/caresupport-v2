@@ -5,6 +5,7 @@ export type RouteTier = "fast" | "reason" | "critical";
 export type Intent =
   | "EMERGENCY"
   | "MEDICATION_CHANGE"
+  | "COVERAGE_GAP"
   | "ONBOARDING"
   | "BILLING"
   | "GENERAL";

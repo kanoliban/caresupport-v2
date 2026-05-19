@@ -168,6 +168,35 @@ describe("SOUL_CONTENT", () => {
     expect(SKILLS_CONTENT).toContain("do NOT recite on every turn");
   });
 
+  it("includes the coverage-gap relief loop tied to coordination_event_updates", () => {
+    // #given SKILLS_CONTENT Coverage gaps section
+    expect(SKILLS_CONTENT).toContain("## Coverage gaps");
+
+    // #then the relief loop names the M4 primitive
+    expect(SKILLS_CONTENT).toContain("coordination_event_update");
+    expect(SKILLS_CONTENT).toContain('action: "create"');
+    expect(SKILLS_CONTENT).toContain('action: "resolve"');
+    expect(SKILLS_CONTENT).toContain('type: "coverage_gap"');
+
+    // #and the no-outreach + no-time-pressure rules are explicit
+    expect(SKILLS_CONTENT).toContain(
+      "You cannot send messages to caregivers yourself yet",
+    );
+    expect(SKILLS_CONTENT).toContain(
+      "Don't impose time pressure on the user",
+    );
+
+    // #and the agent should cite sources so the user can correct cheaply
+    expect(SKILLS_CONTENT).toContain(
+      "Cite the source when proposing an order",
+    );
+  });
+
+  it("routes COVERAGE_GAP as a known bucket in ROUTING_CONTENT", () => {
+    expect(ROUTING_CONTENT).toContain("COVERAGE_GAP");
+    expect(ROUTING_CONTENT).toContain("Coverage gaps skill");
+  });
+
   it("answers meta commands without exposing memory as a database", () => {
     // #given SKILLS_CONTENT Meta commands section
     expect(SKILLS_CONTENT).toContain("## Meta commands");

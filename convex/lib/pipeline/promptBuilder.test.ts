@@ -138,6 +138,21 @@ describe("buildSystemBlocks", () => {
     );
   });
 
+  it("emits a COVERAGE_GAP intent block that frames the relief loop", () => {
+    const blocks = buildSystemBlocks(makeInput({ intent: "COVERAGE_GAP" }));
+    const operationalBlock = blocks.find((block) =>
+      block.text.includes("── INTENT: COVERAGE GAP ──"),
+    );
+    expect(operationalBlock).toBeDefined();
+    expect(operationalBlock?.text).toContain(
+      "Someone scheduled is not going to make it",
+    );
+    expect(operationalBlock?.text).toContain("Coverage gap skill");
+    expect(operationalBlock?.text).toContain(
+      "Do not text the caregiver yourself — outreach is not enabled yet",
+    );
+  });
+
   it("acknowledges the daily digest and forbids one-off phantom pushes", () => {
     // #given the default system blocks
     // #when the reminder/push block is found

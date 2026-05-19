@@ -10,6 +10,10 @@ export const TIER_ORDER: RouteTier[] = ["fast", "reason", "critical"];
 
 const EMERGENCY = /\b(911|emergency|ambulance|chest pain|can't breathe|not breathing|stroke|heart attack|unconscious|unresponsive|seizure|overdose)\b/i;
 const MEDICATION_CHANGE = /\b(change|stop|start|switch|adjust|increase|decrease|new|discontinue|hold|pause|resume).{0,30}\b(med|medication|prescription|dosage|dose|pill)\b|\b(med|medication|prescription|dosage|dose)\s+(change|update|adjustment)\b/i;
+// Coverage gaps: someone scheduled to cover/work/come is no longer able to,
+// or the user needs to find someone for a shift.
+const COVERAGE_GAP =
+  /\b(cancell?ed|canceling|cancelling|cancel|bailed|no[- ]show(?:ed|s|ing)?|couldn'?t make it|can'?t make it|won'?t make it|backed out|fell through|called out|out sick|need (?:someone to )?cover|need coverage|find (?:someone|a replacement)|replacement for|fill in for|step in for|nobody (?:to|can) cover|no one (?:to|can) cover|gap in (?:the )?(?:schedule|coverage)|short[- ]staffed)\b/i;
 const BILLING = /\b(price|pricing|cost|charge|billing|bill|free|paid|plan)\b/i;
 
 const PATTERNS: Array<{
@@ -20,6 +24,7 @@ const PATTERNS: Array<{
 }> = [
   { pattern: EMERGENCY, tier: "critical", intent: "EMERGENCY", reason: "emergency keywords detected" },
   { pattern: MEDICATION_CHANGE, tier: "reason", intent: "MEDICATION_CHANGE", reason: "medication request detected" },
+  { pattern: COVERAGE_GAP, tier: "reason", intent: "COVERAGE_GAP", reason: "coverage gap detected" },
   { pattern: BILLING, tier: "fast", intent: "BILLING", reason: "billing question detected" },
 ];
 

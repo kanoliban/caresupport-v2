@@ -114,6 +114,13 @@ function intentGuidance(intent: Intent | string): string {
         "── INTENT: MEDICATION ──",
         "Prefer medication_updates over generic care_case_memory_updates when the user gives specific medication instructions.",
       ].join("\n");
+    case "COVERAGE_GAP":
+      return [
+        "── INTENT: COVERAGE GAP ──",
+        "Someone scheduled is not going to make it. The user is the coordinator. Your job is to reduce what they have to chase.",
+        "Follow the Coverage gap skill below. Confirm the gap, name who you'd ask first (from the care circle and known preferences), draft a message they can copy, and offer to track it as a coordination_event so you can keep the loop open until it's resolved.",
+        "Do not text the caregiver yourself — outreach is not enabled yet. You draft, the user sends, you track.",
+      ].join("\n");
     case "BILLING":
       return [
         "── INTENT: BILLING ──",
