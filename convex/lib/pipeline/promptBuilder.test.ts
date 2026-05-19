@@ -138,21 +138,30 @@ describe("buildSystemBlocks", () => {
     );
   });
 
-  it("forbids phantom-reminder language in the response format", () => {
+  it("acknowledges the daily digest and forbids one-off phantom pushes", () => {
     // #given the default system blocks
-    // #when the response format block is found
+    // #when the reminder/push block is found
     const blocks = buildSystemBlocks(makeInput());
-    const responseFormatBlock = blocks.find((block) =>
-      block.text.includes("── REMINDER LANGUAGE ──"),
+    const reminderBlock = blocks.find((block) =>
+      block.text.includes("── REMINDER & PUSH LANGUAGE ──"),
     );
 
-    // #then the model is explicitly told not to use the forbidden phrasings
-    expect(responseFormatBlock).toBeDefined();
-    expect(responseFormatBlock?.text).toContain("\"I'll remind you\"");
-    expect(responseFormatBlock?.text).toContain("\"I'll text you\"");
-    expect(responseFormatBlock?.text).toContain("\"I'll check in\"");
-    expect(responseFormatBlock?.text).toContain("\"I'll follow up\"");
-    expect(responseFormatBlock?.text).toContain("Push reminders aren't on yet");
+    expect(reminderBlock).toBeDefined();
+
+    // #then the block names the real capability (daily morning digest)
+    expect(reminderBlock?.text).toContain("daily morning digest");
+
+    // #and still forbids forward-promise phrasing for one-off pushes
+    expect(reminderBlock?.text).toContain("I'll remind you at 3pm");
+    expect(reminderBlock?.text).toContain("I'll text you tonight");
+    expect(reminderBlock?.text).toContain("I'll check in tomorrow");
+    expect(reminderBlock?.text).toContain("I'll follow up later");
+
+    // #and explicitly forbids denying the digest exists
+    expect(reminderBlock?.text).toContain("Never deny that the morning digest exists");
+
+    // #and no longer carries the old "push reminders aren't on yet" denial
+    expect(reminderBlock?.text).not.toContain("Push reminders aren't on yet");
   });
 });
 

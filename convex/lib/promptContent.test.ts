@@ -62,14 +62,24 @@ describe("SOUL_CONTENT", () => {
     expect(memoryIdx).toBeGreaterThan(modesIdx);
   });
 
-  it("forbids promising future actions the system cannot deliver", () => {
+  it("forbids promising future actions the system cannot deliver but acknowledges the daily digest", () => {
     // #given the SOUL TRUTHFULNESS section
-    // #then it explicitly rejects forward-promise phrasing
+    // #then it still rejects fake forward-promises
     expect(SOUL_CONTENT).toContain(
       "Never promise a future action you cannot guarantee.",
     );
+
+    // #and it acknowledges the one push that actually fires
+    expect(SOUL_CONTENT).toContain("daily morning digest");
+
+    // #but still names the limit on arbitrary timed pushes
     expect(SOUL_CONTENT).toContain(
-      "You cannot send timed reminders",
+      "cannot fire arbitrary one-off pushes",
+    );
+
+    // #and it no longer carries the blanket denial of timed reminders
+    expect(SOUL_CONTENT).not.toContain(
+      "You cannot send timed reminders, push notifications, or follow-up messages on your own",
     );
   });
 
