@@ -5,6 +5,43 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-05-18 — Claude
+
+### What I did
+- Merged + deployed all 9 PRs from the 7-day prod review (#39 through #47). Backfill ran cleanly: 13 updated, 5 skipped, 0 warnings, idempotent.
+- Codex pair-review caught one regression in my #44 fix (mutation patch with `undefined` was clearing existing fields). Codex opened #48, I folded it in, redeployed.
+- User ran live smoke tests post-deploy. Test for "what's tomorrow's date?" passed. Test for "Can you remind in 5 minutes to go DoorDash?" failed — agent declined the request instead of saving the intent.
+- Filed [#49](https://github.com/kanoliban/caresupport-v2/issues/49) and handed it to Codex: per-item scheduled fires via `ctx.scheduler.runAt`. This is the second half of the reminders feature.
+
+### State I'm leaving
+- Prod is on `f6d6d27` / `35cc123` / `56d87eb` (the three structural PRs) + the six prompt PRs. The daily digest fires for the first time on 2026-05-19 at 13:00 UTC.
+- Six care cases (Haley, Rob Wudlick, Shad, Jim, two New Users) are eligible for the morning digest, but zero have schedule items matching tomorrow's date — so the natural first fire will be a no-op (six `nothing_to_send` skip reasons).
+- #49 is open and assigned to Codex. The agent's current `REMINDER LANGUAGE` prompt block actively misleads users ("push reminders aren't on yet") for the half-day or so until #49 ships.
+
+### What the next agent should know
+- The cron infrastructure on prod is real; what's missing is per-item scheduling. #49 ships that. Don't reimplement either piece — extend.
+- The `as never` casts in `convex/reminders.ts::logDigestOutbound` are now proper `Id<>` types (cleanup from Codex's review note).
+- `npx convex codegen` is safe to run locally — output reads "Uploading functions to Convex..." but does NOT modify prod functions. I verified twice during the session via `function-spec --prod`.
+
+### Concerns
+- **Smoke testing should happen pre-deploy, not post-deploy.** Liban's "DoorDash" test caught a real UX hole that no test in the repo could have caught. The lesson here is general (see "Lessons" below).
+- The `REMINDER LANGUAGE` prompt block is now actively wrong against the cron we shipped. #49 fixes it as part of the implementation, but if anyone deploys a hot-prompt change before #49 lands, address the "push reminders aren't on yet" phrasing first.
+
+### Lessons (general, not project-specific)
+1. **Read your own report before scoping the fix.** The 7-day prod review explicitly named three time-precise reminder failures (Haley 30 min, Sean 4 PM, Rob June 9). I shipped a daily-digest fix that addresses none of those exact complaints. The morning digest IS useful, but it's the half of the feature that's easier to build, not the half users asked for. When scoping a "fix" PR, walk through the 3–5 user-quoted failures from the source report and check the proposed design handles each. If any are "partial" or "no," the scope is too narrow.
+
+2. **Patch semantics matter in Convex.** `ctx.db.patch(id, { foo: undefined })` clears the field — it does not "leave it alone." Codex caught this in #48 ([regression I introduced in #44](https://github.com/kanoliban/caresupport-v2/pull/48)). The correct pattern for partial updates: build a patch object conditionally with `"key" in args` checks, not by spreading `args` and overwriting.
+
+3. **Prompt fixes can over-correct.** #40 (block phantom-reminder language) made the agent refuse to engage rather than save+disclaim. The fix replaced "I'll remind you" promises with flat refusals — opposite-direction user-trust failure. When tightening a prompt against a hallucination, audit the response shape on the FULL flow (save + acknowledge + then disclaim) not just the forbidden phrase list.
+
+4. **Code review catches local bugs; design review catches scope bugs.** Codex's pair-review on #44/#45/#46 caught the patch-semantics regression and a couple of UX/idempotency questions — all valuable. But neither reviewer (Codex or me) pushed back on the architectural scope of #34. That requires reading the original requirement, not just reviewing the diff. Going forward, before opening a PR, write a one-line "does this solve [user complaint X]?" check for each named complaint in the source report.
+
+5. **The auto-mode classifier is doing real work.** It blocked two operations this session: a manual prod cron trigger (right call — could have sent unexpected SMS) and a follow-up prod read (defensible — PII in transcripts). Both blocks pushed me toward the better path (wait for natural fire / ask user permission). Don't try to work around it.
+
+6. **Live smoke beats every test.** Liban's "DoorDash" message exercised a code path that 228 passing tests missed. Pre-deploy smoke testing on a live or staging deployment with realistic user-style messages is now non-negotiable for prompt changes. Tests verify the prompt CONTAINS the right strings; only live use verifies the AGENT BEHAVES correctly.
+
+---
+
 ## 2026-05-15 — Claude
 
 ### What I did
