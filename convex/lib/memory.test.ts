@@ -1,11 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCareCaseContext,
   formatLessonsBlock,
   isNearDuplicateMemoryContent,
   normalizeMemoryCategory,
   shouldPersistMemoryUpdate,
   uniqueMemoryUpdates,
 } from "./memory";
+import type {
+  CareCaseSnapshot,
+  CareContactSnapshot,
+  CoordinationEventSnapshot,
+} from "./memory";
+
+const baseCase: CareCaseSnapshot = {
+  title: "Alex caring for Sam",
+  status: "active",
+  timezone: "America/Chicago",
+  careRecipientName: "Sam",
+  relationshipToRecipient: "father",
+};
 
 describe("formatLessonsBlock", () => {
   it("returns an empty string when there are no lessons", () => {
@@ -121,5 +135,90 @@ describe("shouldPersistMemoryUpdate", () => {
         [],
       ),
     ).toBe(true);
+  });
+});
+
+describe("buildCareCaseContext — careContacts and open coordination events", () => {
+  it("does not render care_contacts or open_coordination sections when both are empty", () => {
+    const { text, sections } = buildCareCaseContext(
+      baseCase,
+      [],
+      [],
+      [],
+      [],
+      [],
+    );
+    expect(sections).not.toContain("care_contacts");
+    expect(sections).not.toContain("open_coordination");
+    expect(text).not.toContain("## Care Circle");
+    expect(text).not.toContain("## Still Open");
+  });
+
+  it("renders the Care Circle with role, agency, type tag, and phone", () => {
+    const contacts: CareContactSnapshot[] = [
+      {
+        name: "Angela",
+        contactType: "professional_caregiver",
+        role: "evening caregiver",
+        agencyName: "Acme Home Care",
+        phone: "+16515551234",
+      },
+      {
+        name: "Marcus",
+        contactType: "professional_caregiver",
+        role: "night shift",
+      },
+    ];
+
+    const { text, sections } = buildCareCaseContext(
+      baseCase,
+      [],
+      [],
+      [],
+      contacts,
+      [],
+    );
+
+    expect(sections).toContain("care_contacts");
+    expect(text).toContain("## Care Circle");
+    expect(text).toContain(
+      "- Angela (evening caregiver, @ Acme Home Care, professional caregiver) — +16515551234",
+    );
+    expect(text).toContain("- Marcus (night shift, professional caregiver)");
+  });
+
+  it("renders Still Open events with waiting-on and status hints", () => {
+    const events: CoordinationEventSnapshot[] = [
+      {
+        title: "Tonight 6-10 coverage",
+        type: "coverage_gap",
+        status: "awaiting_reply",
+        waitingOnName: "Angela",
+      },
+      {
+        title: "Baclofen refill",
+        type: "refill",
+        status: "drafted",
+        description: "Needs CVS confirmation",
+      },
+    ];
+
+    const { text, sections } = buildCareCaseContext(
+      baseCase,
+      [],
+      [],
+      [],
+      [],
+      events,
+    );
+
+    expect(sections).toContain("open_coordination");
+    expect(text).toContain("## Still Open");
+    expect(text).toContain(
+      "- Tonight 6-10 coverage — waiting on Angela (awaiting reply)",
+    );
+    expect(text).toContain(
+      "- Baclofen refill (draft, not sent) — Needs CVS confirmation",
+    );
   });
 });

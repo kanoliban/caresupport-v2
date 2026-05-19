@@ -89,6 +89,109 @@ describe("extractJson", () => {
     );
     expect(result.memoryArchiveUpdates).toEqual([]);
   });
+
+  it("normalizes care_contact_updates with snake_case nested keys and validates contact type", () => {
+    const result = extractJson(
+      JSON.stringify({
+        sms_response: "Got Angela down.",
+        internal_notes: "",
+        user_profile_update: null,
+        care_case_profile_update: null,
+        user_memory_updates: [],
+        care_case_memory_updates: [],
+        memory_archive_updates: [],
+        self_corrections: [],
+        reactions: [],
+        effect: null,
+        care_contact_updates: [
+          {
+            action: "upsert",
+            name: "Angela",
+            phone: "+16515551234",
+            contact_type: "professional_caregiver",
+            agency_name: "Acme Home Care",
+          },
+          // junk action defaults to upsert; unknown contact_type defaults to "other"
+          { action: "weird", name: "Mystery", contact_type: "wizard" },
+          // blank name dropped
+          { action: "upsert", name: "  ", contact_type: "family" },
+        ],
+      }),
+    );
+
+    expect(result.careContactUpdates).toEqual([
+      {
+        action: "upsert",
+        name: "Angela",
+        phone: "+16515551234",
+        contactType: "professional_caregiver",
+        role: undefined,
+        agencyName: "Acme Home Care",
+        notes: undefined,
+      },
+      {
+        action: "upsert",
+        name: "Mystery",
+        phone: undefined,
+        contactType: "other",
+        role: undefined,
+        agencyName: undefined,
+        notes: undefined,
+      },
+    ]);
+  });
+
+  it("normalizes coordination_event_updates and clamps invalid action/status/type", () => {
+    const result = extractJson(
+      JSON.stringify({
+        sms_response: "Tracking that.",
+        internal_notes: "",
+        user_profile_update: null,
+        care_case_profile_update: null,
+        user_memory_updates: [],
+        care_case_memory_updates: [],
+        memory_archive_updates: [],
+        self_corrections: [],
+        reactions: [],
+        effect: null,
+        coordination_event_updates: [
+          {
+            action: "create",
+            type: "coverage_gap",
+            title: "Tonight 6-10 coverage",
+            status: "awaiting_reply",
+            waiting_on_name: "Angela",
+            draft_message: "Hey Angela, free tonight 6-10?",
+            due_at: 1747600000000,
+          },
+          // invalid action falls back to "create"; invalid type falls back to undefined
+          {
+            action: "bonk",
+            type: "alien",
+            title: "Other thing",
+          },
+          // blank title dropped
+          { action: "create", title: "  " },
+        ],
+      }),
+    );
+
+    expect(result.coordinationEventUpdates).toHaveLength(2);
+    expect(result.coordinationEventUpdates?.[0]).toMatchObject({
+      action: "create",
+      type: "coverage_gap",
+      title: "Tonight 6-10 coverage",
+      status: "awaiting_reply",
+      waitingOnName: "Angela",
+      draftMessage: "Hey Angela, free tonight 6-10?",
+      dueAt: 1747600000000,
+    });
+    expect(result.coordinationEventUpdates?.[1]).toMatchObject({
+      action: "create",
+      type: undefined,
+      title: "Other thing",
+    });
+  });
 });
 
 describe("normalizeResponse", () => {

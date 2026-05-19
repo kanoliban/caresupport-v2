@@ -24,8 +24,9 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   self_corrections: "selfCorrections",
   medication_updates: "medicationUpdates",
   schedule_updates: "scheduleUpdates",
+  care_contact_updates: "careContactUpdates",
+  coordination_event_updates: "coordinationEventUpdates",
   target_message: "targetMessage",
-  match_content: "matchContent",
 };
 
 function normalizeMemoryUpdates(value: unknown) {
@@ -73,6 +74,162 @@ function normalizeMemoryArchiveUpdates(
   return updates;
 }
 
+const VALID_CARE_CONTACT_TYPES = new Set([
+  "family",
+  "professional_caregiver",
+  "agency",
+  "clinician",
+  "other",
+]);
+
+function normalizeCareContactUpdates(
+  value: unknown,
+): AgentResponse["careContactUpdates"] {
+  if (!Array.isArray(value)) return undefined;
+  const updates: NonNullable<AgentResponse["careContactUpdates"]> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!name) continue;
+
+    const action = record.action === "archive" ? "archive" : "upsert";
+    const rawContactType =
+      (record.contactType as unknown) ?? (record.contact_type as unknown);
+    const contactType = VALID_CARE_CONTACT_TYPES.has(
+      typeof rawContactType === "string" ? rawContactType : "",
+    )
+      ? (rawContactType as
+          | "family"
+          | "professional_caregiver"
+          | "agency"
+          | "clinician"
+          | "other")
+      : "other";
+
+    const phone =
+      typeof record.phone === "string" && record.phone.trim()
+        ? record.phone.trim()
+        : undefined;
+    const role =
+      typeof record.role === "string" && record.role.trim()
+        ? record.role.trim()
+        : undefined;
+    const rawAgency =
+      (record.agencyName as unknown) ?? (record.agency_name as unknown);
+    const agencyName =
+      typeof rawAgency === "string" && rawAgency.trim()
+        ? rawAgency.trim()
+        : undefined;
+    const notes =
+      typeof record.notes === "string" && record.notes.trim()
+        ? record.notes.trim()
+        : undefined;
+
+    updates.push({ action, name, phone, contactType, role, agencyName, notes });
+  }
+  return updates;
+}
+
+const VALID_COORDINATION_TYPES = new Set([
+  "coverage_gap",
+  "confirmation",
+  "refill",
+  "followup",
+  "other",
+]);
+
+const VALID_COORDINATION_STATUSES = new Set([
+  "drafted",
+  "awaiting_reply",
+  "resolved",
+  "abandoned",
+]);
+
+const VALID_COORDINATION_ACTIONS = new Set([
+  "create",
+  "update",
+  "resolve",
+  "abandon",
+]);
+
+function normalizeCoordinationEventUpdates(
+  value: unknown,
+): AgentResponse["coordinationEventUpdates"] {
+  if (!Array.isArray(value)) return undefined;
+  const updates: NonNullable<AgentResponse["coordinationEventUpdates"]> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+
+    const title = typeof record.title === "string" ? record.title.trim() : "";
+    if (!title) continue;
+
+    const rawAction = typeof record.action === "string" ? record.action : "";
+    const action = VALID_COORDINATION_ACTIONS.has(rawAction)
+      ? (rawAction as "create" | "update" | "resolve" | "abandon")
+      : "create";
+
+    const rawType = typeof record.type === "string" ? record.type : "";
+    const type = VALID_COORDINATION_TYPES.has(rawType)
+      ? (rawType as
+          | "coverage_gap"
+          | "confirmation"
+          | "refill"
+          | "followup"
+          | "other")
+      : undefined;
+
+    const rawStatus = typeof record.status === "string" ? record.status : "";
+    const status = VALID_COORDINATION_STATUSES.has(rawStatus)
+      ? (rawStatus as
+          | "drafted"
+          | "awaiting_reply"
+          | "resolved"
+          | "abandoned")
+      : undefined;
+
+    const description =
+      typeof record.description === "string" && record.description.trim()
+        ? record.description.trim()
+        : undefined;
+    const rawWaitingOn =
+      (record.waitingOnName as unknown) ?? (record.waiting_on_name as unknown);
+    const waitingOnName =
+      typeof rawWaitingOn === "string" && rawWaitingOn.trim()
+        ? rawWaitingOn.trim()
+        : undefined;
+    const rawDraft =
+      (record.draftMessage as unknown) ?? (record.draft_message as unknown);
+    const draftMessage =
+      typeof rawDraft === "string" && rawDraft.trim()
+        ? rawDraft.trim()
+        : undefined;
+    const rawDueAt = (record.dueAt as unknown) ?? (record.due_at as unknown);
+    const dueAt = typeof rawDueAt === "number" ? rawDueAt : undefined;
+    const rawResolution =
+      (record.resolutionNote as unknown) ?? (record.resolution_note as unknown);
+    const resolutionNote =
+      typeof rawResolution === "string" && rawResolution.trim()
+        ? rawResolution.trim()
+        : undefined;
+
+    updates.push({
+      action,
+      type,
+      title,
+      description,
+      status,
+      waitingOnName,
+      draftMessage,
+      dueAt,
+      resolutionNote,
+    });
+  }
+  return updates;
+}
+
 export function normalizeResponse(parsed: Record<string, unknown>): AgentResponse {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed)) {
@@ -105,6 +262,10 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
     scheduleUpdates: Array.isArray(result.scheduleUpdates)
       ? (result.scheduleUpdates as AgentResponse["scheduleUpdates"])
       : undefined,
+    careContactUpdates: normalizeCareContactUpdates(result.careContactUpdates),
+    coordinationEventUpdates: normalizeCoordinationEventUpdates(
+      result.coordinationEventUpdates,
+    ),
   };
 }
 

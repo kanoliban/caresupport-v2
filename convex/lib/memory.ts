@@ -47,6 +47,33 @@ export interface ScheduleItemSnapshot {
   status: string;
 }
 
+export interface CareContactSnapshot {
+  name: string;
+  contactType:
+    | "family"
+    | "professional_caregiver"
+    | "agency"
+    | "clinician"
+    | "other";
+  role?: string;
+  agencyName?: string;
+  phone?: string;
+}
+
+export interface CoordinationEventSnapshot {
+  title: string;
+  type:
+    | "coverage_gap"
+    | "confirmation"
+    | "refill"
+    | "followup"
+    | "other";
+  status: "drafted" | "awaiting_reply" | "resolved" | "abandoned";
+  waitingOnName?: string;
+  description?: string;
+  dueAt?: number;
+}
+
 export interface MemoryUpdateInstruction {
   category: MemoryCategory;
   content: string;
@@ -285,6 +312,8 @@ export function buildCareCaseContext(
   medications: MedicationSnapshot[],
   scheduleItems: ScheduleItemSnapshot[],
   entries: MemoryEntryLike[],
+  careContacts: CareContactSnapshot[] = [],
+  openCoordinationEvents: CoordinationEventSnapshot[] = [],
 ): { text: string; sections: string[]; lessons: string[] } {
   const sections: string[] = ["care_case_profile"];
   const lines = [
@@ -346,6 +375,35 @@ export function buildCareCaseContext(
     lines.push("", "## Care Notes");
     for (const entry of careNotes) {
       lines.push(`- ${entry.content}`);
+    }
+  }
+
+  if (careContacts.length > 0) {
+    sections.push("care_contacts");
+    lines.push("", "## Care Circle");
+    for (const contact of careContacts) {
+      const parts: string[] = [contact.name];
+      const roleBits: string[] = [];
+      if (contact.role) roleBits.push(contact.role);
+      if (contact.agencyName) roleBits.push(`@ ${contact.agencyName}`);
+      const tag = contact.contactType.replace(/_/g, " ");
+      roleBits.push(tag);
+      parts.push(`(${roleBits.join(", ")})`);
+      if (contact.phone) parts.push(`— ${contact.phone}`);
+      lines.push(`- ${parts.join(" ")}`);
+    }
+  }
+
+  if (openCoordinationEvents.length > 0) {
+    sections.push("open_coordination");
+    lines.push("", "## Still Open");
+    for (const event of openCoordinationEvents) {
+      const parts: string[] = [event.title];
+      if (event.waitingOnName) parts.push(`— waiting on ${event.waitingOnName}`);
+      if (event.status === "drafted") parts.push("(draft, not sent)");
+      else if (event.status === "awaiting_reply") parts.push("(awaiting reply)");
+      if (event.description) parts.push(`— ${event.description}`);
+      lines.push(`- ${parts.join(" ")}`);
     }
   }
 

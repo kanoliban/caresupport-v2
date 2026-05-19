@@ -578,6 +578,59 @@ export const handleMessage = internalAction({
       }
     }
 
+    if (parsed.careContactUpdates?.length) {
+      const result = await ctx.runMutation(internal.mutations.upsertCareContacts, {
+        careCaseId,
+        updates: parsed.careContactUpdates,
+      });
+      if (result.upserted > 0 || result.archived > 0) {
+        for (const update of parsed.careContactUpdates) {
+          await ctx.runMutation(internal.mutations.logAudit, {
+            careCaseId,
+            userId,
+            event:
+              update.action === "archive"
+                ? "care_contact_archived"
+                : "care_contact_upserted",
+            phone: senderPhone,
+            details: { careContactName: update.name },
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
+    if (parsed.coordinationEventUpdates?.length) {
+      const result = await ctx.runMutation(
+        internal.mutations.upsertCoordinationEvents,
+        {
+          careCaseId,
+          userId,
+          updates: parsed.coordinationEventUpdates,
+        },
+      );
+      for (const outcome of result.outcomes) {
+        const event =
+          outcome.outcome === "created"
+            ? "coordination_event_created"
+            : outcome.outcome === "resolved" || outcome.outcome === "abandoned"
+              ? "coordination_event_resolved"
+              : "coordination_event_updated";
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId,
+          userId,
+          event,
+          phone: senderPhone,
+          details: {
+            coordinationEventTitle: outcome.title,
+            coordinationEventStatus: outcome.status,
+            coordinationEventType: outcome.type,
+          },
+          timestamp: Date.now(),
+        });
+      }
+    }
+
     await ctx.runMutation(internal.mutations.logAudit, {
       careCaseId,
       userId,

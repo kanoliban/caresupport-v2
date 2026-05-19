@@ -123,6 +123,48 @@ export interface ScheduleUpdate {
   provider?: string;
 }
 
+export type CareContactType =
+  | "family"
+  | "professional_caregiver"
+  | "agency"
+  | "clinician"
+  | "other";
+
+export interface CareContactUpdate {
+  action: "upsert" | "archive";
+  name: string;
+  phone?: string;
+  contactType: CareContactType;
+  role?: string;
+  agencyName?: string;
+  notes?: string;
+}
+
+export type CoordinationEventType =
+  | "coverage_gap"
+  | "confirmation"
+  | "refill"
+  | "followup"
+  | "other";
+
+export type CoordinationEventStatus =
+  | "drafted"
+  | "awaiting_reply"
+  | "resolved"
+  | "abandoned";
+
+export interface CoordinationEventUpdate {
+  action: "create" | "update" | "resolve" | "abandon";
+  type?: CoordinationEventType;
+  title: string;
+  description?: string;
+  status?: CoordinationEventStatus;
+  waitingOnName?: string;
+  draftMessage?: string;
+  dueAt?: number;
+  resolutionNote?: string;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
@@ -136,4 +178,6 @@ export interface AgentResponse {
   effect: EffectRequest | null;
   medicationUpdates?: MedicationUpdate[];
   scheduleUpdates?: ScheduleUpdate[];
+  careContactUpdates?: CareContactUpdate[];
+  coordinationEventUpdates?: CoordinationEventUpdate[];
 }

@@ -60,6 +60,34 @@ const eventValidator = v.union(
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
   v.literal("memory_archived"),
+  v.literal("care_contact_upserted"),
+  v.literal("care_contact_archived"),
+  v.literal("coordination_event_created"),
+  v.literal("coordination_event_updated"),
+  v.literal("coordination_event_resolved"),
+);
+
+const careContactTypeValidator = v.union(
+  v.literal("family"),
+  v.literal("professional_caregiver"),
+  v.literal("agency"),
+  v.literal("clinician"),
+  v.literal("other"),
+);
+
+const coordinationEventTypeValidator = v.union(
+  v.literal("coverage_gap"),
+  v.literal("confirmation"),
+  v.literal("refill"),
+  v.literal("followup"),
+  v.literal("other"),
+);
+
+const coordinationEventStatusValidator = v.union(
+  v.literal("drafted"),
+  v.literal("awaiting_reply"),
+  v.literal("resolved"),
+  v.literal("abandoned"),
 );
 
 const detailsValidator = v.object({
@@ -79,6 +107,10 @@ const detailsValidator = v.object({
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
   archivedScopes: v.optional(v.array(v.string())),
+  careContactName: v.optional(v.string()),
+  coordinationEventTitle: v.optional(v.string()),
+  coordinationEventStatus: v.optional(v.string()),
+  coordinationEventType: v.optional(v.string()),
 });
 
 const scheduleTypeValidator = v.union(
@@ -458,7 +490,15 @@ export const getCompiledPromptContext = internalMutation({
     careCaseId: v.id("careCases"),
   },
   handler: async (ctx, args) => {
-    const [user, careCase, medications, scheduleItems, memoryEntries] = await Promise.all([
+    const [
+      user,
+      careCase,
+      medications,
+      scheduleItems,
+      memoryEntries,
+      careContacts,
+      openCoordinationEvents,
+    ] = await Promise.all([
       ctx.db.get(args.userId),
       ctx.db.get(args.careCaseId),
       ctx.db
@@ -477,6 +517,22 @@ export const getCompiledPromptContext = internalMutation({
         .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
         .filter((q) => q.eq(q.field("active"), true))
         .collect(),
+      ctx.db
+        .query("careContacts")
+        .withIndex("by_care_case_active", (q) =>
+          q.eq("careCaseId", args.careCaseId).eq("active", true),
+        )
+        .collect(),
+      ctx.db
+        .query("coordinationEvents")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+        .filter((q) =>
+          q.or(
+            q.eq(q.field("status"), "drafted"),
+            q.eq(q.field("status"), "awaiting_reply"),
+          ),
+        )
+        .collect(),
     ]);
 
     if (!user || !careCase) {
@@ -489,6 +545,21 @@ export const getCompiledPromptContext = internalMutation({
       medications,
       scheduleItems,
       memoryEntries,
+      careContacts.map((c) => ({
+        name: c.name,
+        contactType: c.contactType,
+        role: c.role,
+        agencyName: c.agencyName,
+        phone: c.phone,
+      })),
+      openCoordinationEvents.map((e) => ({
+        title: e.title,
+        type: e.type,
+        status: e.status,
+        waitingOnName: e.waitingOnName,
+        description: e.description,
+        dueAt: e.dueAt,
+      })),
     );
 
     return {
@@ -601,5 +672,239 @@ export const upsertScheduleItem = internalMutation({
         status: "scheduled",
       });
     }
+  },
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// M4: careContacts + coordinationEvents (V1 multiplayer primitives)
+// ────────────────────────────────────────────────────────────────────────
+
+const careContactUpdateValidator = v.object({
+  action: v.union(v.literal("upsert"), v.literal("archive")),
+  name: v.string(),
+  phone: v.optional(v.string()),
+  contactType: careContactTypeValidator,
+  role: v.optional(v.string()),
+  agencyName: v.optional(v.string()),
+  notes: v.optional(v.string()),
+});
+
+export const upsertCareContacts = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    updates: v.array(careContactUpdateValidator),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    let upserted = 0;
+    let archived = 0;
+
+    for (const update of args.updates) {
+      const name = update.name.trim();
+      if (!name) continue;
+
+      const existing = await ctx.db
+        .query("careContacts")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+        .filter((q) => q.eq(q.field("name"), name))
+        .first();
+
+      if (update.action === "archive") {
+        if (existing && existing.active) {
+          await ctx.db.patch(existing._id, { active: false, updatedAt: now });
+          archived += 1;
+        }
+        continue;
+      }
+
+      if (existing) {
+        const patch: Record<string, unknown> = { updatedAt: now, active: true };
+        if (update.phone) patch.phone = update.phone;
+        if (update.contactType) patch.contactType = update.contactType;
+        if (update.role) patch.role = update.role;
+        if (update.agencyName) patch.agencyName = update.agencyName;
+        if (update.notes) patch.notes = update.notes;
+        await ctx.db.patch(existing._id, patch);
+        upserted += 1;
+      } else {
+        await ctx.db.insert("careContacts", {
+          careCaseId: args.careCaseId,
+          name,
+          phone: update.phone,
+          contactType: update.contactType,
+          role: update.role,
+          agencyName: update.agencyName,
+          notes: update.notes,
+          active: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+        upserted += 1;
+      }
+    }
+
+    return { upserted, archived };
+  },
+});
+
+const coordinationEventUpdateValidator = v.object({
+  action: v.union(
+    v.literal("create"),
+    v.literal("update"),
+    v.literal("resolve"),
+    v.literal("abandon"),
+  ),
+  type: v.optional(coordinationEventTypeValidator),
+  title: v.string(),
+  description: v.optional(v.string()),
+  status: v.optional(coordinationEventStatusValidator),
+  waitingOnName: v.optional(v.string()),
+  draftMessage: v.optional(v.string()),
+  dueAt: v.optional(v.number()),
+  resolutionNote: v.optional(v.string()),
+});
+
+export const upsertCoordinationEvents = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    updates: v.array(coordinationEventUpdateValidator),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    type EventOutcome = "created" | "updated" | "resolved" | "abandoned";
+    const outcomes: { title: string; outcome: EventOutcome; status: string; type: string }[] = [];
+
+    for (const update of args.updates) {
+      const title = update.title.trim();
+      if (!title) continue;
+
+      // Match by title within open statuses to avoid stomping unrelated past events.
+      const existing = await ctx.db
+        .query("coordinationEvents")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("title"), title),
+            q.or(
+              q.eq(q.field("status"), "drafted"),
+              q.eq(q.field("status"), "awaiting_reply"),
+            ),
+          ),
+        )
+        .first();
+
+      // Optional waiting-on contact lookup (best-effort by name).
+      let waitingOnContact = null;
+      if (update.waitingOnName) {
+        waitingOnContact = await ctx.db
+          .query("careContacts")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("name"), update.waitingOnName),
+              q.eq(q.field("active"), true),
+            ),
+          )
+          .first();
+      }
+      const waitingOnId = waitingOnContact?._id;
+
+      if (update.action === "create") {
+        if (existing) {
+          // already exists in open state → treat as update
+          const patch: Record<string, unknown> = { updatedAt: now };
+          if (update.description) patch.description = update.description;
+          if (update.status) patch.status = update.status;
+          if (update.waitingOnName) patch.waitingOnName = update.waitingOnName;
+          if (waitingOnId) patch.waitingOnContactId = waitingOnId;
+          if (update.draftMessage) patch.draftMessage = update.draftMessage;
+          if (update.dueAt) patch.dueAt = update.dueAt;
+          await ctx.db.patch(existing._id, patch);
+          outcomes.push({
+            title,
+            outcome: "updated",
+            status: update.status ?? existing.status,
+            type: existing.type,
+          });
+        } else {
+          const type = update.type ?? "other";
+          await ctx.db.insert("coordinationEvents", {
+            careCaseId: args.careCaseId,
+            createdByUserId: args.userId,
+            type,
+            status: update.status ?? "drafted",
+            title,
+            description: update.description,
+            waitingOnContactId: waitingOnId,
+            waitingOnName: update.waitingOnName,
+            draftMessage: update.draftMessage,
+            dueAt: update.dueAt,
+            createdAt: now,
+            updatedAt: now,
+          });
+          outcomes.push({
+            title,
+            outcome: "created",
+            status: update.status ?? "drafted",
+            type,
+          });
+        }
+        continue;
+      }
+
+      if (!existing) {
+        // can't update/resolve/abandon what doesn't exist
+        continue;
+      }
+
+      if (update.action === "resolve") {
+        await ctx.db.patch(existing._id, {
+          status: "resolved",
+          resolutionNote: update.resolutionNote,
+          updatedAt: now,
+        });
+        outcomes.push({
+          title,
+          outcome: "resolved",
+          status: "resolved",
+          type: existing.type,
+        });
+        continue;
+      }
+
+      if (update.action === "abandon") {
+        await ctx.db.patch(existing._id, {
+          status: "abandoned",
+          resolutionNote: update.resolutionNote,
+          updatedAt: now,
+        });
+        outcomes.push({
+          title,
+          outcome: "abandoned",
+          status: "abandoned",
+          type: existing.type,
+        });
+        continue;
+      }
+
+      // action === "update"
+      const patch: Record<string, unknown> = { updatedAt: now };
+      if (update.description) patch.description = update.description;
+      if (update.status) patch.status = update.status;
+      if (update.waitingOnName) patch.waitingOnName = update.waitingOnName;
+      if (waitingOnId) patch.waitingOnContactId = waitingOnId;
+      if (update.draftMessage) patch.draftMessage = update.draftMessage;
+      if (update.dueAt) patch.dueAt = update.dueAt;
+      await ctx.db.patch(existing._id, patch);
+      outcomes.push({
+        title,
+        outcome: "updated",
+        status: update.status ?? existing.status,
+        type: existing.type,
+      });
+    }
+
+    return { outcomes };
   },
 });

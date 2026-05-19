@@ -74,6 +74,34 @@ const auditEvent = v.union(
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
   v.literal("memory_archived"),
+  v.literal("care_contact_upserted"),
+  v.literal("care_contact_archived"),
+  v.literal("coordination_event_created"),
+  v.literal("coordination_event_updated"),
+  v.literal("coordination_event_resolved"),
+);
+
+const careContactType = v.union(
+  v.literal("family"),
+  v.literal("professional_caregiver"),
+  v.literal("agency"),
+  v.literal("clinician"),
+  v.literal("other"),
+);
+
+const coordinationEventType = v.union(
+  v.literal("coverage_gap"),
+  v.literal("confirmation"),
+  v.literal("refill"),
+  v.literal("followup"),
+  v.literal("other"),
+);
+
+const coordinationEventStatus = v.union(
+  v.literal("drafted"),
+  v.literal("awaiting_reply"),
+  v.literal("resolved"),
+  v.literal("abandoned"),
 );
 
 const auditDetails = v.object({
@@ -93,6 +121,10 @@ const auditDetails = v.object({
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
   archivedScopes: v.optional(v.array(v.string())),
+  careContactName: v.optional(v.string()),
+  coordinationEventTitle: v.optional(v.string()),
+  coordinationEventStatus: v.optional(v.string()),
+  coordinationEventType: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -199,4 +231,47 @@ export default defineSchema({
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
     .index("by_event", ["event"]),
+
+  // V1 multiplayer primitive (M4). Minimal field set — name, phone, role,
+  // agency, plus contactType for routing and active for soft-delete. Do not
+  // pre-build availability windows or permission state; grow with evidence.
+  careContacts: defineTable({
+    careCaseId: v.id("careCases"),
+    name: v.string(),
+    phone: v.optional(v.string()),
+    contactType: careContactType,
+    role: v.optional(v.string()),
+    agencyName: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_active", ["careCaseId", "active"]),
+
+  // V1 coordination primitive (M4). Status set is intentionally narrow
+  // (drafted → awaiting_reply → resolved / abandoned). The richer state
+  // machine in docs/rob-care-operations-model.md (pending/confirmed/declined
+  // contact arrays, escalation timing) is deferred until the first relief
+  // loop ships and produces evidence.
+  coordinationEvents: defineTable({
+    careCaseId: v.id("careCases"),
+    createdByUserId: v.id("users"),
+    type: coordinationEventType,
+    status: coordinationEventStatus,
+    title: v.string(),
+    description: v.optional(v.string()),
+    waitingOnContactId: v.optional(v.id("careContacts")),
+    waitingOnName: v.optional(v.string()),
+    draftMessage: v.optional(v.string()),
+    relatedScheduleItemId: v.optional(v.id("scheduleItems")),
+    sourceMessageId: v.optional(v.id("messages")),
+    dueAt: v.optional(v.number()),
+    resolutionNote: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_status", ["careCaseId", "status"]),
 });
