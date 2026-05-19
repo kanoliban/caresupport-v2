@@ -8,6 +8,35 @@ Read the last 2-3 entries before starting work.
 ## 2026-05-19 - Codex
 
 ### What I did
+- Created branch `codex/family-runtime-alignment`.
+- Committed the documentation/product alignment pass as `7944f77`.
+- Updated runtime prompt and handler boundary language so unsupported third-party coordination is framed as "not executable yet," not as a solo-only product identity.
+- Added `careContacts` and `coordinationEvents` Convex tables, scoped CRUD/list modules, care-case isolation checks for cross-contact references, admin reset/count support, and prompt-context rendering for active contacts plus open/waiting coordination events.
+- Added regression coverage for contact scoping, coordination-event scoping, prompt context rendering, and updated boundary wording.
+
+### State I'm leaving
+- Runtime work is committed locally as `44bf59e`.
+- Verification passed:
+  - `npx vitest run convex/careContacts.test.ts convex/coordinationEvents.test.ts convex/mutations.test.ts convex/handler.test.ts convex/lib/promptContent.test.ts convex/lib/pipeline/promptBuilder.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test` (236/236 passing)
+- `npm install` was run because `node_modules` was absent in this checkout.
+- `CONVEX_DEPLOYMENT=prod:keen-raccoon-606 npx convex codegen --typecheck disable` generated local Convex bindings. The command reported "Uploading functions to Convex"; no data reset/import/destructive command was run.
+
+### What the next agent should know
+- `careContacts` and `coordinationEvents` now exist as substrate and are loaded into prompt context when present.
+- The model still cannot create contacts/events from structured output. There is no outbound outreach and no tool execution.
+- Next implementation step should be a narrow model-write path for contact/event capture, or `toolActions` + `userToolPermissions` if moving toward approved outreach.
+
+### Concerns
+- Because Convex codegen was pointed at the prod deployment name to get generated types on this machine, verify deployment state before assuming prod is still exactly on `origin/main`.
+- Do not add outbound messaging to caregivers until permission rules, persisted action state, provider failure handling, and audit records exist.
+
+---
+
+## 2026-05-19 - Codex
+
+### What I did
 - Reviewed issue #52, the canonical docs, the newer Rob/product/tool docs, and the current open PR list (#50 agent-log only, #28 Claude workflow only).
 - Realigned the active docs around CareSupport as a multiplayer, one-to-many family care coordination runtime with the solo thread as the current wedge, not the final identity.
 - Updated `README.md`, `CLAUDE.md`, `SOUL.md`, `docs/design.md`, `AGENTS.md`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/onboarding.md`, `docs/concierge-beta.md`, and `docs/product-specs/sms-care-coordination.md`.
