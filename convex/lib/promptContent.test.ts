@@ -123,18 +123,30 @@ describe("SOUL_CONTENT", () => {
     expect(SKILLS_CONTENT).toContain("You never send the message yourself");
   });
 
-  it("instructs the model to extract all onboarding slots from one message when possible", () => {
+  it("asks for FOUR onboarding slots including the coordination burden", () => {
     // #given the SKILLS_CONTENT Onboarding block
-    // #then it tells the model to extract multiple slots at once
+    // #then the four slots are named: name, care recipient, burden, first surface
+    expect(SKILLS_CONTENT).toContain("## Onboarding");
+    expect(SKILLS_CONTENT).toContain("FOUR things to leave onboarding");
+    expect(SKILLS_CONTENT).toContain("the user's name");
+    expect(SKILLS_CONTENT).toContain("who they are caring for");
+    expect(SKILLS_CONTENT).toContain("coordination burden");
     expect(SKILLS_CONTENT).toContain(
-      "EXTRACT ALL THREE FROM A SINGLE MESSAGE WHEN POSSIBLE",
+      "which surface to start helping on first",
     );
+
+    // #and the burden is captured as a [burden]-prefixed care_note
     expect(SKILLS_CONTENT).toContain(
-      "Do not re-ask for slots the user already gave",
+      'content: "[burden] <user\'s words, lightly paraphrased>"',
+    );
+
+    // #and the model still extracts everything from one message when possible
+    expect(SKILLS_CONTENT).toContain(
+      "EXTRACT ALL FOUR FROM A SINGLE MESSAGE WHEN POSSIBLE",
     );
   });
 
-  it("tells the model to flip care case status to active once onboarding slots are filled", () => {
+  it("tells the model to flip care case status to active only after slots + first record exist", () => {
     // #given the prompt contents
     // #then both ROUTING and SKILLS reflect the slot→active transition
     expect(SKILLS_CONTENT).toContain(
@@ -142,6 +154,18 @@ describe("SOUL_CONTENT", () => {
     );
     expect(SKILLS_CONTENT).toContain(
       "do not ask onboarding-style questions again",
+    );
+    // #and the ROUTING_CONTENT requires the four slots + first concrete record
+    expect(ROUTING_CONTENT).toContain("all four are known");
+    expect(ROUTING_CONTENT).toContain("first concrete record");
+  });
+
+  it("opens onboarding with a learning-posture greeting, not a setup-wizard frame", () => {
+    expect(SKILLS_CONTENT).toContain(
+      "I'm here to learn how care works in your family",
+    );
+    expect(SKILLS_CONTENT).toContain(
+      "What's the part of coordination that keeps falling back on you?",
     );
   });
 

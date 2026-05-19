@@ -72,14 +72,20 @@ describe("buildSystemBlocks", () => {
     expect(breakpoints[1].text).toContain("YOU ARE TEXTING WITH: Alex");
   });
 
-  it("includes onboarding guidance when intent is onboarding", () => {
+  it("includes learning-posture onboarding guidance with the burden slot", () => {
     const blocks = buildSystemBlocks(makeInput({ intent: "ONBOARDING" }));
     const onboardingBlock = blocks.find((block) =>
       block.text.includes("INTENT: ONBOARDING"),
     );
 
     expect(onboardingBlock).toBeDefined();
-    expect(onboardingBlock?.text).toContain("Learn their name first");
+    expect(onboardingBlock?.text).toContain("meeting this family for the first time");
+    expect(onboardingBlock?.text).toContain("Ask ONE question at a time");
+    expect(onboardingBlock?.text).toContain("the burden");
+    expect(onboardingBlock?.text).toContain("[burden]");
+    expect(onboardingBlock?.text).toContain(
+      "When extracting from a single message",
+    );
   });
 
   it("renders the care case context block", () => {

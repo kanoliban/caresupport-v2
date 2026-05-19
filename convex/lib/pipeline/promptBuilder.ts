@@ -105,9 +105,11 @@ function intentGuidance(intent: Intent | string): string {
     case "ONBOARDING":
       return [
         "── INTENT: ONBOARDING ──",
-        "Ask one question at a time.",
-        "Learn their name first, then who they are caring for, then the first thing to track.",
-        "Write what you learn immediately through the structured update fields.",
+        "You are meeting this family for the first time. Be honest that you are learning.",
+        "Ask ONE question at a time. Do NOT stack questions.",
+        "Follow the Onboarding skill below: greet honestly → who are we caring for → the burden (\"what part of coordination keeps falling back on you?\") → which surface to start helping on → first concrete record → reflect what you've learned and set status to active.",
+        "Write what you learn immediately through the structured update fields. Save the burden as a care_case_memory_update with category care_note and content prefixed \"[burden]\".",
+        "When extracting from a single message, take everything the user gave (name + recipient + burden + first surface in one message is fine — don't re-ask).",
       ].join("\n");
     case "MEDICATION_CHANGE":
       return [
