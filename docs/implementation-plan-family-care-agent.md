@@ -100,7 +100,7 @@ I can start by remembering what matters and helping you keep track. As I learn t
 
 ## Current State
 
-The active product is solo-native: one user, one care case, one persistent thread.
+The active runtime is solo-thread native: one user, one care case, one persistent thread.
 
 That is still correct for the beta, but onboarding should not frame the product as a solo caregiver app. It should frame the solo relationship as the beginning of CareSupport learning the family care system.
 
@@ -396,7 +396,7 @@ openLoops: defineTable({
 
 ## Current State
 
-The active design defers family/network entities, access tiers, outreach, approvals, and group chats.
+The active runtime does not yet implement family/network entities, access tiers, outreach, approvals, or group chats.
 
 ## Needed Change
 
@@ -465,7 +465,7 @@ Covered. Angela can do Tuesday 5-8. I added it to the schedule and noted that Ma
 
 Multiple family members can text CareSupport with role-aware context and privacy controls.
 
-This is where access levels, group chats, approvals, and PHI filtering return.
+This is where role-aware visibility, group chats, approval flows, and PHI filtering return in a redesigned form.
 
 ## Important Principle
 

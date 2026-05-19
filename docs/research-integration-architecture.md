@@ -16,6 +16,22 @@ CareSupport should not make Rob leave the thread to finish the work.
 
 Conversation is the interface. Tools are how the work gets done.
 
+## Current Runtime Status
+
+The active runtime can persist `careContacts` and `coordinationEvents` as scoped
+care-case substrate and load active contacts plus open coordination events into
+prompt context.
+
+It cannot yet create those records from model output, execute external tool
+actions, contact third parties, sync calendars/email, or manage reusable tool
+permissions.
+
+Research should not directly expand assistant claims. If research shows users
+want CareSupport to text caregivers or update calendars, the repo still needs
+schema support, permission checks, action lifecycle records, provider execution,
+failure handling, tests, and audit logs before the assistant may claim the work
+was done.
+
 ## What Products Like Poke-Style Assistants Generally Need
 
 The exact internal stack of products like Poke is not reliably public. Do not assume their specific vendor or implementation.

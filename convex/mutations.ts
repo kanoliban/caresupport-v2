@@ -406,7 +406,16 @@ export const getCompiledPromptContext = internalMutation({
     careCaseId: v.id("careCases"),
   },
   handler: async (ctx, args) => {
-    const [user, careCase, medications, scheduleItems, memoryEntries] = await Promise.all([
+    const [
+      user,
+      careCase,
+      medications,
+      scheduleItems,
+      memoryEntries,
+      careContacts,
+      openCoordinationEvents,
+      waitingCoordinationEvents,
+    ] = await Promise.all([
       ctx.db.get(args.userId),
       ctx.db.get(args.careCaseId),
       ctx.db
@@ -425,6 +434,24 @@ export const getCompiledPromptContext = internalMutation({
         .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
         .filter((q) => q.eq(q.field("active"), true))
         .collect(),
+      ctx.db
+        .query("careContacts")
+        .withIndex("by_care_case_active", (q) =>
+          q.eq("careCaseId", args.careCaseId).eq("active", true),
+        )
+        .collect(),
+      ctx.db
+        .query("coordinationEvents")
+        .withIndex("by_care_case_status", (q) =>
+          q.eq("careCaseId", args.careCaseId).eq("status", "open"),
+        )
+        .collect(),
+      ctx.db
+        .query("coordinationEvents")
+        .withIndex("by_care_case_status", (q) =>
+          q.eq("careCaseId", args.careCaseId).eq("status", "waiting"),
+        )
+        .collect(),
     ]);
 
     if (!user || !careCase) {
@@ -437,6 +464,8 @@ export const getCompiledPromptContext = internalMutation({
       medications,
       scheduleItems,
       memoryEntries,
+      careContacts,
+      [...openCoordinationEvents, ...waitingCoordinationEvents],
     );
 
     return {

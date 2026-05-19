@@ -205,6 +205,59 @@ describe("getCompiledPromptContext", () => {
     expect(compiled?.careCaseContext).toContain("Lisinopril 10mg");
     expect(compiled?.careCaseContext).toContain("Cardiology visit");
   });
+
+  it("renders care contacts and open coordination events into prompt context", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      {
+        phone: "+16517030005",
+        chatId: "chat-5",
+      },
+    );
+
+    const angelaId = await t.mutation(api.careContacts.create, {
+      careCaseId,
+      name: "Angela",
+      phone: "+16515554001",
+      relationship: "evening caregiver",
+      contactType: "professional_caregiver",
+      role: "evening coverage",
+      contactPriority: 1,
+      availabilityNotes: "Prefers 6-10 shifts",
+      consentToContact: false,
+    });
+    const marcusId = await t.mutation(api.careContacts.create, {
+      careCaseId,
+      name: "Marcus",
+      contactType: "family",
+      contactPriority: 2,
+    });
+
+    await t.mutation(api.coordinationEvents.create, {
+      careCaseId,
+      type: "coverage_gap",
+      title: "Tonight 6-10 coverage gap",
+      status: "waiting",
+      urgency: "high",
+      description: "Tasha cancelled and Rob needs replacement coverage.",
+      pendingContactIds: [angelaId],
+      fallbackOrderContactIds: [angelaId, marcusId],
+    });
+
+    const compiled = await t.mutation(internal.mutations.getCompiledPromptContext, {
+      userId,
+      careCaseId,
+    });
+
+    expect(compiled?.contextSections).toContain("care_contacts");
+    expect(compiled?.contextSections).toContain("coordination_events");
+    expect(compiled?.careCaseContext).toContain("Angela [professional_caregiver]");
+    expect(compiled?.careCaseContext).toContain("outreach consent no");
+    expect(compiled?.careCaseContext).toContain("[waiting/high/coverage_gap] Tonight 6-10 coverage gap");
+    expect(compiled?.careCaseContext).toContain("pending: Angela");
+    expect(compiled?.careCaseContext).toContain("fallback: Angela, Marcus");
+  });
 });
 
 describe("upsertScheduleItem validation", () => {

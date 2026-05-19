@@ -47,6 +47,40 @@ export interface ScheduleItemSnapshot {
   status: string;
 }
 
+export interface CareContactSnapshot {
+  _id: string;
+  name: string;
+  phone?: string;
+  relationship?: string;
+  contactType: string;
+  agencyName?: string;
+  role?: string;
+  availabilityNotes?: string;
+  contactPriority?: number;
+  canReceiveTexts: boolean;
+  consentToContact?: boolean;
+  active: boolean;
+  notes?: string;
+}
+
+export interface CoordinationEventSnapshot {
+  type: string;
+  title: string;
+  status: string;
+  urgency: string;
+  description?: string;
+  startsAt?: number;
+  endsAt?: number;
+  originalAssigneeContactId?: string;
+  confirmedContactIds?: string[];
+  pendingContactIds?: string[];
+  declinedContactIds?: string[];
+  fallbackOrderContactIds?: string[];
+  nextActionAt?: number;
+  escalationAt?: number;
+  resolution?: string;
+}
+
 export interface MemoryUpdateInstruction {
   category: MemoryCategory;
   content: string;
@@ -277,6 +311,8 @@ export function buildCareCaseContext(
   medications: MedicationSnapshot[],
   scheduleItems: ScheduleItemSnapshot[],
   entries: MemoryEntryLike[],
+  careContacts: CareContactSnapshot[] = [],
+  coordinationEvents: CoordinationEventSnapshot[] = [],
 ): { text: string; sections: string[]; lessons: string[] } {
   const sections: string[] = ["care_case_profile"];
   const lines = [
@@ -325,6 +361,70 @@ export function buildCareCaseContext(
     }
   }
 
+  const activeContacts = [...careContacts]
+    .filter((contact) => contact.active)
+    .sort((a, b) => {
+      const priorityA = a.contactPriority ?? Number.MAX_SAFE_INTEGER;
+      const priorityB = b.contactPriority ?? Number.MAX_SAFE_INTEGER;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      return a.name.localeCompare(b.name);
+    });
+
+  if (activeContacts.length > 0) {
+    sections.push("care_contacts");
+    lines.push("", "## Care Contacts");
+    for (const contact of activeContacts) {
+      const details = [
+        contact.relationship,
+        contact.role,
+        contact.agencyName,
+        contact.phone,
+        contact.canReceiveTexts ? "textable" : "not textable",
+        contact.consentToContact === true
+          ? "outreach consent yes"
+          : contact.consentToContact === false
+            ? "outreach consent no"
+            : "outreach consent unknown",
+      ].filter(Boolean);
+      lines.push(
+        `- ${contact.name} [${contact.contactType}]${
+          details.length > 0 ? `: ${details.join(", ")}` : ""
+        }${contact.availabilityNotes ? ` - ${contact.availabilityNotes}` : ""}`,
+      );
+    }
+  }
+
+  const activeCoordinationEvents = coordinationEvents.filter(
+    (event) => event.status === "open" || event.status === "waiting",
+  );
+
+  if (activeCoordinationEvents.length > 0) {
+    sections.push("coordination_events");
+    const contactsById = new Map(activeContacts.map((contact) => [contact._id, contact.name]));
+    lines.push("", "## Open Coordination Events");
+    for (const event of activeCoordinationEvents) {
+      const contactParts = [
+        formatContactList("confirmed", event.confirmedContactIds, contactsById),
+        formatContactList("pending", event.pendingContactIds, contactsById),
+        formatContactList("declined", event.declinedContactIds, contactsById),
+        formatContactList("fallback", event.fallbackOrderContactIds, contactsById),
+      ].filter(Boolean);
+      const timeParts = [
+        event.startsAt ? `starts ${formatDateTime(event.startsAt)}` : "",
+        event.endsAt ? `ends ${formatDateTime(event.endsAt)}` : "",
+        event.nextActionAt ? `next action ${formatDateTime(event.nextActionAt)}` : "",
+        event.escalationAt ? `escalate ${formatDateTime(event.escalationAt)}` : "",
+      ].filter(Boolean);
+      lines.push(
+        `- [${event.status}/${event.urgency}/${event.type}] ${event.title}${
+          timeParts.length > 0 ? ` (${timeParts.join("; ")})` : ""
+        }${contactParts.length > 0 ? ` - ${contactParts.join("; ")}` : ""}${
+          event.description ? ` - ${event.description}` : ""
+        }`,
+      );
+    }
+  }
+
   if (carePreferences.length > 0) {
     sections.push("care_preferences");
     lines.push("", "## Care Preferences");
@@ -346,4 +446,18 @@ export function buildCareCaseContext(
     sections,
     lessons,
   };
+}
+
+function formatDateTime(timestamp: number): string {
+  return new Date(timestamp).toISOString();
+}
+
+function formatContactList(
+  label: string,
+  ids: string[] | undefined,
+  contactsById: Map<string, string>,
+): string {
+  if (!ids || ids.length === 0) return "";
+  const names = ids.map((id) => contactsById.get(id) ?? id);
+  return `${label}: ${names.join(", ")}`;
 }

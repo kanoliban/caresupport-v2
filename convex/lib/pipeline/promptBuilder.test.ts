@@ -138,6 +138,18 @@ describe("buildSystemBlocks", () => {
     );
   });
 
+  it("describes third-party coordination as a current runtime boundary", () => {
+    const blocks = buildSystemBlocks(makeInput());
+    const responseFormatBlock = blocks.find((block) =>
+      block.text.includes("CURRENT RUNTIME BOUNDARY"),
+    );
+
+    expect(responseFormatBlock).toBeDefined();
+    expect(responseFormatBlock?.text).toContain(
+      "CareSupport is currently one trusted thread around one care situation",
+    );
+    expect(responseFormatBlock?.text).toContain("cannot do that yet");
+  });
 });
 
 describe("systemBlocksToString", () => {

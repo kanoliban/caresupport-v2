@@ -59,6 +59,39 @@ const memoryCategory = v.union(
   v.literal("lesson"),
 );
 
+const careContactType = v.union(
+  v.literal("family"),
+  v.literal("professional_caregiver"),
+  v.literal("agency"),
+  v.literal("clinician"),
+  v.literal("other"),
+);
+
+const coordinationEventType = v.union(
+  v.literal("coverage_gap"),
+  v.literal("schedule_change"),
+  v.literal("handoff"),
+  v.literal("task_followup"),
+  v.literal("appointment"),
+  v.literal("medication"),
+  v.literal("outreach"),
+  v.literal("other"),
+);
+
+const coordinationEventStatus = v.union(
+  v.literal("open"),
+  v.literal("waiting"),
+  v.literal("resolved"),
+  v.literal("cancelled"),
+);
+
+const coordinationUrgency = v.union(
+  v.literal("low"),
+  v.literal("normal"),
+  v.literal("high"),
+  v.literal("urgent"),
+);
+
 const auditEvent = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
@@ -185,6 +218,56 @@ export default defineSchema({
     .index("by_care_case_scope", ["careCaseId", "scope"])
     .index("by_care_case_scope_category", ["careCaseId", "scope", "category"])
     .index("by_user_scope", ["userId", "scope"]),
+
+  careContacts: defineTable({
+    careCaseId: v.id("careCases"),
+    name: v.string(),
+    phone: v.optional(v.string()),
+    relationship: v.optional(v.string()),
+    contactType: careContactType,
+    agencyName: v.optional(v.string()),
+    role: v.optional(v.string()),
+    availabilityNotes: v.optional(v.string()),
+    contactPriority: v.optional(v.number()),
+    canReceiveTexts: v.boolean(),
+    consentToContact: v.optional(v.boolean()),
+    active: v.boolean(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_active", ["careCaseId", "active"])
+    .index("by_care_case_type", ["careCaseId", "contactType"])
+    .index("by_care_case_phone", ["careCaseId", "phone"]),
+
+  coordinationEvents: defineTable({
+    careCaseId: v.id("careCases"),
+    type: coordinationEventType,
+    title: v.string(),
+    status: coordinationEventStatus,
+    urgency: coordinationUrgency,
+    description: v.optional(v.string()),
+    startsAt: v.optional(v.number()),
+    endsAt: v.optional(v.number()),
+    scheduleItemId: v.optional(v.id("scheduleItems")),
+    originalAssigneeContactId: v.optional(v.id("careContacts")),
+    confirmedContactIds: v.optional(v.array(v.id("careContacts"))),
+    pendingContactIds: v.optional(v.array(v.id("careContacts"))),
+    declinedContactIds: v.optional(v.array(v.id("careContacts"))),
+    fallbackOrderContactIds: v.optional(v.array(v.id("careContacts"))),
+    nextActionAt: v.optional(v.number()),
+    escalationAt: v.optional(v.number()),
+    resolution: v.optional(v.string()),
+    createdByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    closedAt: v.optional(v.number()),
+  })
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_status", ["careCaseId", "status"])
+    .index("by_care_case_type", ["careCaseId", "type"])
+    .index("by_care_case_next_action", ["careCaseId", "status", "nextActionAt"]),
 
   auditLogs: defineTable({
     careCaseId: v.optional(v.id("careCases")),

@@ -3,9 +3,9 @@ import {
   ensureExplicitUserMemoryUpdate,
   formatConversationLog,
   inferExplicitUserMemoryUpdate,
-  isSoloExpansionRequest,
+  isUnsupportedCoordinationRequest,
   parseLesson,
-  shouldFireSoloBoundaryOverride,
+  shouldFireCoordinationBoundaryOverride,
   stripMarkdown,
 } from "./handler";
 
@@ -126,20 +126,20 @@ describe("ensureExplicitUserMemoryUpdate", () => {
   });
 });
 
-describe("isSoloExpansionRequest", () => {
+describe("isUnsupportedCoordinationRequest", () => {
   it("detects add-another-person requests", () => {
-    expect(isSoloExpansionRequest("Please add my sister Maya to this plan.")).toBe(true);
+    expect(isUnsupportedCoordinationRequest("Please add my sister Maya to this plan.")).toBe(true);
   });
 
   it("does not flag ordinary care-management requests", () => {
-    expect(isSoloExpansionRequest("Please remind me about Sam's appointment tomorrow.")).toBe(false);
+    expect(isUnsupportedCoordinationRequest("Please remind me about Sam's appointment tomorrow.")).toBe(false);
   });
 });
 
-describe("shouldFireSoloBoundaryOverride", () => {
+describe("shouldFireCoordinationBoundaryOverride", () => {
   const boundaryReply = {
     direction: "outbound" as const,
-    body: "Right now CareSupport is focused on helping you directly in this thread.",
+    body: "I can't add them or message them for you yet.",
   };
   const ordinaryOutbound = {
     direction: "outbound" as const,
@@ -156,7 +156,7 @@ describe("shouldFireSoloBoundaryOverride", () => {
 
     // #then the override fires
     expect(
-      shouldFireSoloBoundaryOverride("Add my sister Maya to this plan", recent),
+      shouldFireCoordinationBoundaryOverride("Add my sister Maya to this plan", recent),
     ).toBe(true);
   });
 
@@ -172,18 +172,18 @@ describe("shouldFireSoloBoundaryOverride", () => {
     // #when the user asks again with similar phrasing
     // #then the override does NOT fire — LLM handles naturally
     expect(
-      shouldFireSoloBoundaryOverride("Text my sister too", recent),
+      shouldFireCoordinationBoundaryOverride("Text my sister too", recent),
     ).toBe(false);
   });
 
-  it("does not fire on messages that are not solo-expansion requests", () => {
+  it("does not fire on messages that are not unsupported coordination requests", () => {
     // #given a clean history
     const recent = [ordinaryOutbound];
 
     // #when the message is ordinary care content
     // #then the override does NOT fire
     expect(
-      shouldFireSoloBoundaryOverride(
+      shouldFireCoordinationBoundaryOverride(
         "Sam takes Lipitor at bedtime",
         recent,
       ),
@@ -196,10 +196,10 @@ describe("shouldFireSoloBoundaryOverride", () => {
     const padding = Array.from({ length: 5 }, () => ordinaryOutbound);
     const recent = [oldBoundary, ...padding];
 
-    // #when the user makes a fresh solo-expansion request
+    // #when the user makes a fresh unsupported coordination request
     // #then the override fires again because the recent window is clean
     expect(
-      shouldFireSoloBoundaryOverride("Add my aunt to the plan", recent),
+      shouldFireCoordinationBoundaryOverride("Add my aunt to the plan", recent),
     ).toBe(true);
   });
 });

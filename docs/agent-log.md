@@ -5,6 +5,82 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-05-19 - Codex
+
+### What I did
+- Created branch `codex/family-runtime-alignment`.
+- Committed the documentation/product alignment pass as `7944f77`.
+- Updated runtime prompt and handler boundary language so unsupported third-party coordination is framed as "not executable yet," not as a solo-only product identity.
+- Added `careContacts` and `coordinationEvents` Convex tables, scoped CRUD/list modules, care-case isolation checks for cross-contact references, admin reset/count support, and prompt-context rendering for active contacts plus open/waiting coordination events.
+- Added regression coverage for contact scoping, coordination-event scoping, prompt context rendering, and updated boundary wording.
+
+### State I'm leaving
+- Runtime work is committed locally as `44bf59e`.
+- Verification passed:
+  - `npx vitest run convex/careContacts.test.ts convex/coordinationEvents.test.ts convex/mutations.test.ts convex/handler.test.ts convex/lib/promptContent.test.ts convex/lib/pipeline/promptBuilder.test.ts`
+  - `npx tsc --noEmit`
+  - `npm test` (236/236 passing)
+- `npm install` was run because `node_modules` was absent in this checkout.
+- `CONVEX_DEPLOYMENT=prod:keen-raccoon-606 npx convex codegen --typecheck disable` generated local Convex bindings. The command reported "Uploading functions to Convex"; no data reset/import/destructive command was run.
+
+### What the next agent should know
+- `careContacts` and `coordinationEvents` now exist as substrate and are loaded into prompt context when present.
+- The model still cannot create contacts/events from structured output. There is no outbound outreach and no tool execution.
+- Next implementation step should be a narrow model-write path for contact/event capture, or `toolActions` + `userToolPermissions` if moving toward approved outreach.
+
+### Concerns
+- Because Convex codegen was pointed at the prod deployment name to get generated types on this machine, verify deployment state before assuming prod is still exactly on `origin/main`.
+- Do not add outbound messaging to caregivers until permission rules, persisted action state, provider failure handling, and audit records exist.
+
+---
+
+## 2026-05-19 - Codex
+
+### What I did
+- Reviewed issue #52, the canonical docs, the newer Rob/product/tool docs, and the current open PR list (#50 agent-log only, #28 Claude workflow only).
+- Realigned the active docs around CareSupport as a multiplayer, one-to-many family care coordination runtime with the solo thread as the current wedge, not the final identity.
+- Updated `README.md`, `CLAUDE.md`, `SOUL.md`, `docs/design.md`, `AGENTS.md`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/onboarding.md`, `docs/concierge-beta.md`, and `docs/product-specs/sms-care-coordination.md`.
+- Added missing architecture notes for `docs/integrations-and-tool-bearing-agent.md` and `docs/research-integration-architecture.md`.
+- Updated archive banners in `docs/ARCHIVE.md`, `docs/PRODUCT_STRATEGY.md`, and `docs/VISION.md` so old docs are stale for dashboard/network/family.md assumptions, not because family coordination is no longer active direction.
+
+### State I'm leaving
+- This is a documentation/architecture alignment pass only. No runtime code or tests were changed.
+- `git diff --check` passes.
+- The current runtime still enforces a solo-thread boundary in prompts and handler behavior.
+
+### What the next agent should know
+- Product direction is now explicit: family care agent, text-native coordination runtime, one-to-many orchestration, tool-bearing assistant.
+- Current implementation remains `users` + `careCases` + `messages` + care records + memory + audit logs.
+- Future code should introduce `careContacts`, `coordinationEvents`, `toolActions`, `connectedAccounts`, `externalRefs`, and `userToolPermissions` only behind concrete product loops and tests.
+
+### Concerns
+- `convex/lib/promptContent.ts`, `convex/lib/pipeline/promptBuilder.ts`, and `convex/handler.ts` still contain solo-only product language and blocking behavior. That is acceptable for the current runtime, but it is now the main runtime/doc mismatch to address when implementation moves beyond the wedge.
+- Do not ship outbound outreach or tools by prompt copy alone. The runtime needs permission checks, persisted action state, provider adapters, failure handling, and audit logs first.
+
+---
+
+## 2026-05-18 — Codex
+
+### What I did
+- Pulled `main` forward to `5d3139e` after repairing local corrupted remote refs (`origin/main 2` and duplicate `*.lock` remote-ref files were moved aside under `/tmp/caresupport-git-ref-backup`).
+- Read the updated canonical direction (`AGENTS.md`, `docs/DECISIONS.md`, `docs/design.md`, `docs/product-thesis.md`) and the new Rob/family-care planning docs.
+- Reviewed recent merged PRs #39-#47, open PR #50, and open issue #49 via GitHub CLI.
+
+### State I'm leaving
+- Local `main` matches `origin/main` at `5d3139e`.
+- `docs/agent-log.md` has this session note appended per repo convention.
+- A previous local stash named `codex-agent-log-before-pull` still exists with older Poke/OpenPoke research log entries from before the pull; it was not reapplied because the upstream agent log has moved on.
+
+### What the next agent should know
+- The active runtime remains solo beta by repo instruction, but current product thinking now distinguishes the solo beta from the broader family-care assistant thesis.
+- The Rob docs define the real long-term target as operational, one-to-many coordination that reduces Rob's physical interaction burden, with future primitives like `careContacts`, `coordinationEvents`, permissioned playbooks, and closed-loop coverage-gap handling.
+- Immediate implementation pressure is issue #49: the daily digest cron shipped, but time-precise one-off reminders via `ctx.scheduler.runAt` are still missing.
+
+### Concerns
+- The pulled repo contains a live strategic tension: `AGENTS.md` still says do not re-center active implementation around multiplayer, while the new Rob/product docs make clear that multiplayer coordination is the deeper product direction. Treat that as sequencing, not contradiction: do not ship outreach without an explicit decision, but design current primitives so they can grow toward coordination.
+
+---
+
 ## 2026-05-15 — Claude
 
 ### What I did
@@ -539,3 +615,30 @@ Read the last 2-3 entries before starting work.
 
 ### Concerns
 - Prod has been reset cleanly, but there has not yet been a real post-reset iMessage conversation on prod. The next real user message will effectively be the first production validation on the restarted system.
+
+---
+
+## 2026-05-19 — Codex
+
+### What I did
+- Merged `origin/main` into `codex/family-runtime-alignment` after main advanced with the integrations/research docs and the prompt fix from PR #51.
+- Resolved conflicts by keeping the newer tool-bearing integration architecture docs from main, then folding in the current runtime status for `careContacts` and `coordinationEvents`.
+- Preserved the PR #51 prompt correction that removed unsupported reminder/push-follow-up claims.
+- Preserved the family-runtime branch wording that third-party outreach is a current runtime boundary, not a permanent product prohibition.
+- Re-ran local verification:
+  - `npx tsc --noEmit`
+  - `npm test`
+
+### State I'm leaving
+- Branch `codex/family-runtime-alignment` includes the latest `origin/main` through `91d8fbe`.
+- The staged merge keeps the documentation alignment work and the new care coordination substrate intact.
+- Local verification passes: TypeScript has 0 errors and Vitest reports 17 files / 234 tests passing.
+- The working tree still has pre-existing untracked duplicate/archive files with ` 2` in their names; I left them untouched.
+
+### What the next agent should know
+- PR #53 is the active branch for family runtime alignment.
+- The runtime now has `careContacts` and `coordinationEvents` substrate, but no outbound third-party messaging, external tool execution, provider sync, or reusable permission model yet.
+- The prompt should continue saying CareSupport cannot contact others yet, not that contacting others is outside the product.
+
+### Concerns
+- The next implementation tranche should add tool action lifecycle and permission primitives before any assistant copy claims calendar changes, caregiver outreach, or autonomous follow-up.
