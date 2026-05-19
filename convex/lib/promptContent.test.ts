@@ -13,8 +13,14 @@ describe("SOUL_CONTENT", () => {
     expect(SOUL_CONTENT).not.toContain("check_schedule");
   });
 
-  it("frames the product as a solo care planning assistant", () => {
-    expect(SOUL_CONTENT).toContain("one person manage one loved one's care");
+  it("frames the product as a family care assistant currently in a solo wedge", () => {
+    // #given the SOUL_CONTENT identity opener
+    // #then it names the family-care-assistant identity
+    expect(SOUL_CONTENT).toContain("family care assistant");
+    // #and acknowledges the current solo conversation as the first relationship
+    expect(SOUL_CONTENT).toContain("one person managing one loved one's care");
+    expect(SOUL_CONTENT).toContain("first relationship");
+    // #and the operational rules still hold
     expect(CAPABILITIES_CONTENT).toContain("one user, one loved one, one thread");
     expect(CAPABILITIES_CONTENT).toContain("CareSupport is free during the concierge beta");
   });

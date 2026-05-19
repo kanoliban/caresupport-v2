@@ -1,8 +1,12 @@
-# CareSupport v2 — Solo Beta Design
+# CareSupport v2 — Solo Beta Runtime Design
 
-## What CareSupport Is
+> **Read first:** [docs/product-thesis.md](product-thesis.md) and [docs/rob-care-operations-model.md](rob-care-operations-model.md). The solo beta described below is the **first relationship** of a family care assistant; it is not the destination. The capability ladder (Remember → Remind → Draft → Ask permission → Act → Track → Escalate → Close the loop) lives in [docs/tools-and-capabilities-thought-experiment.md](tools-and-capabilities-thought-experiment.md).
+>
+> This document is the source of truth for the runtime as it exists today.
 
-CareSupport is an iMessage-based care planning and reminders assistant for one person managing a loved one's care.
+## What CareSupport Is (today)
+
+CareSupport is an iMessage/SMS-based care assistant. Today it serves one person managing a loved one's care.
 
 The active product is 1:1:
 - one user
