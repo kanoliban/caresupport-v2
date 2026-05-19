@@ -62,6 +62,11 @@ export interface MemoryUpdate {
   source?: string;
 }
 
+export interface MemoryArchiveUpdate {
+  scope: "user" | "care_case";
+  matchContent: string;
+}
+
 export interface UserProfileUpdate {
   name?: string;
   relationship_to_recipient?: string;
@@ -84,6 +89,7 @@ export interface HandlerResult {
   routedIntent?: string;
   lessonsLearned?: number;
   memoriesSaved?: number;
+  memoriesArchived?: number;
 }
 
 export interface ReactionRequest {
@@ -124,6 +130,7 @@ export interface AgentResponse {
   careCaseProfileUpdate: CareCaseProfileUpdate | null;
   userMemoryUpdates: MemoryUpdate[];
   careCaseMemoryUpdates: MemoryUpdate[];
+  memoryArchiveUpdates: MemoryArchiveUpdate[];
   selfCorrections: string[];
   reactions: ReactionRequest[];
   effect: EffectRequest | null;

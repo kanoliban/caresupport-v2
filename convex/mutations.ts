@@ -8,6 +8,7 @@ import {
 import {
   buildCareCaseContext,
   buildUserContext,
+  isNearDuplicateMemoryContent,
   normalizeMemoryCategory,
   shouldPersistMemoryUpdate,
   uniqueMemoryUpdates,
@@ -58,6 +59,7 @@ const eventValidator = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
+  v.literal("memory_archived"),
 );
 
 const detailsValidator = v.object({
@@ -76,6 +78,7 @@ const detailsValidator = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
+  archivedScopes: v.optional(v.array(v.string())),
 });
 
 const scheduleTypeValidator = v.union(
@@ -397,6 +400,55 @@ export const upsertMemoryEntries = internalMutation({
     }
 
     return { inserted: savedCategories.size, savedCategories: [...savedCategories] };
+  },
+});
+
+const memoryArchiveUpdateValidator = v.object({
+  scope: memoryScopeValidator,
+  matchContent: v.string(),
+});
+
+export const archiveMemoryEntries = internalMutation({
+  args: {
+    userId: v.id("users"),
+    careCaseId: v.id("careCases"),
+    updates: v.array(memoryArchiveUpdateValidator),
+  },
+  handler: async (ctx, args) => {
+    if (args.updates.length === 0) {
+      return { archived: 0, scopes: [] as string[] };
+    }
+
+    const activeEntries = await ctx.db
+      .query("memoryEntries")
+      .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+      .filter((q) => q.eq(q.field("active"), true))
+      .collect();
+
+    let archived = 0;
+    const scopes = new Set<string>();
+    const now = Date.now();
+
+    for (const update of args.updates) {
+      const match = update.matchContent.trim();
+      if (!match) continue;
+
+      for (const entry of activeEntries) {
+        if (entry.scope !== update.scope) continue;
+        // user-scope archive should only touch this user's own memory
+        if (entry.scope === "user" && entry.userId !== args.userId) continue;
+        if (!entry.active) continue;
+
+        if (isNearDuplicateMemoryContent(entry.content, match)) {
+          await ctx.db.patch(entry._id, { active: false, updatedAt: now });
+          entry.active = false;
+          archived += 1;
+          scopes.add(entry.scope);
+        }
+      }
+    }
+
+    return { archived, scopes: [...scopes] };
   },
 });
 

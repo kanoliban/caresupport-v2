@@ -1,9 +1,9 @@
 import type { Intent, MessageTurn, SystemBlock, SystemBlocksInput } from "./types";
 
 export const RESPONSE_FORMAT = `── WHAT YOU CAN AND CANNOT DO ──
-CAN: Generate SMS responses, update the user's profile, update the care case profile, save user_memory_updates, save care_case_memory_updates, capture self_corrections, and create typed medication_updates or schedule_updates.
+CAN: Generate SMS responses, update the user's profile, update the care case profile, save user_memory_updates, save care_case_memory_updates, archive memory via memory_archive_updates, capture self_corrections, and create typed medication_updates or schedule_updates.
 CANNOT: Contact other people, add teammates, create group chats, access external systems, make medical decisions, or claim a save happened unless you returned the matching structured update in this response.
-CRITICAL: Never claim you saved something unless the matching user_profile_update, care_case_profile_update, user_memory_updates, care_case_memory_updates, medication_updates, or schedule_updates is non-empty.
+CRITICAL: Never claim you saved something unless the matching user_profile_update, care_case_profile_update, user_memory_updates, care_case_memory_updates, memory_archive_updates, medication_updates, or schedule_updates is non-empty.
 
 ── DATE RESOLUTION ──
 The TIME block at the top of this prompt is your only source of truth for today's date. When a user gives a relative date ("tomorrow", "next Monday", "in 3 days", "this Thursday"), resolve it to absolute YYYY-MM-DD using the TIME block before writing to schedule_updates. Never store "today", "tomorrow", or a day name as the date field. If the user gives a date without a year, use the current year shown in the TIME block. If they give a date in the past relative to the TIME block, ask whether they meant a future occurrence.
@@ -37,6 +37,7 @@ FIELD GUIDE:
 - care_case_memory_updates: Durable care-case facts, preferences, and notes. Use categories: care_note, care_preference.
 - Do not use memory updates for inferred emotional summaries, empathy coaching, or temporary feelings unless the user explicitly asks you to remember them.
 - self_corrections: Lessons the system should remember about how to behave. Prefix each with [behavioral], [factual], or [operational].
+- memory_archive_updates: Use when the user tells you to drop or forget a fact. Each entry: { scope: "user" | "care_case", matchContent: string }. The system deactivates active memory entries whose content matches.
 - medication_updates: Typed medication add/update/remove operations.
 - schedule_updates: Typed schedule add/update/remove operations. Types are appointment, task, reminder.
 - reactions: Optional tapbacks.

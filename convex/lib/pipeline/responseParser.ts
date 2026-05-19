@@ -7,6 +7,7 @@ const EMPTY_ARRAYS: Omit<
 > = {
   userMemoryUpdates: [],
   careCaseMemoryUpdates: [],
+  memoryArchiveUpdates: [],
   selfCorrections: [],
   reactions: [],
   effect: null,
@@ -19,10 +20,12 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   care_case_profile_update: "careCaseProfileUpdate",
   user_memory_updates: "userMemoryUpdates",
   care_case_memory_updates: "careCaseMemoryUpdates",
+  memory_archive_updates: "memoryArchiveUpdates",
   self_corrections: "selfCorrections",
   medication_updates: "medicationUpdates",
   schedule_updates: "scheduleUpdates",
   target_message: "targetMessage",
+  match_content: "matchContent",
 };
 
 function normalizeMemoryUpdates(value: unknown) {
@@ -48,6 +51,28 @@ function normalizeMemoryUpdates(value: unknown) {
   return updates;
 }
 
+function normalizeMemoryArchiveUpdates(
+  value: unknown,
+): AgentResponse["memoryArchiveUpdates"] {
+  if (!Array.isArray(value)) return [];
+  const updates: AgentResponse["memoryArchiveUpdates"] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const rawMatch =
+      (record.matchContent as unknown) ?? (record.match_content as unknown);
+    const matchContent = typeof rawMatch === "string" ? rawMatch.trim() : "";
+    if (!matchContent) continue;
+
+    const rawScope = typeof record.scope === "string" ? record.scope : "";
+    const scope: "user" | "care_case" =
+      rawScope === "user" ? "user" : "care_case";
+
+    updates.push({ scope, matchContent });
+  }
+  return updates;
+}
+
 export function normalizeResponse(parsed: Record<string, unknown>): AgentResponse {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed)) {
@@ -67,6 +92,7 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
         : null,
     userMemoryUpdates: normalizeMemoryUpdates(result.userMemoryUpdates),
     careCaseMemoryUpdates: normalizeMemoryUpdates(result.careCaseMemoryUpdates),
+    memoryArchiveUpdates: normalizeMemoryArchiveUpdates(result.memoryArchiveUpdates),
     selfCorrections: Array.isArray(result.selfCorrections) ? result.selfCorrections : [],
     reactions: Array.isArray(result.reactions) ? result.reactions : [],
     effect:

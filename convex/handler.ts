@@ -35,7 +35,7 @@ import {
   CAPABILITIES_CONTENT,
   SKILLS_CONTENT,
 } from "./lib/promptContent";
-import { normalizeMemoryCategory } from "./lib/memory";
+import { formatLessonsBlock, normalizeMemoryCategory } from "./lib/memory";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
@@ -355,7 +355,7 @@ export const handleMessage = internalAction({
       routingContent: ROUTING_CONTENT,
       capabilitiesContent: CAPABILITIES_CONTENT,
       skillsContent: SKILLS_CONTENT,
-      lessonsContent: compiledContext.lessons.map((lesson) => `- ${lesson}`).join("\n"),
+      lessonsContent: formatLessonsBlock(compiledContext.lessons),
       user: {
         name: compiledContext.user.name,
         phone: compiledContext.user.phone,
@@ -512,6 +512,26 @@ export const handleMessage = internalAction({
       }
     }
 
+    let memoriesArchived = 0;
+    if (parsed.memoryArchiveUpdates.length > 0) {
+      const result = await ctx.runMutation(internal.mutations.archiveMemoryEntries, {
+        userId,
+        careCaseId,
+        updates: parsed.memoryArchiveUpdates,
+      });
+      memoriesArchived = result.archived;
+      if (result.archived > 0) {
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId,
+          userId,
+          event: "memory_archived",
+          phone: senderPhone,
+          details: { archivedScopes: result.scopes },
+          timestamp: Date.now(),
+        });
+      }
+    }
+
     if (parsed.medicationUpdates?.length) {
       for (const medication of parsed.medicationUpdates) {
         await ctx.runMutation(internal.mutations.upsertMedication, {
@@ -614,6 +634,7 @@ export const handleMessage = internalAction({
       routedIntent: intent,
       lessonsLearned: parsed.selfCorrections.length,
       memoriesSaved,
+      memoriesArchived,
       blocked: shouldFireSoloBoundaryOverride(messageBody, recentMessages),
     };
   },

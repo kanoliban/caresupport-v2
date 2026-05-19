@@ -47,6 +47,48 @@ describe("extractJson", () => {
     const result = extractJson(input);
     expect(result.smsResponse).toBe(input);
   });
+
+  it("normalizes memory_archive_updates from snake_case and skips blanks", () => {
+    const result = extractJson(
+      JSON.stringify({
+        sms_response: "Dropped — I won't bring that up again.",
+        internal_notes: "User asked to forget Marcus night-shift rule",
+        user_profile_update: null,
+        care_case_profile_update: null,
+        user_memory_updates: [],
+        care_case_memory_updates: [],
+        memory_archive_updates: [
+          { scope: "care_case", match_content: "Marcus works nights" },
+          { scope: "care_case", match_content: "" },
+          { scope: "care_case" },
+        ],
+        self_corrections: [],
+        reactions: [],
+        effect: null,
+      }),
+    );
+
+    expect(result.memoryArchiveUpdates).toEqual([
+      { scope: "care_case", matchContent: "Marcus works nights" },
+    ]);
+  });
+
+  it("defaults missing memory_archive_updates to an empty array", () => {
+    const result = extractJson(
+      JSON.stringify({
+        sms_response: "ok",
+        internal_notes: "no archive in this turn",
+        user_profile_update: null,
+        care_case_profile_update: null,
+        user_memory_updates: [],
+        care_case_memory_updates: [],
+        self_corrections: [],
+        reactions: [],
+        effect: null,
+      }),
+    );
+    expect(result.memoryArchiveUpdates).toEqual([]);
+  });
 });
 
 describe("normalizeResponse", () => {

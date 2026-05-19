@@ -73,6 +73,7 @@ const auditEvent = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
+  v.literal("memory_archived"),
 );
 
 const auditDetails = v.object({
@@ -91,6 +92,7 @@ const auditDetails = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
+  archivedScopes: v.optional(v.array(v.string())),
 });
 
 export default defineSchema({

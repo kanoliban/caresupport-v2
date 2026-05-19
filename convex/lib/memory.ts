@@ -224,6 +224,14 @@ export function shouldPersistMemoryUpdate(
   );
 }
 
+export function formatLessonsBlock(lessons: string[]): string {
+  if (lessons.length === 0) return "";
+  return [
+    "── THINGS YOU'VE LEARNED ABOUT THIS FAMILY ──",
+    ...lessons.map((lesson) => `- ${lesson}`),
+  ].join("\n");
+}
+
 export function buildUserContext(
   user: UserSnapshot,
   entries: MemoryEntryLike[],
