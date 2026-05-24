@@ -138,30 +138,220 @@ Compliance becomes a byproduct of coordination, not a separate burden. The same 
 
 ---
 
-### Layer 3: The Companion App
+### Layer 3: The Companion App (The Gate)
 
-**What it is:** An iOS application that displays everything the agent is organizing — schedules, medications, care plans, coverage status, care team, coordination history. It is the visual layer for the intelligence the agent holds.
+**What it is:** An iOS application that surfaces everything the agent is organizing — and introduces the native device capabilities (GPS, biometrics, background processes) that transform conversational coordination into verifiable, billable care operations. It is both the visual layer for the agent's intelligence and the sensor layer that unlocks every layer above it.
 
-**Why it is inevitable from Layer 2:** The agent accumulates context through daily text conversations — schedules, medications, preferences, availability, care needs, family dynamics. That context becomes too rich to live only in a text thread. Families need to see the organized picture: who is covering what, what is coming up, what medications are tracked, what care needs are open. The app does not ask families to input data. It displays what the agent has already learned and organized.
+**Why it is inevitable from Layer 2:** The agent, coordinating across 12 people for Rob's care, accumulates context that exceeds what any text thread can display. After two weeks: 7 medications with dosing windows, 12 care team members with availability patterns, shift schedules across 3 agencies, a care plan with morning and evening routines, coordination event history, open care needs. That cannot live in scrollable iMessage. It needs a visual, structured, navigable surface. The information has exceeded the carrying capacity of the conversational interface.
+
+**The dual-surface mechanic (informed by the Poppy iOS study — `docs/research/poppy-ios/STUDY.md`):**
+
+The companion app does not host the conversation. iMessage does that. The app hosts what the agent has organized — rendered as interactive, structured artifacts. The agent decides per-response which surface owns the output:
+
+- Conversational reply ("Your Dad's meds are fine, all on schedule today") → stays in iMessage
+- Structured artifact (full medication schedule, today's shift coverage map, weekly care plan) → emitted as `askcaresupport.app/{id}` URL, rendered as iMessage rich link preview, taps open into the app as an editable, actionable view
+
+This is the cross-surface bridge pattern observed in Poppy's architecture: `askpoppy.app/{id}` URLs bridging iMessage to the iOS app without either surface dominating. CareSupport applies the same mechanic to care artifacts:
+
+- `askcaresupport.app/meds/dad` → medication schedule with dosing times, refill dates, prescribers
+- `askcaresupport.app/today` → today's coverage map: who is on, who is next, what gaps remain
+- `askcaresupport.app/team` → care team directory: 12 people, roles, availability, contact priority
+- `askcaresupport.app/shift/saturday-evening` → specific shift detail: who was scheduled, who cancelled, who the agent is contacting, current status
+
+**The app as sensor — this is the gate:**
+
+The moment the app is installed on a caregiver's phone, it introduces native iOS capabilities iMessage cannot access:
+
+- **GPS** — verifies the caregiver is at the care recipient's home (EVV requirement)
+- **Background location** — confirms presence during the full shift window
+- **Precise timestamps** — device-level clock-in and clock-out accuracy
+- **Camera** — photo documentation of wound care, medication labels, home conditions
+- **Biometric auth** — secure access to PHI and financial records
+- **Push notifications** — time-critical care alerts independent of iMessage delivery
+- **App Intents** — actions exposed to Siri, Shortcuts, Action Button: "Log med," "Start shift," "Send handoff," "Get today's schedule" (see Poppy study Section 8: App Intents as agent primitives)
+
+Without these sensors, CareSupport is an intelligent coordinator trapped in text. With them, the agent's conversational data is augmented with verified location, verified time, and verified identity — the three inputs that transform coordination into compliance, and compliance into billing.
+
+**What the app surfaces for each role:**
+
+The app is not one view. It is role-aware — each person in the care network sees what is relevant to their role:
+
+- **Coordinator (Rob, or the daughter from the church ICP):** Full operational view — today's coverage, open gaps, coordination events in progress, care team status, medication adherence, financial summary (hours used vs authorized)
+- **Family caregiver:** Their upcoming shifts, handoff notes from the previous caregiver, medications due during their shift, quick actions (start shift, log activity, end shift)
+- **Professional caregiver:** Shift details with context briefing (care recipient profile, routines, preferences, current medications), handoff notes, session log interface
+- **Care recipient (when applicable, like Rob):** High-level daily view — who is coming, when, what is scheduled — optimized for minimal interaction (see `docs/rob-care-operations-model.md`: every avoidable interaction matters)
 
 **What the app enables for later layers:**
-- GPS capture for EVV compliance (Layer 4)
+- GPS capture for EVV compliance (Layer 4) — the mechanical gate
 - Care plan visualization for case manager reviews
-- Financial dashboard for FMS transparency (Layer 5)
-- Marketplace caregiver profiles and dispatch interface (Layer 6)
+- Financial dashboard for FMS transparency (Layer 5) — hours, earnings, reimbursement status
+- Marketplace caregiver profiles and dispatch interface (Layer 6) — browse, match, hire
+- Lock Screen Briefing via iOS Shortcuts (see Poppy study Section 8): "Mom's morning meds at 9 AM. Helper Angela arriving 10 AM." — glanceable care state without opening the app
 
 ---
 
-### Layer 2: The Coordination Agent (Multi-Party)
+### Layer 2: The Coordination Agent (Multi-Party Orchestration)
 
-**What it is:** CareSupport coordinates between everyone involved in the family's care — family members, friends, professional caregivers, case managers, and eventually marketplace caregivers. It texts with each person individually and in group contexts, maintaining context across all parties.
+**What it is:** CareSupport becomes the lead coordinator for a family's entire care operation. It texts with every person involved in care — family members, professional caregivers, agency contacts, case managers — each in their own 1:1 thread. It maintains a unified model of the care situation across all threads. It can initiate outreach, track responses, escalate non-responses, assemble partial coverage, and close loops — all without requiring the human coordinator to be the relay.
 
 **Why it is inevitable from Layer 1:** The solo agent proves it can listen, remember, organize, and respond usefully for one caregiver. But care is inherently multi-party. The moment a family member says "can you ask my brother if he can cover Tuesday?" or a caregiver says "I can't make it Saturday evening," the agent needs to coordinate across people. The solo experience creates the demand for multi-party coordination by surfacing exactly the moments where one person cannot solve the problem alone.
 
+**The orchestration mechanic — Rob's scenario, made visceral:**
+
+Rob is quadriplegic. He uses his nose to operate his iPhone. He coordinates his own care across 12 people: 9 professional caregivers from 3 separate home care agencies and 3 family members (his mother who has dementia, his sister who primarily cares for their mother, and his cousin). The three agencies do not communicate with each other. Rob is the communication bridge between all of them. (See `docs/rob-care-operations-model.md` for the full operational model.)
+
+Today, when a caregiver cancels, Rob must:
+
+1. Understand which shift is uncovered
+2. Remember who can perform that type of care
+3. Remember who recently worked and who is likely available
+4. Text or call each candidate — using his nose — one at a time
+5. Wait for responses, decide how long to wait, move to the next person
+6. Track partial coverage mentally
+7. Update everyone involved
+8. Start over if the replacement also falls through
+
+This can happen multiple times per week. It is physically expensive, cognitively demanding, emotionally exhausting, and operationally risky.
+
+**With CareSupport as the lead coordinator, here is what happens instead:**
+
+Tasha, one of Rob's evening caregivers from Agency A, texts CareSupport:
+
+> "Hey, I can't make it tonight."
+
+CareSupport has full context. It knows:
+- Tasha was scheduled tonight 6-10 PM
+- Tasha's shift requires mobility assistance and medication administration at 8 PM
+- Rob's evening routine includes transfer support, dinner assistance, and Baclofen at 8
+- The fallback priority order Rob established: Angela first, then Marcus, then Agency B on-call
+
+**CareSupport texts Rob (1:1):**
+
+> Tasha cancelled for tonight 6-10. I'm starting coverage outreach now — Angela first, then Marcus, then Agency B. I'll only interrupt you if I need a decision or the gap isn't covered in time.
+
+**CareSupport texts Angela (1:1) — simultaneously:**
+
+> Hi Angela, this is CareSupport for Rob. Tasha can't make it tonight. Are you available 6-10 PM? Rob's evening routine: transfer support, dinner assist, Baclofen at 8 PM. Reply yes, no, or partial with hours.
+
+**Angela replies (to CareSupport, 1:1):**
+
+> I can do 6-8 but not after that
+
+**CareSupport texts Marcus (1:1) — immediately:**
+
+> Hi Marcus, CareSupport for Rob. I have Angela confirmed 6-8 tonight but still need coverage 8-10. Are you available? Baclofen administration at 8 PM, transfer support, evening settle. Reply yes, no, or partial.
+
+**CareSupport texts Rob (1:1) — update:**
+
+> Partial coverage: Angela confirmed 6-8. Working on 8-10 — texted Marcus.
+
+**Marcus replies (to CareSupport, 1:1):**
+
+> Yeah I got it
+
+**CareSupport texts Marcus (1:1) — confirmation:**
+
+> Confirmed. You're covering Rob tonight 8-10 PM. Handoff from Angela at 8. Key tasks: Baclofen at 8 PM, transfer support, evening settle routine. Angela will have handoff notes ready.
+
+**CareSupport texts Angela (1:1) — coordination:**
+
+> Confirmed 6-8 tonight. Marcus takes over at 8. Please leave handoff notes when your shift ends — I'll pass them to Marcus.
+
+**CareSupport texts Rob (1:1) — loop closed:**
+
+> Covered. Angela has 6-8, Marcus has 8-10. Baclofen at 8 is with Marcus. Schedule updated. Anything else?
+
+**Rob's total interaction: reading two messages.** He did not text 12 people. He did not chase responses. He did not track who replied. He did not assemble partial coverage. He did not relay handoff details. CareSupport did all of it — 1:1, with each person, in parallel, maintaining full context across all threads.
+
+**If Marcus had not responded within 10 minutes,** CareSupport would have texted Agency B's on-call coordinator:
+
+> CareSupport for Rob. Coverage needed tonight 8-10 PM. Angela has 6-8. Can your agency fill 8-10? Requirements: mobility assist, Baclofen administration at 8 PM.
+
+**If Agency B proposed an unknown caregiver,** CareSupport would have escalated to Rob — because the permission model (see `docs/rob-care-operations-model.md`, Stage 2-3 permissions) requires Rob's approval before accepting someone new:
+
+> Agency B can send Devon, who you haven't worked with before. Should I accept? If no one else confirms in 10 minutes, Devon is the fallback.
+
+**Every person in this scenario has their own 1:1 thread with CareSupport.** Tasha's thread is where she communicates her availability. Angela's thread is where she gets shift requests and handoff instructions. Marcus's thread is where he gets backup requests. Agency B's coordinator thread is where they receive coverage inquiries. Rob's thread is where he gets operational updates and makes decisions. No one sees anyone else's thread. CareSupport holds the unified view.
+
+**The 1:1 and 1:many mechanic:**
+
+CareSupport operates on two communication patterns simultaneously:
+
+- **1:1 threads** — each person has a private, persistent thread with CareSupport. Their availability, preferences, history, and context are specific to them. The agent remembers each person's communication style, response patterns, and role.
+- **1:many orchestration** — when a coordination event occurs (cancellation, schedule change, new care need), CareSupport fans out across the relevant 1:1 threads in parallel, tracks responses, assembles coverage, and closes the loop. The coordinator sees the unified status. Each participant sees only their relevant slice.
+
+This is not group texting. Group texts expose everyone's responses to everyone else, create noise, and break down when the group exceeds 5 people. CareSupport's model is hub-and-spoke: the agent is the hub, each person is a spoke, and the coordinator sees the full picture through the app (Layer 3).
+
 **What this layer captures that makes everything downstream possible:**
+
 - **Care needs as structured signals.** Every coordination conversation reveals a typed demand: "ride to dialysis Tuesdays," "someone to sit with Mom 4 hours Saturday," "overnight coverage needed." These are not notes. They are the seeds of marketplace demand (Layer 6) and billing events (Layer 5).
-- **Caregiver profiles from behavior.** Who responds quickly, who takes overnight shifts, who handles medication, who the care recipient prefers — this context emerges from coordination, not from forms.
+- **Caregiver profiles from behavior.** Who responds quickly, who takes overnight shifts, who handles medication, who the care recipient prefers, who cancels frequently, who is reliable under pressure — this context emerges from coordination, not from forms. After 3 months of coordinating Rob's 12 people, CareSupport knows each caregiver's behavioral signature better than any agency supervisor.
 - **Schedule patterns.** When gaps recur, when coverage is fragile, when burnout is approaching — the data for care plan optimization and capacity planning.
+- **Cross-agency visibility.** For Rob, whose 9 caregivers come from 3 agencies that do not communicate, CareSupport becomes the only entity with a unified view of his care across all providers. This is the coordination context that no individual agency holds.
+
+---
+
+### The Two Sides of CareSupport
+
+CareSupport is not only the family's operating system. It is simultaneously the caregiver's operating system. The same platform, viewed from the other side.
+
+**From the family's side:** CareSupport coordinates their care operation — scheduling, medication tracking, gap coverage, compliance, billing.
+
+**From the caregiver's side:** CareSupport is how they manage their professional work.
+
+Consider Angela. Angela is one of Rob's 9 professional caregivers. She works through Agency A. But Angela also provides care for two other families — the Johnsons and the Garcias — independently, not through an agency. Today, Angela manages her schedule across 3 families using a paper planner, text threads with each family, and a separate timesheet for each client.
+
+**When all three families use CareSupport, Angela's experience transforms:**
+
+Angela has one CareSupport thread and one companion app. Through them, she sees:
+
+- **Her unified schedule across all families** — Rob's shifts, the Johnsons' shifts, the Garcias' shifts, all in one view. No double-booking. No mental arithmetic about which family she's covering when.
+- **Context briefings per family** — when she starts a shift with Rob, the app shows his current medications, today's routine, handoff notes from the previous caregiver. When she starts with the Johnsons, she gets their context. She does not carry the mental load of remembering every family's details.
+- **Shift requests** — when any of her families has a gap, CareSupport texts her: "Rob needs coverage Saturday 6-10. Are you available?" She replies in her 1:1 thread. She does not need to coordinate directly with the family or the other caregivers.
+- **Session logging** — "Starting my shift with Rob" → clock in. "Finished with Rob, gave him his Baclofen, he's settled" → clock out, activity logged, handoff notes captured. The same conversation logs her hours for EVV compliance AND creates her timesheet for payroll.
+- **Earnings across all families** — hours worked, pay received, tax documents. One place, all families.
+- **Her professional profile** — skills, certifications, availability windows, reliability score (built from coordination data, not self-reported), families she has worked with, reviews.
+
+**Angela does not download 3 different family apps. She does not manage 3 separate timesheets. She does not mentally switch context between families.** CareSupport is her professional workspace.
+
+**This is how the supply side of the marketplace seeds itself.**
+
+Angela is already on CareSupport because Rob's family uses it. When the Johnsons sign up, they can invite Angela — or CareSupport can suggest her based on geographic proximity, capability match, and the fact that she already has a CareSupport profile with verified history. Angela's reliability score, built from months of coordination data across Rob's care, becomes her portable professional reputation.
+
+When a new family in Angela's area needs evening coverage and Angela has open availability, the marketplace match writes itself: CareSupport knows the family's care needs (from their coordination data), knows Angela's capabilities and availability (from her coordination data across all families), and can brief Angela on the new family's situation before her first shift.
+
+**The caregiver's operating system is the supply engine for the marketplace.** Every professional caregiver on CareSupport — whether they arrived through a family, through an agency, or independently — builds a profile through the act of providing care. That profile is portable, verified, and context-rich. It is not a Care.com resume full of self-reported claims. It is a coordination-verified record of actual care delivery.
+
+**The independent caregiver's CareSupport:**
+
+For caregivers who work independently (not through agencies), CareSupport becomes even more central:
+
+- **Client management** — all families, all schedules, all care contexts, in one place
+- **Invoicing and payroll** — hours verified by EVV, payroll processed by the FMS layer. No more chasing families for payment.
+- **Compliance** — EVV, documentation, and reporting handled automatically. The caregiver's compliance burden disappears.
+- **Professional growth** — as they serve more families through CareSupport, their profile deepens, their reliability score improves, their marketplace visibility increases, and they receive more shift offers matched to their capabilities and preferences
+- **Boundaries** — availability windows, maximum hours, preferred care types, geographic range. The agent respects these and does not offer shifts that violate them.
+
+**The existing `PRODUCT_STRATEGY.md` calls this CareGiver OS** (see Section 9.2). The north star grounds it in the same gravity well: the caregiver's operating system is not a separate product. It is the same platform, viewed from the supply side, powered by the same coordination data, and connected to the same FMS and marketplace layers.
+
+**From the agency's side:**
+
+Agency A, which employs 3 of Rob's 9 caregivers, also sees CareSupport. Not as a competitor — CareSupport is not hiring their caregivers away. CareSupport is the coordination layer that makes their caregivers' shifts visible to the family and the other agencies' caregivers, ensures handoffs are documented, and reduces the agency coordinator's phone calls. The agency coordinator has a CareSupport thread and app view scoped to their staff — they see their caregivers' shifts, handoff notes, and incidents, but not the full care plan or other agencies' staff.
+
+When CareSupport contacts Agency B's on-call about Rob's evening gap, that is the agent operating as the family's coordinator — dispatching across organizational boundaries that no individual agency can cross.
+
+**Everyone who participates in care has CareSupport. Each sees it from their role:**
+
+| Role | Their CareSupport | Their app view |
+|---|---|---|
+| **Care recipient (Rob)** | Operational updates via text, minimal interaction required | Today's schedule, who's coming, what's next |
+| **Family coordinator** | Full coordination control, decisions when needed | Full operational dashboard, coverage map, financials |
+| **Family caregiver** | Shift reminders, task lists, check-in prompts | Their shifts, care context, handoff notes, earnings |
+| **Professional caregiver** | Shift requests, context briefings, session logging | Unified schedule across all families, earnings, profile |
+| **Agency coordinator** | Coverage requests, staff shift visibility, incident routing | Scoped view of their staff's shifts and handoffs |
+| **Case manager** | Care plan updates, compliance reports, reassessment data | Read-only care plan view, hours utilization, outcome metrics |
+
+One platform. One agent. Many perspectives. Every person's CareSupport is shaped by their role in the care network — but the underlying data, the coordination context, and the operational intelligence are unified.
 
 ---
 
@@ -201,19 +391,28 @@ If the north star lives only in the founder's head, every implementation decisio
 The inverse path is not a roadmap of strategic choices. It is a gravity well. Once the coordination layer works, everything else falls into it — not because you chase it, but because each layer is the only logical next step given what you already hold.
 
 ```
-You coordinate care → so you capture needs as structured data
-You have structured data → so you can verify visits
-You can verify visits → so you can do compliance
-You can do compliance → so you can bill Medicaid
-You can bill Medicaid → so you are the FMS
-You are the FMS with context → so you see the gaps families cannot fill
-You see the gaps → so you fill them
-You fill them → so you are the marketplace
+You coordinate one caregiver → the caregiver asks you to text their brother
+You text the brother → now you coordinate the family
+You coordinate the family → caregivers join through the family
+You coordinate caregivers → you hold the unified schedule across agencies
+You hold the unified schedule → the agent's intelligence exceeds what text can display
+The intelligence exceeds text → the companion app surfaces it
+The companion app is installed → GPS + timestamps + biometrics are available
+GPS + time + identity + schedule → EVV-compliant visit verification
+Verified visits → billable Medicaid claims
+Billing + payroll → you are the fiscal intermediary
+FMS + coordination context → you see demand that no one else can see
+Demand + payment rail + context briefing → marketplace dispatch
+Marketplace caregivers join CareSupport → their profiles build across families
+Caregiver profiles deepen → CareSupport becomes their operating system too
+Both sides of the platform compound → the agency is dissolved
 ```
 
 No step is a pivot. No step requires a strategy change. Each one is just the obvious next thing given what you already have from the step before.
 
-And the reason no one else can run this cascade is that it only works in this order. An FMS that tries to add coordination is bolting on a chat feature. A marketplace that tries to add context is asking families to fill out forms. CareSupport starts where the context originates — inside the family's actual conversation — and everything downstream is a derivative of that.
+The cascade runs on both sides simultaneously. From the family side, CareSupport grows from coordinator to FMS to marketplace. From the caregiver side, CareSupport grows from shift management tool to unified professional workspace to portable career platform. Both sides feed each other: every family that joins adds demand; every caregiver who joins adds supply; the coordination data from both sides makes the matching engine smarter.
+
+And the reason no one else can run this cascade is that it only works in this order. An FMS that tries to add coordination is bolting on a chat feature. A marketplace that tries to add context is asking families to fill out forms. An agency that tries to add an app is building on top of shifts, not conversations. CareSupport starts where the context originates — inside the family's actual conversation and the caregiver's actual work — and everything downstream is a derivative of that.
 
 The inevitability is not the destination. It is that there is no off-ramp once the coordination layer works.
 
