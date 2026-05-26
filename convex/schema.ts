@@ -280,4 +280,17 @@ export default defineSchema({
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
     .index("by_event", ["event"]),
+
+  waitlistSignups: defineTable({
+    email: v.string(),
+    phone: v.optional(v.string()),
+    fullName: v.optional(v.string()),
+    role: v.optional(v.string()),
+    source: v.string(),
+    userAgent: v.optional(v.string()),
+    submittedAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_source", ["source"])
+    .index("by_submitted_at", ["submittedAt"]),
 });
