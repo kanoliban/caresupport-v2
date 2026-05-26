@@ -178,11 +178,15 @@
 
 @media (max-width: 720px) {
   .footer {
-    aspect-ratio: 1448 / 1100;
+    aspect-ratio: auto;
+    min-height: 520px;
+    padding-bottom: 240px;
+    background-size: 100% 240px;
+    background-position: bottom center;
   }
   .content {
     grid-template-columns: 1fr;
-    padding-top: 10%;
+    padding-top: 32px;
     gap: 20px;
   }
   .brandCol {
@@ -203,6 +207,13 @@
     flex-wrap: wrap;
     justify-content: center;
     text-align: center;
+    margin-bottom: 12px;
+  }
+  .authNote {
+    text-align: center;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
   }
   .legalStrip {
     font-size: 10.5px;
@@ -212,5 +223,6 @@
     text-align: center;
     gap: 4px;
     padding: 0 16px;
+    bottom: 16px;
   }
 }

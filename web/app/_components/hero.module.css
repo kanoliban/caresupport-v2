@@ -144,10 +144,11 @@
   font:
     600 14px/1 var(--font-inter-tight),
     sans-serif;
-  padding: 0 22px;
+  padding: 16px 22px;
   border-radius: 8px;
   white-space: nowrap;
   transition: background-color 150ms;
+  margin-top: 2px;
 }
 
 .submit:hover {
