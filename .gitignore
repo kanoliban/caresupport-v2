@@ -12,6 +12,5 @@ runtime/scripts/linq_config.json
 .processed_event_ids.json
 .message_approval_map.json
 __pycache__/
-convex/_generated/
 .convex/
 .vercel
