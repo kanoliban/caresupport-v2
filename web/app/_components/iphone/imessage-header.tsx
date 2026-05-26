@@ -51,13 +51,13 @@ export function IMessageHeader() {
           <span className="text-[17px]">Messages</span>
         </div>
 
-        <div className="flex-1 flex flex-col items-center -ml-[60px]">
-          <div className="w-[40px] h-[40px] rounded-full bg-white flex items-center justify-center mb-[2px] overflow-hidden">
+        <div className="flex-1 flex flex-col items-center -ml-[60px] mt-[8px]">
+          <div className="w-[48px] h-[48px] rounded-full bg-white flex items-center justify-center mb-[2px] overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/caresupport-logo.webp"
               alt=""
-              className="w-[36px] h-[36px] object-contain"
+              className="w-[43px] h-[43px] object-contain"
             />
           </div>
           <span className="text-[13px] font-semibold text-black">CareSupport</span>

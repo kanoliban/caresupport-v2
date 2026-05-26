@@ -61,26 +61,24 @@ export function Hero({ initialCount }: HeroProps) {
     >
       <div className={styles.inner}>
         <div className={styles.left}>
-          <div className={styles.brandRow}>
-            <Image
-              src="/caresupport-logo.webp"
-              alt="CareSupport"
-              width={512}
-              height={512}
-              className={styles.brandMark}
-              priority
-            />
-            <span className={styles.brandWord}>
-              CareSupport<span className={styles.brandDot}>.com</span>
-            </span>
-          </div>
-
           <span className={styles.eyebrow}>
             <span className={styles.eyebrowDot} aria-hidden />
             Now in private beta
           </span>
 
-          <h1 className={styles.title}>CareSupport lives in iMessage.</h1>
+          <h1 className={styles.title}>
+            <Image
+              src="/caresupport-logo.webp"
+              alt=""
+              width={512}
+              height={512}
+              className={styles.titleMark}
+              priority
+            />
+            <span className={styles.titleText}>
+              CareSupport lives in iMessage.
+            </span>
+          </h1>
 
           <p className={styles.lede}>
             Text the care details once. CareSupport turns medications,

@@ -23,34 +23,6 @@
   align-items: flex-start;
 }
 
-.brandRow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 28px;
-}
-
-.brandMark {
-  width: 67px;
-  height: 67px;
-  flex: none;
-  display: block;
-  object-fit: contain;
-}
-
-.brandWord {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 28px;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-  line-height: 1;
-  font-weight: 400;
-}
-
-.brandWord .brandDot {
-  color: var(--ink-2);
-}
-
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -81,6 +53,23 @@
   margin: 0 0 20px;
   font-weight: 400;
   text-wrap: balance;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.titleMark {
+  width: 100px;
+  height: 100px;
+  flex: none;
+  object-fit: contain;
+  display: block;
+}
+
+.titleText {
+  flex: 1;
+  min-width: 0;
 }
 
 .lede {
