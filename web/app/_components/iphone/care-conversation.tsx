@@ -7,6 +7,7 @@ import { MessageBubble } from "./message-bubble";
 import { TypingIndicator } from "./typing-indicator";
 import { OptionButtons, type Option } from "./option-buttons";
 import { SignupView } from "./signup-view";
+import { ContactCard } from "./contact-card";
 
 const FONT_STYLE = {
   fontFamily:
@@ -29,7 +30,7 @@ type Phase =
 
 type Path = "parent" | "siblings" | "learn";
 
-type ViewState = "conversation" | "signup" | "confirmed";
+type ViewState = "conversation" | "signup" | "confirmed" | "contact";
 
 const INITIAL_OPTIONS: Option[] = [
   { id: "parent", label: "I help an aging parent" },
@@ -52,7 +53,7 @@ const PATH_MESSAGES: Record<Path, Message[]> = {
   learn: [
     { id: "l1", text: "Care doesn't happen in a dashboard.", variant: "received", showTail: false },
     { id: "l2", text: "It happens in the messages your family already sends at 11 PM.", variant: "received", showTail: true },
-    { id: "l3", text: "I live there. I remember the details. I quietly nudge before things slip.", variant: "received", showTail: false },
+    { id: "l3", text: "I'm part of the thread. The details stick. I nudge before things slip.", variant: "received", showTail: false },
     { id: "l4", text: "One ask, the right people, the right time.", variant: "received", showTail: true },
   ],
 };
@@ -192,6 +193,31 @@ export function CareConversation({
     setView("conversation");
   }
 
+  function handleContactTap() {
+    setAnimateView(true);
+    setView("contact");
+  }
+
+  function handleBackFromContact() {
+    setAnimateView(true);
+    setView("conversation");
+  }
+
+  function handleMessagesBack() {
+    if (view !== "conversation") {
+      setAnimateView(true);
+      setView("conversation");
+      return;
+    }
+    setMessages([]);
+    setShowTyping(false);
+    setShowOptions(false);
+    setSelectedPath(null);
+    setMessageIndex(0);
+    setPhase("initial");
+    setHasInitialized(false);
+  }
+
   function handleSignupSuccess() {
     setAnimateView(true);
     setView("conversation");
@@ -220,7 +246,10 @@ export function CareConversation({
           <div
             className={`h-full flex flex-col bg-[#f2f2f7] ${animateView ? "animate-slide-in-right" : ""}`}
           >
-            <IMessageHeader />
+            <IMessageHeader
+              onMessagesBack={handleMessagesBack}
+              onContactTap={handleContactTap}
+            />
 
             <div
               ref={containerRef}
@@ -279,6 +308,14 @@ export function CareConversation({
           <SignupView
             onBack={handleBackFromSignup}
             onSuccess={handleSignupSuccess}
+            animate={animateView}
+          />
+        )}
+
+        {view === "contact" && (
+          <ContactCard
+            onBack={handleBackFromContact}
+            onJoinWaitlist={handleJoinClick}
             animate={animateView}
           />
         )}

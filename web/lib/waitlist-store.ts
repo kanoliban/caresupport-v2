@@ -6,6 +6,10 @@ if (!CONVEX_URL) {
   throw new Error("NEXT_PUBLIC_CONVEX_URL is required for waitlist storage.");
 }
 
+// Display offset added to the live Convex count. Set by founder to reflect
+// pre-launch signups collected outside this form (private cohort, manual list).
+const DISPLAY_OFFSET = 23;
+
 let cachedClient: ConvexHttpClient | null = null;
 
 function getClient(): ConvexHttpClient {
@@ -29,9 +33,10 @@ export async function submitSignup(input: SubmitInput): Promise<SubmitResult> {
     phone: input.phone,
     userAgent: input.userAgent,
   });
-  return { count: result.count };
+  return { count: result.count + DISPLAY_OFFSET };
 }
 
 export async function getSignupCount(): Promise<number> {
-  return await getClient().query(api.waitlist.getSignupCount, {});
+  const count = await getClient().query(api.waitlist.getSignupCount, {});
+  return count + DISPLAY_OFFSET;
 }

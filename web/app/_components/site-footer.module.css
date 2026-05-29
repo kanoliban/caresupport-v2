@@ -1,8 +1,8 @@
 .footer {
   position: relative;
   width: 100%;
-  aspect-ratio: 1448 / 1086;
-  background-image: url("/footer-illustration.png");
+  aspect-ratio: 1536 / 1024;
+  background-image: url("/caresupport-footer-illustration.svg");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: top center;
@@ -179,9 +179,9 @@
 @media (max-width: 720px) {
   .footer {
     aspect-ratio: auto;
-    min-height: 520px;
-    padding-bottom: 240px;
-    background-size: 100% 240px;
+    min-height: 560px;
+    padding-bottom: 280px;
+    background-size: 100% 280px;
     background-position: bottom center;
   }
   .content {
@@ -223,6 +223,6 @@
     text-align: center;
     gap: 4px;
     padding: 0 16px;
-    bottom: 16px;
+    bottom: 6px;
   }
 }

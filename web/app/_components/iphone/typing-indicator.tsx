@@ -6,7 +6,7 @@ interface TypingIndicatorProps {
 
 export function TypingIndicator({ animate = true }: TypingIndicatorProps) {
   return (
-    <div className={`flex justify-start ${animate ? "animate-message-in" : ""}`}>
+    <div className={`relative w-fit mr-auto ${animate ? "animate-message-in" : ""}`}>
       <div className="relative">
         <div className="bg-[#e5e5ea] rounded-[18px] rounded-bl-[4px] px-[16px] py-[12px] flex items-center gap-[5px]">
           <span

@@ -15,6 +15,7 @@ interface SignupViewProps {
 
 export function SignupView({ onBack, onSuccess, animate = false }: SignupViewProps) {
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState("");
 
@@ -27,7 +28,7 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
       const response = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, phone }),
       });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as {
@@ -67,7 +68,7 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
             Get early access
           </h3>
           <p className="text-[15px] text-[#3c3c43] leading-[20px] mb-[20px]">
-            Drop your email. We&rsquo;ll send your invite when CareSupport is
+            Drop your email and number. We&rsquo;ll reach out when CareSupport is
             ready for your family.
           </p>
 
@@ -84,6 +85,22 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-[14px] py-[12px] rounded-[10px] bg-[#f2f2f7] border border-transparent text-[16px] text-black placeholder-[#8e8e93] outline-none focus:border-[#007aff]"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[13px] font-medium text-[#3c3c43] mb-[6px] block">
+                Phone
+              </span>
+              <input
+                type="tel"
+                name="phone"
+                autoComplete="tel"
+                required
+                placeholder="(555) 123-4567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
                 className="w-full px-[14px] py-[12px] rounded-[10px] bg-[#f2f2f7] border border-transparent text-[16px] text-black placeholder-[#8e8e93] outline-none focus:border-[#007aff]"
               />
             </label>

@@ -5,7 +5,15 @@ const FONT_STYLE = {
     '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
 };
 
-export function IMessageHeader() {
+interface IMessageHeaderProps {
+  onMessagesBack?: () => void;
+  onContactTap?: () => void;
+}
+
+export function IMessageHeader({
+  onMessagesBack,
+  onContactTap,
+}: IMessageHeaderProps = {}) {
   return (
     <div
       className="relative bg-[#f6f6f6]/95 backdrop-blur-xl border-b border-[#c6c6c8]"
@@ -37,7 +45,12 @@ export function IMessageHeader() {
 
       {/* nav bar */}
       <div className="flex items-center px-[16px] py-[10px]">
-        <div className="flex items-center gap-[4px] text-[#007aff]">
+        <button
+          type="button"
+          onClick={onMessagesBack}
+          className="flex items-center gap-[4px] text-[#007aff] active:opacity-50 transition-opacity"
+          aria-label="Back to Messages"
+        >
           <svg width="12" height="20" viewBox="0 0 12 20" aria-hidden>
             <path
               d="M10.5 1L2 10L10.5 19"
@@ -49,9 +62,14 @@ export function IMessageHeader() {
             />
           </svg>
           <span className="text-[17px]">Messages</span>
-        </div>
+        </button>
 
-        <div className="flex-1 flex flex-col items-center -ml-[60px] mt-[8px]">
+        <button
+          type="button"
+          onClick={onContactTap}
+          className="flex-1 flex flex-col items-center -ml-[60px] mt-[8px] active:opacity-60 transition-opacity"
+          aria-label="View CareSupport contact"
+        >
           <div className="w-[48px] h-[48px] rounded-full bg-white flex items-center justify-center mb-[2px] overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -62,7 +80,7 @@ export function IMessageHeader() {
           </div>
           <span className="text-[13px] font-semibold text-black">CareSupport</span>
           <span className="text-[11px] text-[#8e8e93]">Care coordinator</span>
-        </div>
+        </button>
 
         <div className="flex items-center gap-[16px] text-[#007aff]">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
