@@ -116,10 +116,11 @@ function StepRow({ step }: { step: Step }) {
   const { ref, inView } = useInView<HTMLDivElement>();
 
   return (
-    <div
+    <section
       ref={ref}
       className={`${styles.step} ${step.reverse ? styles.reverse : ""}`}
     >
+      <div className={styles.divider} aria-hidden />
       <div className={styles.row}>
         <div className={styles.copy}>
           <span className={styles.tag}>{step.tag}</span>
@@ -147,7 +148,7 @@ function StepRow({ step }: { step: Step }) {
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

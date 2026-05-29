@@ -49,15 +49,26 @@
 .steps {
   display: flex;
   flex-direction: column;
-  gap: clamp(80px, 12vw, 180px);
+  gap: clamp(36px, 5vw, 72px);
   width: 100%;
+}
+
+.step {
+  width: 100%;
+}
+
+.divider {
+  height: 1px;
+  width: 100%;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  margin-bottom: clamp(36px, 5vw, 72px);
 }
 
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  gap: clamp(28px, 5vw, 80px);
+  gap: clamp(28px, 5vw, 72px);
 }
 
 .reverse .row {
@@ -213,5 +224,20 @@
   }
   .sub {
     max-width: none;
+  }
+
+  /* each step is its own screen — one flick, one page */
+  .steps {
+    gap: 0;
+  }
+  .step {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(20px, 6vh, 56px) 0;
+  }
+  .divider {
+    display: none;
   }
 }

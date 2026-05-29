@@ -134,6 +134,9 @@
 }
 
 @media (max-width: 700px) {
+  .hero {
+    padding-top: 148px;
+  }
   .phoneWrap {
     transform: scale(0.92);
     margin-top: 28px;
