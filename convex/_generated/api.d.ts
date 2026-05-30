@@ -28,6 +28,7 @@ import type * as lib_pipeline_responseParser from "../lib/pipeline/responseParse
 import type * as lib_pipeline_types from "../lib/pipeline/types.js";
 import type * as lib_promptContent from "../lib/promptContent.js";
 import type * as lib_scheduleBackfill from "../lib/scheduleBackfill.js";
+import type * as lib_tools_composioClient from "../lib/tools/composioClient.js";
 import type * as medications from "../medications.js";
 import type * as memoryEntries from "../memoryEntries.js";
 import type * as messages from "../messages.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   "lib/pipeline/types": typeof lib_pipeline_types;
   "lib/promptContent": typeof lib_promptContent;
   "lib/scheduleBackfill": typeof lib_scheduleBackfill;
+  "lib/tools/composioClient": typeof lib_tools_composioClient;
   medications: typeof medications;
   memoryEntries: typeof memoryEntries;
   messages: typeof messages;
