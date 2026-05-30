@@ -680,3 +680,44 @@ Read the last 2-3 entries before starting work.
 ### Concerns
 - This was a synthetic Convex function smoke, not a real inbound Linq webhook/iMessage test.
 - Dev had to be cleared because stale data blocked schema validation. Treat prod separately; do not reset or deploy prod without an explicit production decision.
+
+---
+
+## 2026-05-30 — Codex
+
+### What I did
+- Checked local sync against `https://github.com/kanoliban/caresupport-v2.git`; the active landing branch was up to date but the worktree had uncommitted WIP.
+- Created branch `liban/composio-integration-wip` from `liban/landing-2026-05`.
+- Removed the root `.DS_Store` file and added `.DS_Store` to `.gitignore`.
+- Committed and pushed the coherent Composio integration spike:
+  - `@composio/core` dependency
+  - `convex/lib/tools/composioClient.ts`
+  - `scripts/composio-smoke.ts`
+  - `docs/composio-integration-plan.md`
+  - `tasks/todo.md` rewrite and archived billing task
+  - generated Convex API type update
+- Verified before commit:
+  - `npm run typecheck`
+  - `npm test` (17 files / 234 tests)
+
+### State I'm leaving
+- Remote branch `origin/liban/composio-integration-wip` exists with the Composio WIP checkpoint.
+- The branch still has untracked ambiguous local files that were intentionally not committed:
+  - `.claude/skills/`
+  - `caresupport-rev1.png`
+  - `caresupport-rev2.png`
+  - `convex/seed.ts`
+  - `docs/CODEBASE-OVERVIEW.md`
+  - `docs/STRATEGY.md`
+  - `docs/STRATEGY.pdf`
+  - `docs/product-decisions/`
+  - `images__1_-removebg-preview.png`
+
+### What the next agent should know
+- The committed Composio work is a plan/spike checkpoint, not a complete runtime integration.
+- The spike intentionally uses the low-level `@composio/core` path rather than `@composio/anthropic` because of SDK peer-version mismatch noted in the plan.
+- The next implementation step should start with schema/action primitives (`connectedAccounts`, `toolActions`, `externalRefs`, `userToolPermissions`) before any prompt copy claims external actions can run.
+
+### Concerns
+- Ambiguous untracked docs/assets may still need a human decision: commit on a separate branch, archive, or remove.
+- No live Composio API smoke was run because no `COMPOSIO_API_KEY` was configured in this session.
