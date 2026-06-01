@@ -29,6 +29,7 @@ export interface MessageTurn {
 
 export interface SystemBlocksInput {
   soulContent: string;
+  modelConstitutionContent?: string;
   routingContent: string;
   capabilitiesContent: string;
   skillsContent: string;
@@ -117,6 +118,73 @@ export interface ScheduleUpdate {
   provider?: string;
 }
 
+export type CareContactType =
+  | "family"
+  | "professional_caregiver"
+  | "agency"
+  | "clinician"
+  | "other";
+
+export interface CareContactUpdate {
+  action: "add" | "update" | "remove";
+  name?: string;
+  phone?: string;
+  relationship?: string;
+  contactType?: CareContactType;
+  agencyName?: string;
+  role?: string;
+  availabilityNotes?: string;
+  contactPriority?: number;
+  canReceiveTexts?: boolean;
+  consentToContact?: boolean;
+  active?: boolean;
+  notes?: string;
+}
+
+export type CoordinationEventType =
+  | "coverage_gap"
+  | "schedule_change"
+  | "handoff"
+  | "task_followup"
+  | "appointment"
+  | "medication"
+  | "outreach"
+  | "other";
+
+export type CoordinationEventStatus =
+  | "open"
+  | "waiting"
+  | "resolved"
+  | "cancelled";
+
+export type CoordinationUrgency = "low" | "normal" | "high" | "urgent";
+
+export interface CoordinationEventUpdate {
+  action: "add" | "update" | "remove";
+  title?: string;
+  type?: CoordinationEventType;
+  status?: CoordinationEventStatus;
+  urgency?: CoordinationUrgency;
+  description?: string;
+  startsAt?: number;
+  endsAt?: number;
+  originalAssigneeName?: string;
+  confirmedContactNames?: string[];
+  pendingContactNames?: string[];
+  declinedContactNames?: string[];
+  fallbackContactNames?: string[];
+  nextActionAt?: number;
+  escalationAt?: number;
+  resolution?: string;
+}
+
+export interface OutreachRequest {
+  contactName: string;
+  purpose: string;
+  message: string;
+  coordinationEventTitle?: string;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
@@ -129,4 +197,7 @@ export interface AgentResponse {
   effect: EffectRequest | null;
   medicationUpdates?: MedicationUpdate[];
   scheduleUpdates?: ScheduleUpdate[];
+  careContactUpdates?: CareContactUpdate[];
+  coordinationEventUpdates?: CoordinationEventUpdate[];
+  outreachRequests?: OutreachRequest[];
 }

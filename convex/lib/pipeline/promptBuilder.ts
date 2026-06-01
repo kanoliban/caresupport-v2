@@ -1,9 +1,9 @@
 import type { Intent, MessageTurn, SystemBlock, SystemBlocksInput } from "./types";
 
 export const RESPONSE_FORMAT = `── WHAT YOU CAN AND CANNOT DO ──
-CAN: Generate SMS responses, update the user's profile, update the care case profile, save user_memory_updates, save care_case_memory_updates, capture self_corrections, and create typed medication_updates or schedule_updates.
-CANNOT YET: Contact other people, add teammates, create group chats, access external systems, make medical decisions, or claim a save happened unless you returned the matching structured update in this response.
-CRITICAL: Never claim you saved something unless the matching user_profile_update, care_case_profile_update, user_memory_updates, care_case_memory_updates, medication_updates, or schedule_updates is non-empty.
+CAN: Generate SMS responses, update the user's profile, update the care case profile, save user_memory_updates, save care_case_memory_updates, capture self_corrections, and create typed medication_updates, schedule_updates, care_contact_updates, coordination_event_updates, or outreach_requests.
+CANNOT YET: Create group chats, access external systems, make medical decisions, send outreach without a persisted coordinator approval, or claim a save happened unless you returned the matching structured update in this response.
+CRITICAL: Never claim you saved something unless the matching user_profile_update, care_case_profile_update, user_memory_updates, care_case_memory_updates, medication_updates, schedule_updates, care_contact_updates, or coordination_event_updates is non-empty. Never claim you contacted someone unless the runtime has approved and sent a persisted outreach attempt.
 
 ── DATE RESOLUTION ──
 The TIME block at the top of this prompt is your only source of truth for today's date. When a user gives a relative date ("tomorrow", "next Monday", "in 3 days", "this Thursday"), resolve it to absolute YYYY-MM-DD using the TIME block before writing to schedule_updates. Never store "today", "tomorrow", or a day name as the date field. If the user gives a date without a year, use the current year shown in the TIME block. If they give a date in the past relative to the TIME block, ask whether they meant a future occurrence.
@@ -26,14 +26,18 @@ FIELD GUIDE:
 - self_corrections: Lessons the system should remember about how to behave. Prefix each with [behavioral], [factual], or [operational].
 - medication_updates: Typed medication add/update/remove operations.
 - schedule_updates: Typed schedule add/update/remove operations. Types are appointment, task, reminder.
+- care_contact_updates: Typed add/update/remove operations for people in the care network. Use this when the user gives a caregiver/family/helper name, phone, role, relationship, availability, or consent detail.
+- coordination_event_updates: Typed add/update/remove operations for coordination work that needs tracking, such as coverage gaps, schedule changes, handoffs, outreach planning, or unresolved caregiver replies.
+- outreach_requests: Proposed third-party messages. The runtime stores them pending approval and may send them only after a matching coordinator approval. In sms_response, ask permission before any new outreach.
 - reactions: Optional tapbacks.
 - effect: Optional iMessage effect.
 
 CURRENT RUNTIME BOUNDARY:
 - CareSupport is currently one trusted thread around one care situation.
-- Do not promise to text, call, invite, or add anyone else yet.
+- CareSupport can record care contacts, track coordination events, propose outreach, and execute approved one-to-one outreach to known contacts.
+- Do not promise that you texted, called, invited, or contacted anyone else unless the runtime reports that the send succeeded.
 - If asked about pricing, say CareSupport is free during the concierge beta.
-- If asked to add or contact another person, explain that CareSupport cannot do that yet, offer to draft the message, and keep tracking the coordination issue here.`;
+- If asked to add or contact another person, save the known contact/coordination details when provided, ask permission before outreach, and use caregiver micro-onboarding language in the proposed message: identify CareSupport, say who asked, state the concrete purpose, ask whether this is a good number to text, and avoid unnecessary private care detail.`;
 
 export function channelGuidance(service: string): string {
   if (service.toUpperCase() === "SMS") {
@@ -116,6 +120,14 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     text: input.soulContent || "You are CareSupport — a family care agent starting in one trusted text thread.",
     cacheBreakpoint: false,
   });
+
+  if (input.modelConstitutionContent?.trim()) {
+    blocks.push({
+      type: "text",
+      text: `── CARESUPPORT MODEL CONSTITUTION ──\n${input.modelConstitutionContent.trim()}`,
+      cacheBreakpoint: true,
+    });
+  }
 
   blocks.push({
     type: "text",
