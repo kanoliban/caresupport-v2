@@ -275,7 +275,7 @@ Implementation tasks:
       reference context, and observability layers.
 - [x] Define when Convex-native RAG becomes justified.
 - [x] Define the Pinecone/external-vector gate.
-- [ ] Before installing any RAG dependency, define the minimal retrieval
+- [x] Before installing any RAG dependency, define the minimal retrieval
       interface and eval questions it must satisfy.
 - [ ] Revisit after Phase 2E transcript tests show whether older/fuzzy context
       is actually being missed.
@@ -287,12 +287,13 @@ Acceptance criteria:
 - [x] Current truth cannot be overridden by retrieved semantic context.
 - [x] Pinecone is explicitly deferred until measured Convex-native retrieval
       limits appear.
-- [ ] A future Convex RAG spike has source-link, namespace, filter, and eval
+- [x] A future Convex RAG spike has source-link, namespace, filter, and eval
       requirements before implementation.
 
 Validation targets:
 
 - [x] `docs/convex-memory-retrieval-architecture.md`
+- [x] `docs/caresupport-learning-retrieval-implementation.md`
 - [x] `AGENTS.md`
 - [x] this task tracker
 - [ ] future retrieval/eval tests if a Convex RAG spike is started
@@ -328,7 +329,7 @@ Implementation tasks:
   - which coordination event it affected
 - [x] Split context-loading expectations into always-loaded current context and
       on-demand reference context before introducing Convex RAG.
-- [ ] Define a small retrieval interface that can later be backed by
+- [x] Define a small retrieval interface that can later be backed by
       Convex-native RAG without changing the care graph source of truth.
 - [x] Add transcript-style tests for the full agent loop:
   coordinator need -> contact creation -> approval -> outbound -> caregiver
@@ -357,10 +358,89 @@ Test targets:
 - [x] `convex/lib/promptContent.test.ts`
 - [x] `convex/lib/pipeline/promptBuilder.test.ts`
 - [x] `docs/convex-memory-retrieval-architecture.md`
+- [x] `docs/caresupport-learning-retrieval-implementation.md`
 - [x] `convex/contactReplies.test.ts`
 - [x] `convex/handler.test.ts`
 - [ ] `convex/lib/pipeline/responseParser.test.ts`
 - [x] New transcript-style coordination loop tests if practical
+
+## 2E1 — CareSupport Learning / Claim Layer
+
+Purpose: define CareSupport learning as source-linked, revisable claims before
+confirmed current truth, so the model can seek accuracy without acting from
+false certainty.
+
+Implementation tasks:
+
+- [ ] Add a `careClaims` table for source-linked heard, inferred,
+      needs-clarification, confirmed, rejected, contradicted, superseded, and
+      archived understanding.
+- [ ] Add claim lifecycle helpers:
+  - create claims from a source message
+  - list claims by care case/status/subject/source
+  - confirm, reject, contradict, and supersede claims
+  - preserve source and confirming message ids
+- [ ] Keep claims separate from current truth until a deterministic promotion
+      rule runs.
+- [ ] Add promotion helpers from confirmed claims into current tables such as
+      `careContacts`, `coordinationEvents`, and `memoryEntries`.
+- [ ] Add unresolved-claim context to compiled prompt context so CareSupport can
+      say what it thinks it heard and what still needs confirmation.
+- [ ] Ensure non-scheduling claims remain possible:
+  relationship, role, constraint, preference, coordination rule, and care note.
+
+Acceptance criteria:
+
+- [ ] Messy fragments can create source-linked claims without changing current
+      truth.
+- [ ] Ambiguous/risky claims are marked `needs_clarification`.
+- [ ] CareSupport can ask targeted clarification questions before outreach or
+      schedule creation.
+- [ ] Confirmed claims can promote into current truth with source links.
+- [ ] Contradicted/superseded claims do not continue to appear as current truth.
+
+Test targets:
+
+- [ ] `convex/careClaims.test.ts`
+- [ ] `convex/robCareNetworkClarification.test.ts`
+- [ ] prompt context test for unresolved claims
+
+## 2E2 — Convex-Native Retrieval / RAG Spike
+
+Purpose: evaluate Convex-native semantic retrieval after the claim layer exists,
+without letting retrieved text override structured current truth.
+
+Implementation tasks:
+
+- [ ] Add `convex/lib/knowledge/retrieveCareContext.ts` with a structured-only
+      backend first.
+- [ ] Return current truth, unresolved claims, reference snippets, and source
+      links as separate sections.
+- [ ] Install `@convex-dev/rag` only after the structured retrieval interface
+      and claim simulator pass.
+- [ ] Use care-case-scoped namespaces:
+      `namespace = careCaseId`.
+- [ ] Index selected summaries, not every raw message:
+  - confirmed care model summaries
+  - unresolved claim summaries
+  - resolved coordination event recaps
+  - important corrections and stable preferences
+- [ ] Preserve source ids and filters for record type, claim status, contact,
+      event type, actor type, sensitivity, and active state.
+
+Acceptance criteria:
+
+- [ ] Current structured truth always wins over retrieved reference context.
+- [ ] RAG entries are care-case scoped.
+- [ ] Retrieved references include source ids.
+- [ ] Tests prove retrieval improves a response or next-step decision.
+- [ ] No Pinecone or external vector database is introduced.
+
+Test targets:
+
+- [ ] `convex/lib/knowledge/retrieveCareContext.test.ts`
+- [ ] RAG index payload construction tests
+- [ ] transcript/eval test with mocked retrieval results
 
 ## 2F — Follow-Up Cron / Next Action Scanner
 

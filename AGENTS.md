@@ -112,6 +112,7 @@ Start with:
 - `docs/product-thesis.md`
 - `docs/caresupport-model-constitution.md`
 - `docs/convex-memory-retrieval-architecture.md`
+- `docs/caresupport-learning-retrieval-implementation.md`
 - `docs/rob-care-operations-model.md`
 - `docs/tools-and-capabilities-thought-experiment.md`
 - `docs/integrations-and-tool-bearing-agent.md`

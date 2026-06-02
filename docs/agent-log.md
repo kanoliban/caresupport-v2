@@ -8,6 +8,48 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-02 — Codex
 
 ### What I did
+- Added `docs/caresupport-learning-retrieval-implementation.md` as the
+  implementation-facing plan for CareSupport learning and Convex-native
+  retrieval.
+- Defined learning as source-linked, revisable understanding that can be
+  clarified, confirmed, promoted into current truth, retrieved later, and
+  audited.
+- Proposed the new `careClaims` layer:
+  - heard
+  - inferred
+  - needs clarification
+  - confirmed
+  - rejected
+  - contradicted
+  - superseded
+  - archived
+- Defined the minimal retrieval interface that can start structured-only and
+  later be backed by Convex RAG.
+- Added the next implementation phases to `tasks/coordination-phase-2.md`:
+  - `2E1 — CareSupport Learning / Claim Layer`
+  - `2E2 — Convex-Native Retrieval / RAG Spike`
+- Added the new document to `AGENTS.md` canonical docs.
+
+### Validation
+- `git diff --check` passed.
+
+### State I'm leaving
+- The next implementation PR should start with `careClaims` and the Rob care
+  network clarification simulator, not with a RAG dependency.
+- Convex RAG is now explicitly sequenced after the claim layer and structured
+  retrieval interface.
+
+### Concerns
+- Sensitive claims such as dementia context need a product decision around
+  whether they can be stored as `needs_clarification` before explicit
+  confirmation, or whether explicit confirmation is required before any durable
+  storage.
+
+---
+
+## 2026-06-02 — Codex
+
+### What I did
 - Added `convex/coordinationLoop.test.ts`, a deterministic transcript-style
   simulator for the Phase 2E one-to-many loop.
 - The test simulates:
