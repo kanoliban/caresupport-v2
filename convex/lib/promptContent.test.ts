@@ -151,6 +151,13 @@ describe("SOUL_CONTENT", () => {
     expect(SKILLS_CONTENT).toContain("ask whether this is a good number to text");
   });
 
+  it("teaches care contact reply handling without false confirmations", () => {
+    expect(SKILLS_CONTENT).toContain("## Care contact replies");
+    expect(SKILLS_CONTENT).toContain("do not treat them as the primary coordinator");
+    expect(SKILLS_CONTENT).toContain("Partial availability is not confirmation");
+    expect(SKILLS_CONTENT).toContain("wrong number, stop texting, unsubscribe");
+  });
+
   it("instructs the model to extract all onboarding slots from one message when possible", () => {
     // #given the SKILLS_CONTENT Onboarding block
     // #then it tells the model to extract multiple slots at once

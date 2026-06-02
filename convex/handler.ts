@@ -434,7 +434,7 @@ export const handleMessage = internalAction({
       }
     }
 
-    await ctx.runMutation(internal.mutations.logMessage, {
+    const inboundMessageId = await ctx.runMutation(internal.mutations.logMessage, {
       careCaseId,
       userId,
       senderPhone,
@@ -457,6 +457,7 @@ export const handleMessage = internalAction({
           careContactId: careContactReply.careContactId,
           coordinationEventId: careContactReply.coordinationEventId,
           messageBody,
+          sourceMessageId: inboundMessageId,
         },
       );
       await ctx.runMutation(internal.mutations.logAudit, {
@@ -468,6 +469,7 @@ export const handleMessage = internalAction({
           careContactId: careContactReply.careContactId,
           coordinationEventId: careContactReply.coordinationEventId,
           outreachAttemptId: careContactReply.outreachAttemptId,
+          sourceMessageId: inboundMessageId,
           messageBody: messageBody.slice(0, 500),
           status: replyState.status,
           linqChatId: chatId,

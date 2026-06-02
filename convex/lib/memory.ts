@@ -61,6 +61,7 @@ export interface CareContactSnapshot {
   consentToContact?: boolean;
   active: boolean;
   notes?: string;
+  lastReplyStatus?: string;
 }
 
 export interface CoordinationEventSnapshot {
@@ -79,6 +80,7 @@ export interface CoordinationEventSnapshot {
   nextActionAt?: number;
   escalationAt?: number;
   resolution?: string;
+  lastReplyStatus?: string;
 }
 
 export interface MemoryUpdateInstruction {
@@ -385,6 +387,7 @@ export function buildCareCaseContext(
           : contact.consentToContact === false
             ? "outreach consent no"
             : "outreach consent unknown",
+        contact.lastReplyStatus ? `last reply ${contact.lastReplyStatus}` : "",
       ].filter(Boolean);
       lines.push(
         `- ${contact.name} [${contact.contactType}]${
@@ -414,6 +417,7 @@ export function buildCareCaseContext(
         event.endsAt ? `ends ${formatDateTime(event.endsAt)}` : "",
         event.nextActionAt ? `next action ${formatDateTime(event.nextActionAt)}` : "",
         event.escalationAt ? `escalate ${formatDateTime(event.escalationAt)}` : "",
+        event.lastReplyStatus ? `last reply ${event.lastReplyStatus}` : "",
       ].filter(Boolean);
       lines.push(
         `- [${event.status}/${event.urgency}/${event.type}] ${event.title}${

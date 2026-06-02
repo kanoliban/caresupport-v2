@@ -101,6 +101,16 @@ const outreachAttemptStatus = v.union(
   v.literal("failed"),
 );
 
+const careContactReplyStatus = v.union(
+  v.literal("confirmed"),
+  v.literal("declined"),
+  v.literal("partial"),
+  v.literal("deferred"),
+  v.literal("wrong_number"),
+  v.literal("stop_requested"),
+  v.literal("needs_clarification"),
+);
+
 const auditEvent = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
@@ -264,6 +274,11 @@ export default defineSchema({
     linqChatId: v.optional(v.string()),
     active: v.boolean(),
     notes: v.optional(v.string()),
+    availabilitySourceMessageId: v.optional(v.id("messages")),
+    availabilityUpdatedAt: v.optional(v.number()),
+    lastReplyStatus: v.optional(careContactReplyStatus),
+    lastReplyMessageId: v.optional(v.id("messages")),
+    lastReplyAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -293,6 +308,10 @@ export default defineSchema({
     escalationAt: v.optional(v.number()),
     resolution: v.optional(v.string()),
     createdByUserId: v.optional(v.id("users")),
+    lastReplyContactId: v.optional(v.id("careContacts")),
+    lastReplyMessageId: v.optional(v.id("messages")),
+    lastReplyStatus: v.optional(careContactReplyStatus),
+    lastReplyAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     closedAt: v.optional(v.number()),

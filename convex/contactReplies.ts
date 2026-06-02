@@ -30,21 +30,44 @@ type CareContactReplyStatus =
   | "confirmed"
   | "declined"
   | "partial"
+  | "deferred"
+  | "wrong_number"
+  | "stop_requested"
   | "needs_clarification";
 
+const WRONG_NUMBER_RE =
+  /\b(wrong number|wrong person|you have the wrong|not (me|this person)|who is this)\b/i;
+const STOP_REQUEST_RE =
+  /\b(stop texting|stop messaging|do not text|don't text|dont text|unsubscribe|remove me)\b/i;
+const DEFERRED_REPLY_RE =
+  /\b(ask me later|check later|let me check|i'?ll check|i will check|get back to you|not sure yet|later today|tomorrow|next week|unavailable until|not available until)\b/i;
 const POSITIVE_REPLY_RE =
-  /^(yes|yep|yeah|sure|ok|okay|confirmed|works|that works|i can\b|i can do\b|available\b)/i;
+  /^(yes|yep|yeah|sure|ok|okay|confirmed|works|that works|available\b|i can\b)/i;
 const NEGATIVE_REPLY_RE =
   /^(no|nope|can't\b|cant\b|cannot\b|unable\b|not available\b|won't\b|wont\b)/i;
 const PARTIAL_REPLY_RE =
-  /\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?|morning|afternoon|evening|overnight|\d{1,2}(:\d{2})?\s?(am|pm))\b/i;
+  /\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?|morning|afternoon|evening|overnight|only|except|before|after|from|until|\d{1,2}(:\d{2})?\s?(am|pm))\b/i;
 
 export function classifyCareContactReply(message: string): CareContactReplyStatus {
   const normalized = message.trim();
   if (!normalized) return "needs_clarification";
+  if (WRONG_NUMBER_RE.test(normalized)) return "wrong_number";
+  if (STOP_REQUEST_RE.test(normalized)) return "stop_requested";
   if (NEGATIVE_REPLY_RE.test(normalized)) return "declined";
-  if (POSITIVE_REPLY_RE.test(normalized)) return "confirmed";
+  if (!POSITIVE_REPLY_RE.test(normalized) && DEFERRED_REPLY_RE.test(normalized)) {
+    return "deferred";
+  }
+  if (/^i can\b/i.test(normalized) && PARTIAL_REPLY_RE.test(normalized)) {
+    return "partial";
+  }
+  if (POSITIVE_REPLY_RE.test(normalized)) {
+    if (/\b(but|only|except|unavailable until|not available until)\b/i.test(normalized)) {
+      return "partial";
+    }
+    return "confirmed";
+  }
   if (PARTIAL_REPLY_RE.test(normalized)) return "partial";
+  if (DEFERRED_REPLY_RE.test(normalized)) return "deferred";
   return "needs_clarification";
 }
 
@@ -64,6 +87,21 @@ function removeId(
   id: Id<"careContacts">,
 ): Array<Id<"careContacts">> {
   return (ids ?? []).filter((candidate) => candidate !== id);
+}
+
+function appendNote(existing: string | undefined, note: string): string {
+  if (!existing?.trim()) return note;
+  if (existing.includes(note)) return existing;
+  return `${existing}\n${note}`;
+}
+
+function inferDeferredNextActionAt(message: string, now: number): number | undefined {
+  if (/\btomorrow\b/i.test(message)) return now + 24 * 60 * 60 * 1000;
+  if (/\bnext week\b/i.test(message)) return now + 7 * 24 * 60 * 60 * 1000;
+  if (/\b(later today|ask me later|check later|let me check|get back to you|not sure yet)\b/i.test(message)) {
+    return now + 6 * 60 * 60 * 1000;
+  }
+  return undefined;
 }
 
 function latestSentAttempt(
@@ -184,7 +222,7 @@ async function resolveByChatId(
   const attempt = latestSentAttempt(attempts);
   if (attempt) {
     const contact = await ctx.db.get(attempt.careContactId);
-    if (contact?.careCaseId === attempt.careCaseId) {
+    if (contact?.careCaseId === attempt.careCaseId && contact.active) {
       return { contact, attempt };
     }
   }
@@ -193,7 +231,7 @@ async function resolveByChatId(
     .query("careContacts")
     .withIndex("by_linq_chat_id", (q) => q.eq("linqChatId", chatId))
     .first();
-  if (!contact) return null;
+  if (!contact || !contact.active) return null;
 
   const contactAttempts = await ctx.db
     .query("outreachAttempts")
@@ -265,39 +303,97 @@ export const applyInboundReplyToEvent = internalMutation({
     careContactId: v.id("careContacts"),
     coordinationEventId: v.optional(v.id("coordinationEvents")),
     messageBody: v.string(),
+    sourceMessageId: v.optional(v.id("messages")),
   },
   handler: async (ctx, args): Promise<{ status: CareContactReplyStatus }> => {
     const status = classifyCareContactReply(args.messageBody);
-    if (!args.coordinationEventId) return { status };
+    const now = Date.now();
+    const replySourcePatch = {
+      lastReplyStatus: status,
+      lastReplyMessageId: args.sourceMessageId,
+      lastReplyAt: now,
+      updatedAt: now,
+    };
 
     const [contact, event] = await Promise.all([
       ctx.db.get(args.careContactId),
-      ctx.db.get(args.coordinationEventId),
+      args.coordinationEventId ? ctx.db.get(args.coordinationEventId) : null,
     ]);
     if (
       !contact ||
-      !event ||
       contact.careCaseId !== args.careCaseId ||
-      event.careCaseId !== args.careCaseId
+      (event && event.careCaseId !== args.careCaseId)
     ) {
       return { status };
     }
 
+    if (status === "partial" || status === "deferred") {
+      const availabilityNote = status === "partial"
+        ? `Partial availability reply: ${args.messageBody}`
+        : `Deferred availability reply: ${args.messageBody}`;
+      await ctx.db.patch(contact._id, {
+        ...replySourcePatch,
+        availabilityNotes: appendNote(contact.availabilityNotes, availabilityNote),
+        availabilitySourceMessageId: args.sourceMessageId,
+        availabilityUpdatedAt: now,
+      });
+    } else if (status === "wrong_number" || status === "stop_requested") {
+      const note = status === "wrong_number"
+        ? `Wrong number reported: ${args.messageBody}`
+        : `Stop-texting request received: ${args.messageBody}`;
+      await ctx.db.patch(contact._id, {
+        ...replySourcePatch,
+        active: false,
+        canReceiveTexts: false,
+        consentToContact: false,
+        notes: appendNote(contact.notes, note),
+      });
+    } else {
+      await ctx.db.patch(contact._id, replySourcePatch);
+    }
+
+    if (!event) return { status };
+
+    const eventReplyPatch = {
+      lastReplyContactId: contact._id,
+      lastReplyMessageId: args.sourceMessageId,
+      lastReplyStatus: status,
+      lastReplyAt: now,
+      updatedAt: now,
+    };
+
     if (status === "confirmed") {
       await ctx.db.patch(event._id, {
+        ...eventReplyPatch,
         confirmedContactIds: addId(event.confirmedContactIds, contact._id),
         pendingContactIds: removeId(event.pendingContactIds, contact._id),
         declinedContactIds: removeId(event.declinedContactIds, contact._id),
-        updatedAt: Date.now(),
       });
     } else if (status === "declined") {
       await ctx.db.patch(event._id, {
+        ...eventReplyPatch,
         confirmedContactIds: removeId(event.confirmedContactIds, contact._id),
         pendingContactIds: removeId(event.pendingContactIds, contact._id),
         declinedContactIds: addId(event.declinedContactIds, contact._id),
         status: event.status === "resolved" ? "open" : event.status,
-        updatedAt: Date.now(),
       });
+    } else if (status === "partial") {
+      await ctx.db.patch(event._id, eventReplyPatch);
+    } else if (status === "deferred") {
+      await ctx.db.patch(event._id, {
+        ...eventReplyPatch,
+        nextActionAt: inferDeferredNextActionAt(args.messageBody, now) ?? event.nextActionAt,
+      });
+    } else if (status === "wrong_number" || status === "stop_requested") {
+      await ctx.db.patch(event._id, {
+        ...eventReplyPatch,
+        confirmedContactIds: removeId(event.confirmedContactIds, contact._id),
+        pendingContactIds: removeId(event.pendingContactIds, contact._id),
+        declinedContactIds: addId(event.declinedContactIds, contact._id),
+        status: event.status === "resolved" ? "open" : event.status,
+      });
+    } else {
+      await ctx.db.patch(event._id, eventReplyPatch);
     }
 
     return { status };

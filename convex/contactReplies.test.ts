@@ -89,6 +89,32 @@ async function createSentOutreach(
   };
 }
 
+async function logCareContactReplyMessage(
+  t: ReturnType<typeof convexTest>,
+  args: {
+    careCaseId: Id<"careCases">;
+    userId: Id<"users">;
+    careContactId: Id<"careContacts">;
+    coordinationEventId: Id<"coordinationEvents">;
+    outreachAttemptId?: Id<"outreachAttempts">;
+    body: string;
+  },
+) {
+  return await t.mutation(internal.mutations.logMessage, {
+    careCaseId: args.careCaseId,
+    userId: args.userId,
+    senderPhone: "+16515559999",
+    actorType: "user",
+    direction: "inbound",
+    displayName: "Care contact",
+    body: args.body,
+    timestamp: Date.now(),
+    careContactId: args.careContactId,
+    coordinationEventId: args.coordinationEventId,
+    outreachAttemptId: args.outreachAttemptId,
+  });
+}
+
 describe("contact reply resolution", () => {
   it("resolves an inbound caregiver reply by Linq chat id", async () => {
     const t = convexTest(schema, modules);
@@ -217,7 +243,7 @@ describe("contact reply resolution", () => {
       "+16515556005",
       "chat-rob-5",
     );
-    const { contactId, eventId } = await createSentOutreach(t, {
+    const { contactId, eventId, outreachAttemptId } = await createSentOutreach(t, {
       careCaseId,
       userId,
       contactName: "Angela",
@@ -226,22 +252,40 @@ describe("contact reply resolution", () => {
       outreachMessage: "Can you cover Friday?",
       linqChatId: "chat-angela-confirm",
     });
+    const sourceMessageId = await logCareContactReplyMessage(t, {
+      careCaseId,
+      userId,
+      careContactId: contactId,
+      coordinationEventId: eventId,
+      outreachAttemptId,
+      body: "Yes, Friday works for me.",
+    });
 
     const result = await t.mutation(internal.contactReplies.applyInboundReplyToEvent, {
       careCaseId,
       careContactId: contactId,
       coordinationEventId: eventId,
       messageBody: "Yes, Friday works for me.",
+      sourceMessageId,
     });
     const event = await t.query(api.coordinationEvents.get, {
       careCaseId,
       id: eventId,
+    });
+    const contact = await t.query(api.careContacts.get, {
+      careCaseId,
+      id: contactId,
     });
 
     expect(result.status).toBe("confirmed");
     expect(event?.confirmedContactIds).toContain(contactId);
     expect(event?.pendingContactIds).not.toContain(contactId);
     expect(event?.declinedContactIds ?? []).not.toContain(contactId);
+    expect(event?.lastReplyMessageId).toBe(sourceMessageId);
+    expect(event?.lastReplyContactId).toBe(contactId);
+    expect(event?.lastReplyStatus).toBe("confirmed");
+    expect(contact?.lastReplyMessageId).toBe(sourceMessageId);
+    expect(contact?.lastReplyStatus).toBe("confirmed");
   });
 
   it("marks clear no replies as declined without resolving the event", async () => {
@@ -277,14 +321,154 @@ describe("contact reply resolution", () => {
     expect(event?.pendingContactIds).not.toContain(contactId);
     expect(event?.status).toBe("waiting");
   });
+
+  it("stores partial availability with a source link without confirming coverage", async () => {
+    const t = convexTest(schema, modules);
+    const { careCaseId, userId } = await createCareCaseWithUser(
+      t,
+      "+16515556008",
+      "chat-rob-8",
+    );
+    const { contactId, eventId, outreachAttemptId } = await createSentOutreach(t, {
+      careCaseId,
+      userId,
+      contactName: "Ella",
+      contactPhone: "+16515556801",
+      eventTitle: "Monday full-day coverage",
+      outreachMessage: "Can you cover Monday 9 to 5?",
+      linqChatId: "chat-ella-partial",
+    });
+    const sourceMessageId = await logCareContactReplyMessage(t, {
+      careCaseId,
+      userId,
+      careContactId: contactId,
+      coordinationEventId: eventId,
+      outreachAttemptId,
+      body: "I can do Monday afternoon only.",
+    });
+
+    const result = await t.mutation(internal.contactReplies.applyInboundReplyToEvent, {
+      careCaseId,
+      careContactId: contactId,
+      coordinationEventId: eventId,
+      messageBody: "I can do Monday afternoon only.",
+      sourceMessageId,
+    });
+    const event = await t.query(api.coordinationEvents.get, {
+      careCaseId,
+      id: eventId,
+    });
+    const contact = await t.query(api.careContacts.get, {
+      careCaseId,
+      id: contactId,
+    });
+    const compiled = await t.mutation(internal.mutations.getCompiledPromptContext, {
+      userId,
+      careCaseId,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(event?.confirmedContactIds ?? []).not.toContain(contactId);
+    expect(event?.pendingContactIds).toContain(contactId);
+    expect(event?.lastReplyStatus).toBe("partial");
+    expect(event?.lastReplyMessageId).toBe(sourceMessageId);
+    expect(contact?.availabilityNotes).toContain("I can do Monday afternoon only.");
+    expect(contact?.availabilitySourceMessageId).toBe(sourceMessageId);
+    expect(contact?.lastReplyStatus).toBe("partial");
+    expect(compiled?.careCaseContext).toContain("last reply partial");
+  });
+
+  it("turns wrong-number replies into non-textable inactive contacts", async () => {
+    const t = convexTest(schema, modules);
+    const { careCaseId, userId } = await createCareCaseWithUser(
+      t,
+      "+16515556009",
+      "chat-rob-9",
+    );
+    const { contactId, eventId } = await createSentOutreach(t, {
+      careCaseId,
+      userId,
+      contactName: "Wrong Phone",
+      contactPhone: "+16515556901",
+      eventTitle: "Tuesday coverage",
+      outreachMessage: "Can you cover Tuesday?",
+      linqChatId: "chat-wrong-number",
+    });
+
+    const result = await t.mutation(internal.contactReplies.applyInboundReplyToEvent, {
+      careCaseId,
+      careContactId: contactId,
+      coordinationEventId: eventId,
+      messageBody: "Wrong number. Please stop texting me.",
+    });
+    const event = await t.query(api.coordinationEvents.get, {
+      careCaseId,
+      id: eventId,
+    });
+    const contact = await t.query(api.careContacts.get, {
+      careCaseId,
+      id: contactId,
+    });
+
+    expect(result.status).toBe("wrong_number");
+    expect(contact?.active).toBe(false);
+    expect(contact?.canReceiveTexts).toBe(false);
+    expect(contact?.consentToContact).toBe(false);
+    expect(event?.declinedContactIds).toContain(contactId);
+    expect(event?.pendingContactIds).not.toContain(contactId);
+    expect(event?.lastReplyStatus).toBe("wrong_number");
+  });
+
+  it("keeps deferred replies pending and schedules a later next action", async () => {
+    const t = convexTest(schema, modules);
+    const { careCaseId, userId } = await createCareCaseWithUser(
+      t,
+      "+16515556010",
+      "chat-rob-10",
+    );
+    const { contactId, eventId } = await createSentOutreach(t, {
+      careCaseId,
+      userId,
+      contactName: "Sarah",
+      contactPhone: "+16515557001",
+      eventTitle: "Thursday coverage",
+      outreachMessage: "Can you cover Thursday?",
+      linqChatId: "chat-sarah-deferred",
+    });
+
+    const before = Date.now();
+    const result = await t.mutation(internal.contactReplies.applyInboundReplyToEvent, {
+      careCaseId,
+      careContactId: contactId,
+      coordinationEventId: eventId,
+      messageBody: "Let me check and get back to you later.",
+    });
+    const event = await t.query(api.coordinationEvents.get, {
+      careCaseId,
+      id: eventId,
+    });
+    const contact = await t.query(api.careContacts.get, {
+      careCaseId,
+      id: contactId,
+    });
+
+    expect(result.status).toBe("deferred");
+    expect(event?.confirmedContactIds ?? []).not.toContain(contactId);
+    expect(event?.pendingContactIds).toContain(contactId);
+    expect(event?.nextActionAt).toBeGreaterThanOrEqual(before + 6 * 60 * 60 * 1000);
+    expect(event?.lastReplyStatus).toBe("deferred");
+    expect(contact?.availabilityNotes).toContain("Let me check");
+  });
 });
 
 describe("classifyCareContactReply", () => {
   it("classifies confirmations, declines, partial availability, and unclear replies", () => {
     expect(classifyCareContactReply("Yes, that works")).toBe("confirmed");
     expect(classifyCareContactReply("No, I can't")).toBe("declined");
-    expect(classifyCareContactReply("I can do Monday afternoon")).toBe("confirmed");
+    expect(classifyCareContactReply("I can do Monday afternoon")).toBe("partial");
     expect(classifyCareContactReply("Monday afternoon only")).toBe("partial");
-    expect(classifyCareContactReply("Let me check")).toBe("needs_clarification");
+    expect(classifyCareContactReply("Let me check")).toBe("deferred");
+    expect(classifyCareContactReply("Wrong number")).toBe("wrong_number");
+    expect(classifyCareContactReply("Please stop texting me")).toBe("stop_requested");
   });
 });

@@ -247,7 +247,7 @@ Test targets:
 - [x] `convex/contactReplies.test.ts`
 - [x] `convex/handler.test.ts`
 - [x] `convex/outreachAttempts.test.ts`
-- [ ] `convex/http.test.ts`
+- [x] `convex/http.test.ts`
 
 ## 2E0 — Convex Memory/Retrieval Architecture Policy
 
@@ -310,23 +310,23 @@ Implementation tasks:
       cognitively intelligent without becoming care-task-only.
 - [x] Define the Convex-native memory/retrieval policy so Phase 2E strengthens
       source-linked current truth before adding RAG infrastructure.
-- [ ] Strengthen prompt/runtime instructions for contact replies so the model
+- [x] Strengthen prompt/runtime instructions for contact replies so the model
       reliably writes:
   - caregiver availability/context into `careContacts`
   - coverage/schedule state into `coordinationEvents`
   - lightweight coordinator updates into normal messages
-- [ ] Add deterministic guardrails for common reply classes:
+- [x] Add deterministic guardrails for common reply classes:
   - clear confirmation
   - clear decline
   - partial availability
   - wrong number / stop texting
   - "ask me later" / unavailable until a date
-- [ ] Ensure partial availability never creates false confirmation.
-- [ ] Ensure the context graph keeps source-linked facts:
+- [x] Ensure partial availability never creates false confirmation.
+- [x] Ensure the context graph keeps source-linked facts:
   - who said it
   - which message caused it
   - which coordination event it affected
-- [ ] Split context-loading expectations into always-loaded current context and
+- [x] Split context-loading expectations into always-loaded current context and
       on-demand reference context before introducing Convex RAG.
 - [ ] Define a small retrieval interface that can later be backed by
       Convex-native RAG without changing the care graph source of truth.
@@ -343,8 +343,8 @@ Acceptance criteria:
       Convex-native semantic retrieval second, external vector DB last.
 - [ ] The full coordination loop can be validated through messages and Convex
       state only.
-- [ ] Caregiver availability replies update `careContacts.availabilityNotes`.
-- [ ] Coverage replies update the correct `coordinationEvents` fields.
+- [x] Caregiver availability replies update `careContacts.availabilityNotes`.
+- [x] Coverage replies update the correct `coordinationEvents` fields.
 - [ ] CareSupport can summarize who replied, who has not, and what remains open
       without a UI.
 - [ ] The agent can infer the next useful coordination step while code still
@@ -357,8 +357,8 @@ Test targets:
 - [x] `convex/lib/promptContent.test.ts`
 - [x] `convex/lib/pipeline/promptBuilder.test.ts`
 - [x] `docs/convex-memory-retrieval-architecture.md`
-- [ ] `convex/contactReplies.test.ts`
-- [ ] `convex/handler.test.ts`
+- [x] `convex/contactReplies.test.ts`
+- [x] `convex/handler.test.ts`
 - [ ] `convex/lib/pipeline/responseParser.test.ts`
 - [ ] New transcript-style coordination loop tests if practical
 

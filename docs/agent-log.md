@@ -8,6 +8,52 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-02 — Codex
 
 ### What I did
+- Continued Phase 2E agent/context hardening after the Convex memory/retrieval
+  policy slice.
+- Added optional source/current-truth fields to `careContacts` and
+  `coordinationEvents`:
+  - last reply status/message/time
+  - availability source message/time
+  - coordination event last reply contact/message/status/time
+- Hardened caregiver reply classification and deterministic state transitions:
+  - clear yes -> confirmed contact on event
+  - clear no -> declined contact on event
+  - partial availability -> updates contact availability without confirming
+  - deferred reply -> keeps contact pending and sets a later next action when
+    possible
+  - wrong number / stop-texting -> disables future texting and removes the
+    contact from pending coverage
+- Linked caregiver reply state changes back to the stored inbound `messages` row.
+- Added last-reply status to compiled prompt context so the model can summarize
+  partial/deferred/declined state without a UI.
+- Added prompt guidance for care contact replies so model behavior matches the
+  runtime guardrails.
+- Expanded `convex/contactReplies.test.ts` for source-linked partial,
+  wrong-number, deferred, and confirmation behavior.
+
+### Validation
+- `npm test -- convex/contactReplies.test.ts` passed.
+- `npm test -- convex/handler.test.ts convex/mutations.test.ts` passed.
+- `npm test -- convex/lib/promptContent.test.ts convex/contactReplies.test.ts convex/handler.test.ts convex/mutations.test.ts` passed.
+- `npm run typecheck` passed.
+- Full suite passed: 19 files / 267 tests.
+
+### State I'm leaving
+- Phase 2E now has source-linked current truth for caregiver reply handling.
+- Remaining Phase 2E work is the broader transcript-style loop test and the
+  minimal retrieval interface definition before any Convex RAG spike.
+- No RAG dependency was added.
+
+### Concerns
+- This slice keeps source links directly on current records. If source history
+  grows beyond "last reply" semantics, introduce a narrow fact/decision-trace
+  table rather than overloading current-state rows.
+
+---
+
+## 2026-06-02 — Codex
+
+### What I did
 - Reviewed Obssa's memory/retrieval concern as a technical architecture question,
   distinct from the product context graph.
 - Confirmed the current repo uses custom Convex tables plus custom prompt
