@@ -5,6 +5,48 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-06-02 — Codex
+
+### What I did
+- Reviewed Obssa's memory/retrieval concern as a technical architecture question,
+  distinct from the product context graph.
+- Confirmed the current repo uses custom Convex tables plus custom prompt
+  compilation, not `@convex-dev/rag`, `@convex-dev/agent`, Pinecone, or
+  LangSmith runtime infrastructure.
+- Added `docs/convex-memory-retrieval-architecture.md` to define the current
+  memory/retrieval policy:
+  - structured Convex truth first
+  - messages/audits as the operational record
+  - `memoryEntries` for durable human/care context
+  - semantic retrieval for fuzzy or historical reference
+  - Convex-native RAG before external vector infrastructure
+  - Pinecone only after measured Convex-native limits
+- Added the new architecture doc to `AGENTS.md` canonical docs.
+- Updated `tasks/coordination-phase-2.md` with a completed 2E0 memory/retrieval
+  policy slice and revised Phase 2E acceptance criteria.
+
+### State I'm leaving
+- No runtime code changed.
+- The next implementation phase remains Phase 2E agent/context hardening.
+- The RAG question is now explicit and gated: do source-linked current truth and
+  transcript-loop tests first; run a Convex RAG spike only if those tests show
+  older/fuzzy context is being missed.
+
+### What the next agent should know
+- Do not add Pinecone or Convex RAG by default.
+- Before adding any retrieval dependency, define a small retrieval interface,
+  care-case-scoped namespaces, source links, filters, and eval questions.
+- Current truth must remain in typed Convex tables; semantic retrieval may add
+  reference context but must not override structured state.
+
+### Concerns
+- Two unrelated tracked web UI files were already locally modified and were left
+  untouched: `web/app/_components/feature-sections.tsx` and
+  `web/app/_components/iphone/message-bubble.tsx`.
+- The repo also has unrelated untracked local files that were not included.
+
+---
+
 ## 2026-05-19 - Codex
 
 ### What I did

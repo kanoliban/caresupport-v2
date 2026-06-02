@@ -56,6 +56,7 @@ become critical path.
 - [x] 2B — Permissioned outreach state
 - [x] 2C — Linq outbound execution
 - [x] 2D — Caregiver reply mapping
+- [x] 2E0 — Convex memory/retrieval architecture policy
 - [ ] 2E — Agent/context engine hardening
 - [ ] 2F — Follow-up cron / next action scanner
 - [ ] 2G — Rob-style live test setup
@@ -248,6 +249,54 @@ Test targets:
 - [x] `convex/outreachAttempts.test.ts`
 - [ ] `convex/http.test.ts`
 
+## 2E0 — Convex Memory/Retrieval Architecture Policy
+
+Purpose: make persistent memory and context retrieval an explicit architecture
+track before hardening the agent/context engine.
+
+Decision:
+
+- Current truth stays in structured Convex tables.
+- Messages and audit logs remain the operational record.
+- `memoryEntries` hold durable human/care context that does not fit typed
+  records.
+- Semantic retrieval is for fuzzy or historical reference, not current truth.
+- Convex-native RAG should be evaluated before Pinecone or other external vector
+  infrastructure.
+- LangSmith may be useful for observability/evals, but not as the source of
+  truth.
+
+Implementation tasks:
+
+- [x] Add `docs/convex-memory-retrieval-architecture.md`.
+- [x] Distinguish the product context graph from the technical memory/retrieval
+      layer.
+- [x] Define structured truth, operational record, durable memory, retrieved
+      reference context, and observability layers.
+- [x] Define when Convex-native RAG becomes justified.
+- [x] Define the Pinecone/external-vector gate.
+- [ ] Before installing any RAG dependency, define the minimal retrieval
+      interface and eval questions it must satisfy.
+- [ ] Revisit after Phase 2E transcript tests show whether older/fuzzy context
+      is actually being missed.
+
+Acceptance criteria:
+
+- [x] The team can explain what belongs in typed Convex tables vs memory entries
+      vs semantic retrieval.
+- [x] Current truth cannot be overridden by retrieved semantic context.
+- [x] Pinecone is explicitly deferred until measured Convex-native retrieval
+      limits appear.
+- [ ] A future Convex RAG spike has source-link, namespace, filter, and eval
+      requirements before implementation.
+
+Validation targets:
+
+- [x] `docs/convex-memory-retrieval-architecture.md`
+- [x] `AGENTS.md`
+- [x] this task tracker
+- [ ] future retrieval/eval tests if a Convex RAG spike is started
+
 ## 2E — Agent/Context Engine Hardening
 
 Purpose: make the agent and Convex context graph reliable enough to coordinate
@@ -259,6 +308,8 @@ Implementation tasks:
       and runtime prompt doctrine.
 - [x] Revise `SOUL.md` and live prompt soul so CareSupport is emotionally and
       cognitively intelligent without becoming care-task-only.
+- [x] Define the Convex-native memory/retrieval policy so Phase 2E strengthens
+      source-linked current truth before adding RAG infrastructure.
 - [ ] Strengthen prompt/runtime instructions for contact replies so the model
       reliably writes:
   - caregiver availability/context into `careContacts`
@@ -275,6 +326,10 @@ Implementation tasks:
   - who said it
   - which message caused it
   - which coordination event it affected
+- [ ] Split context-loading expectations into always-loaded current context and
+      on-demand reference context before introducing Convex RAG.
+- [ ] Define a small retrieval interface that can later be backed by
+      Convex-native RAG without changing the care graph source of truth.
 - [ ] Add transcript-style tests for the full agent loop:
   coordinator need -> contact creation -> approval -> outbound -> caregiver
   reply -> context update -> coordinator status.
@@ -284,6 +339,8 @@ Implementation tasks:
 Acceptance criteria:
 
 - [x] The CareSupport model constitution is loaded into every agent system prompt.
+- [x] The memory/retrieval policy is documented: structured truth first,
+      Convex-native semantic retrieval second, external vector DB last.
 - [ ] The full coordination loop can be validated through messages and Convex
       state only.
 - [ ] Caregiver availability replies update `careContacts.availabilityNotes`.
@@ -299,6 +356,7 @@ Test targets:
 
 - [x] `convex/lib/promptContent.test.ts`
 - [x] `convex/lib/pipeline/promptBuilder.test.ts`
+- [x] `docs/convex-memory-retrieval-architecture.md`
 - [ ] `convex/contactReplies.test.ts`
 - [ ] `convex/handler.test.ts`
 - [ ] `convex/lib/pipeline/responseParser.test.ts`
