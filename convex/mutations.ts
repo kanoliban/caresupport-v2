@@ -1,4 +1,6 @@
 import { internalMutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
   validateIsoDate,
@@ -58,6 +60,12 @@ const eventValidator = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
+  v.literal("outreach_requested"),
+  v.literal("outreach_approved"),
+  v.literal("outreach_blocked"),
+  v.literal("outreach_sent"),
+  v.literal("outreach_failed"),
+  v.literal("care_contact_reply_received"),
 );
 
 const detailsValidator = v.object({
@@ -76,6 +84,15 @@ const detailsValidator = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
+  outreachAttemptId: v.optional(v.string()),
+  coordinationEventId: v.optional(v.string()),
+  careContactId: v.optional(v.string()),
+  messageBody: v.optional(v.string()),
+  status: v.optional(v.string()),
+  reason: v.optional(v.string()),
+  matchedCount: v.optional(v.number()),
+  linqChatId: v.optional(v.string()),
+  linqMessageId: v.optional(v.string()),
 });
 
 const scheduleTypeValidator = v.union(
@@ -98,11 +115,142 @@ const medicationStatusValidator = v.union(
   v.literal("discontinued"),
 );
 
+const modelUpdateActionValidator = v.union(
+  v.literal("add"),
+  v.literal("update"),
+  v.literal("remove"),
+);
+
+const careContactTypeValidator = v.union(
+  v.literal("family"),
+  v.literal("professional_caregiver"),
+  v.literal("agency"),
+  v.literal("clinician"),
+  v.literal("other"),
+);
+
+const coordinationEventTypeValidator = v.union(
+  v.literal("coverage_gap"),
+  v.literal("schedule_change"),
+  v.literal("handoff"),
+  v.literal("task_followup"),
+  v.literal("appointment"),
+  v.literal("medication"),
+  v.literal("outreach"),
+  v.literal("other"),
+);
+
+const coordinationEventStatusValidator = v.union(
+  v.literal("open"),
+  v.literal("waiting"),
+  v.literal("resolved"),
+  v.literal("cancelled"),
+);
+
+const coordinationUrgencyValidator = v.union(
+  v.literal("low"),
+  v.literal("normal"),
+  v.literal("high"),
+  v.literal("urgent"),
+);
+
 const memoryUpdateValidator = v.object({
   category: memoryCategoryValidator,
   content: v.string(),
   source: v.optional(v.string()),
 });
+
+const careContactUpdateValidator = v.object({
+  action: modelUpdateActionValidator,
+  name: v.optional(v.string()),
+  phone: v.optional(v.string()),
+  relationship: v.optional(v.string()),
+  contactType: v.optional(careContactTypeValidator),
+  agencyName: v.optional(v.string()),
+  role: v.optional(v.string()),
+  availabilityNotes: v.optional(v.string()),
+  contactPriority: v.optional(v.number()),
+  canReceiveTexts: v.optional(v.boolean()),
+  consentToContact: v.optional(v.boolean()),
+  active: v.optional(v.boolean()),
+  notes: v.optional(v.string()),
+});
+
+const coordinationEventUpdateValidator = v.object({
+  action: modelUpdateActionValidator,
+  title: v.optional(v.string()),
+  type: v.optional(coordinationEventTypeValidator),
+  status: v.optional(coordinationEventStatusValidator),
+  urgency: v.optional(coordinationUrgencyValidator),
+  description: v.optional(v.string()),
+  startsAt: v.optional(v.number()),
+  endsAt: v.optional(v.number()),
+  originalAssigneeName: v.optional(v.string()),
+  confirmedContactNames: v.optional(v.array(v.string())),
+  pendingContactNames: v.optional(v.array(v.string())),
+  declinedContactNames: v.optional(v.array(v.string())),
+  fallbackContactNames: v.optional(v.array(v.string())),
+  nextActionAt: v.optional(v.number()),
+  escalationAt: v.optional(v.number()),
+  resolution: v.optional(v.string()),
+});
+
+type CareContactType =
+  | "family"
+  | "professional_caregiver"
+  | "agency"
+  | "clinician"
+  | "other";
+
+type CoordinationEventType =
+  | "coverage_gap"
+  | "schedule_change"
+  | "handoff"
+  | "task_followup"
+  | "appointment"
+  | "medication"
+  | "outreach"
+  | "other";
+
+type CoordinationEventStatus = "open" | "waiting" | "resolved" | "cancelled";
+type CoordinationUrgency = "low" | "normal" | "high" | "urgent";
+
+interface CareContactModelPatch {
+  name?: string;
+  phone?: string;
+  relationship?: string;
+  contactType?: CareContactType;
+  agencyName?: string;
+  role?: string;
+  availabilityNotes?: string;
+  contactPriority?: number;
+  canReceiveTexts?: boolean;
+  consentToContact?: boolean;
+  linqChatId?: string;
+  active?: boolean;
+  notes?: string;
+  updatedAt: number;
+}
+
+interface CoordinationEventModelPatch {
+  type?: CoordinationEventType;
+  title?: string;
+  status?: CoordinationEventStatus;
+  urgency?: CoordinationUrgency;
+  description?: string;
+  startsAt?: number;
+  endsAt?: number;
+  originalAssigneeContactId?: Id<"careContacts">;
+  confirmedContactIds?: Array<Id<"careContacts">>;
+  pendingContactIds?: Array<Id<"careContacts">>;
+  declinedContactIds?: Array<Id<"careContacts">>;
+  fallbackOrderContactIds?: Array<Id<"careContacts">>;
+  nextActionAt?: number;
+  escalationAt?: number;
+  resolution?: string;
+  closedAt?: number;
+  updatedAt: number;
+}
 
 export function normalizePhone(raw: string): string | null {
   if (!raw) return null;
@@ -113,6 +261,92 @@ export function normalizePhone(raw: string): string | null {
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
   return null;
+}
+
+function normalizeOptionalPhone(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  return normalizePhone(raw) ?? undefined;
+}
+
+function normalizeLookup(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
+async function findCareContactByName(
+  ctx: Pick<MutationCtx, "db">,
+  careCaseId: Id<"careCases">,
+  name: string | undefined,
+): Promise<Doc<"careContacts"> | null> {
+  const target = normalizeLookup(name);
+  if (!target) return null;
+
+  const contacts = await ctx.db
+    .query("careContacts")
+    .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
+    .collect();
+
+  return contacts.find((contact) => normalizeLookup(contact.name) === target) ?? null;
+}
+
+async function findCareContactForModel(
+  ctx: Pick<MutationCtx, "db">,
+  careCaseId: Id<"careCases">,
+  name: string | undefined,
+  phone: string | undefined,
+): Promise<Doc<"careContacts"> | null> {
+  if (phone) {
+    const byPhone = await ctx.db
+      .query("careContacts")
+      .withIndex("by_care_case_phone", (q) =>
+        q.eq("careCaseId", careCaseId).eq("phone", phone),
+      )
+      .first();
+    if (byPhone) return byPhone;
+  }
+
+  return await findCareContactByName(ctx, careCaseId, name);
+}
+
+async function findCoordinationEventByTitle(
+  ctx: Pick<MutationCtx, "db">,
+  careCaseId: Id<"careCases">,
+  title: string | undefined,
+): Promise<Doc<"coordinationEvents"> | null> {
+  const target = normalizeLookup(title);
+  if (!target) return null;
+
+  const events = await ctx.db
+    .query("coordinationEvents")
+    .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
+    .collect();
+
+  return events.find((event) => normalizeLookup(event.title) === target) ?? null;
+}
+
+async function resolveContactIdByName(
+  ctx: Pick<MutationCtx, "db">,
+  careCaseId: Id<"careCases">,
+  name: string | undefined,
+): Promise<Id<"careContacts"> | undefined> {
+  const contact = await findCareContactByName(ctx, careCaseId, name);
+  return contact?._id;
+}
+
+async function resolveContactIdsByNames(
+  ctx: Pick<MutationCtx, "db">,
+  careCaseId: Id<"careCases">,
+  names: string[] | undefined,
+): Promise<Array<Id<"careContacts">> | undefined> {
+  if (names === undefined) return undefined;
+
+  const ids: Array<Id<"careContacts">> = [];
+  for (const name of names) {
+    const id = await resolveContactIdByName(ctx, careCaseId, name);
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+
+  return ids;
 }
 
 export const createOnboardingUserAndCareCase = internalMutation({
@@ -268,6 +502,9 @@ export const logMessage = internalMutation({
     body: v.string(),
     timestamp: v.number(),
     linqMessageId: v.optional(v.string()),
+    careContactId: v.optional(v.id("careContacts")),
+    coordinationEventId: v.optional(v.id("coordinationEvents")),
+    outreachAttemptId: v.optional(v.id("outreachAttempts")),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("messages", args);
@@ -578,5 +815,212 @@ export const upsertScheduleItem = internalMutation({
         status: "scheduled",
       });
     }
+  },
+});
+
+export const upsertCareContactFromModel = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    update: careContactUpdateValidator,
+  },
+  handler: async (ctx, args) => {
+    const update = args.update;
+    const name = update.name?.trim();
+    const phone = normalizeOptionalPhone(update.phone);
+    const existing = await findCareContactForModel(
+      ctx,
+      args.careCaseId,
+      name,
+      phone,
+    );
+
+    if (update.action === "remove") {
+      if (!existing) return { action: "skipped", reason: "not_found" };
+      await ctx.db.patch(existing._id, {
+        active: false,
+        updatedAt: Date.now(),
+      });
+      return { action: "removed", id: existing._id };
+    }
+
+    if (existing) {
+      const patch: CareContactModelPatch = { updatedAt: Date.now() };
+      if (name !== undefined) patch.name = name;
+      if (update.phone !== undefined) patch.phone = phone;
+      if (update.relationship !== undefined) patch.relationship = update.relationship;
+      if (update.contactType !== undefined) patch.contactType = update.contactType;
+      if (update.agencyName !== undefined) patch.agencyName = update.agencyName;
+      if (update.role !== undefined) patch.role = update.role;
+      if (update.availabilityNotes !== undefined) {
+        patch.availabilityNotes = update.availabilityNotes;
+      }
+      if (update.contactPriority !== undefined) {
+        patch.contactPriority = update.contactPriority;
+      }
+      if (update.canReceiveTexts !== undefined) {
+        patch.canReceiveTexts = update.canReceiveTexts;
+      } else if (update.phone !== undefined) {
+        patch.canReceiveTexts = Boolean(phone);
+      }
+      if (update.consentToContact !== undefined) {
+        patch.consentToContact = update.consentToContact;
+      }
+      if (update.active !== undefined) {
+        patch.active = update.active;
+      } else if (update.action === "add" && !existing.active) {
+        patch.active = true;
+      }
+      if (update.notes !== undefined) patch.notes = update.notes;
+
+      await ctx.db.patch(existing._id, patch);
+      return { action: "updated", id: existing._id };
+    }
+
+    if (update.action !== "add" || !name) {
+      return { action: "skipped", reason: "missing_contact_identity" };
+    }
+
+    const now = Date.now();
+    const id = await ctx.db.insert("careContacts", {
+      careCaseId: args.careCaseId,
+      name,
+      phone,
+      relationship: update.relationship,
+      contactType: update.contactType ?? "other",
+      agencyName: update.agencyName,
+      role: update.role,
+      availabilityNotes: update.availabilityNotes,
+      contactPriority: update.contactPriority,
+      canReceiveTexts: update.canReceiveTexts ?? Boolean(phone),
+      consentToContact: update.consentToContact,
+      active: update.active ?? true,
+      notes: update.notes,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { action: "created", id };
+  },
+});
+
+export const upsertCoordinationEventFromModel = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    update: coordinationEventUpdateValidator,
+  },
+  handler: async (ctx, args) => {
+    const update = args.update;
+    const title = update.title?.trim();
+    const existing = await findCoordinationEventByTitle(
+      ctx,
+      args.careCaseId,
+      title,
+    );
+
+    if (update.action === "remove") {
+      if (!existing) return { action: "skipped", reason: "not_found" };
+      await ctx.db.patch(existing._id, {
+        status: "cancelled",
+        closedAt: existing.closedAt ?? Date.now(),
+        updatedAt: Date.now(),
+      });
+      return { action: "removed", id: existing._id };
+    }
+
+    const originalAssigneeContactId = await resolveContactIdByName(
+      ctx,
+      args.careCaseId,
+      update.originalAssigneeName,
+    );
+    const confirmedContactIds = await resolveContactIdsByNames(
+      ctx,
+      args.careCaseId,
+      update.confirmedContactNames,
+    );
+    const pendingContactIds = await resolveContactIdsByNames(
+      ctx,
+      args.careCaseId,
+      update.pendingContactNames,
+    );
+    const declinedContactIds = await resolveContactIdsByNames(
+      ctx,
+      args.careCaseId,
+      update.declinedContactNames,
+    );
+    const fallbackOrderContactIds = await resolveContactIdsByNames(
+      ctx,
+      args.careCaseId,
+      update.fallbackContactNames,
+    );
+
+    if (existing) {
+      const patch: CoordinationEventModelPatch = { updatedAt: Date.now() };
+      if (update.type !== undefined) patch.type = update.type;
+      if (title !== undefined) patch.title = title;
+      if (update.status !== undefined) {
+        patch.status = update.status;
+        if (
+          (update.status === "resolved" || update.status === "cancelled") &&
+          existing.closedAt === undefined
+        ) {
+          patch.closedAt = Date.now();
+        }
+      }
+      if (update.urgency !== undefined) patch.urgency = update.urgency;
+      if (update.description !== undefined) patch.description = update.description;
+      if (update.startsAt !== undefined) patch.startsAt = update.startsAt;
+      if (update.endsAt !== undefined) patch.endsAt = update.endsAt;
+      if (originalAssigneeContactId !== undefined) {
+        patch.originalAssigneeContactId = originalAssigneeContactId;
+      }
+      if (confirmedContactIds !== undefined) {
+        patch.confirmedContactIds = confirmedContactIds;
+      }
+      if (pendingContactIds !== undefined) {
+        patch.pendingContactIds = pendingContactIds;
+      }
+      if (declinedContactIds !== undefined) {
+        patch.declinedContactIds = declinedContactIds;
+      }
+      if (fallbackOrderContactIds !== undefined) {
+        patch.fallbackOrderContactIds = fallbackOrderContactIds;
+      }
+      if (update.nextActionAt !== undefined) patch.nextActionAt = update.nextActionAt;
+      if (update.escalationAt !== undefined) patch.escalationAt = update.escalationAt;
+      if (update.resolution !== undefined) patch.resolution = update.resolution;
+
+      await ctx.db.patch(existing._id, patch);
+      return { action: "updated", id: existing._id };
+    }
+
+    if (update.action !== "add" || !title) {
+      return { action: "skipped", reason: "missing_event_title" };
+    }
+
+    const now = Date.now();
+    const status = update.status ?? "open";
+    const id = await ctx.db.insert("coordinationEvents", {
+      careCaseId: args.careCaseId,
+      type: update.type ?? "other",
+      title,
+      status,
+      urgency: update.urgency ?? "normal",
+      description: update.description,
+      startsAt: update.startsAt,
+      endsAt: update.endsAt,
+      originalAssigneeContactId,
+      confirmedContactIds,
+      pendingContactIds,
+      declinedContactIds,
+      fallbackOrderContactIds,
+      nextActionAt: update.nextActionAt,
+      escalationAt: update.escalationAt,
+      resolution: update.resolution,
+      createdAt: now,
+      updatedAt: now,
+      closedAt: status === "resolved" || status === "cancelled" ? now : undefined,
+    });
+
+    return { action: "created", id };
   },
 });

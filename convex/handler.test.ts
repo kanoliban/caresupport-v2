@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { Id } from "./_generated/dataModel";
 import {
+  approvalResolutionResponse,
+  buildCareContactReplyMessage,
   ensureExplicitUserMemoryUpdate,
   formatConversationLog,
   inferExplicitUserMemoryUpdate,
@@ -139,7 +142,7 @@ describe("isUnsupportedCoordinationRequest", () => {
 describe("shouldFireCoordinationBoundaryOverride", () => {
   const boundaryReply = {
     direction: "outbound" as const,
-    body: "I can't add them or message them for you yet.",
+    body: "I need your approval before I message anyone.",
   };
   const ordinaryOutbound = {
     direction: "outbound" as const,
@@ -201,5 +204,86 @@ describe("shouldFireCoordinationBoundaryOverride", () => {
     expect(
       shouldFireCoordinationBoundaryOverride("Add my aunt to the plan", recent),
     ).toBe(true);
+  });
+});
+
+describe("approvalResolutionResponse", () => {
+  const outreachAttemptId = "attempt-1" as Id<"outreachAttempts">;
+
+  it("confirms when approved outreach was sent", () => {
+    const response = approvalResolutionResponse({
+      action: "approved",
+      id: outreachAttemptId,
+      contactName: "Angela",
+      messageBody: "Can you cover Wednesday?",
+    }, {
+      sent: true,
+      contactName: "Angela",
+      chatId: "chat-1",
+      messageId: "msg-1",
+    });
+
+    expect(response).toContain("Done. I asked Angela");
+    expect(response).toContain("let you know when they reply");
+  });
+
+  it("does not claim execution when approved outreach fails to send", () => {
+    const response = approvalResolutionResponse({
+      action: "approved",
+      id: outreachAttemptId,
+      contactName: "Angela",
+      messageBody: "Can you cover Wednesday?",
+    }, {
+      sent: false,
+      reason: "linq_env_missing",
+      contactName: "Angela",
+    });
+
+    expect(response).toContain("could not send");
+    expect(response).toContain("Linq sending credentials");
+    expect(response).toContain("I have not messaged them");
+  });
+
+  it("asks for clarification on ambiguous approval", () => {
+    const response = approvalResolutionResponse({
+      action: "ambiguous",
+      contactNames: ["Angela", "Marcus"],
+      matchedCount: 2,
+    });
+
+    expect(response).toContain("Angela, Marcus");
+    expect(response).toContain("Which one");
+  });
+
+  it("blocks unsafe outreach without claiming execution", () => {
+    const response = approvalResolutionResponse({
+      action: "blocked",
+      contactName: "Angela",
+      reason: "no_phone",
+    });
+
+    expect(response).toContain("no phone number saved");
+    expect(response).toContain("I have not messaged them");
+  });
+});
+
+describe("buildCareContactReplyMessage", () => {
+  it("frames a caregiver reply without treating them as the primary coordinator", () => {
+    const message = buildCareContactReplyMessage("Yes, Mondays 9 to 5 works.", {
+      careContactName: "Angela",
+      contactRelationship: "caregiver",
+      contactRole: "weekday coverage",
+      contactAvailabilityNotes: "Usually available weekdays",
+      coordinationEventTitle: "Monday coverage",
+      outreachPurpose: "Ask about Monday coverage",
+      outreachMessageBody: "Hi Angela, can you cover Monday 9 to 5 for Rob?",
+    });
+
+    expect(message).toContain("Incoming speaker: care contact Angela");
+    expect(message).toContain("Related coordination event: Monday coverage");
+    expect(message).toContain("Original CareSupport message to this contact");
+    expect(message).toContain("Do not treat this speaker as the primary coordinator");
+    expect(message).toContain("Use care_contact_updates");
+    expect(message).toContain("Yes, Mondays 9 to 5 works.");
   });
 });

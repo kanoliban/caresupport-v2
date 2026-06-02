@@ -27,6 +27,7 @@ interface CareContactPatch {
   contactPriority?: number;
   canReceiveTexts?: boolean;
   consentToContact?: boolean;
+  linqChatId?: string;
   active?: boolean;
   notes?: string;
   updatedAt: number;
@@ -106,6 +107,7 @@ export const create = mutation({
     contactPriority: v.optional(v.number()),
     canReceiveTexts: v.optional(v.boolean()),
     consentToContact: v.optional(v.boolean()),
+    linqChatId: v.optional(v.string()),
     active: v.optional(v.boolean()),
     notes: v.optional(v.string()),
   },
@@ -125,6 +127,7 @@ export const create = mutation({
       contactPriority: args.contactPriority,
       canReceiveTexts: args.canReceiveTexts ?? Boolean(phone),
       consentToContact: args.consentToContact,
+      linqChatId: args.linqChatId,
       active: args.active ?? true,
       notes: args.notes,
       createdAt: now,
@@ -147,6 +150,7 @@ export const update = mutation({
     contactPriority: v.optional(v.number()),
     canReceiveTexts: v.optional(v.boolean()),
     consentToContact: v.optional(v.boolean()),
+    linqChatId: v.optional(v.string()),
     active: v.optional(v.boolean()),
     notes: v.optional(v.string()),
   },
@@ -175,6 +179,7 @@ export const update = mutation({
     if (args.consentToContact !== undefined) {
       patch.consentToContact = args.consentToContact;
     }
+    if (args.linqChatId !== undefined) patch.linqChatId = args.linqChatId;
     if (args.active !== undefined) patch.active = args.active;
     if (args.notes !== undefined) patch.notes = args.notes;
 

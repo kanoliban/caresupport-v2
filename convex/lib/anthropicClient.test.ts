@@ -167,6 +167,12 @@ describe("callAnthropic", () => {
         const oc = body.output_config as Record<string, unknown>;
         expect(oc.effort).toBeUndefined();
         expect(oc.format).toHaveProperty("type", "json_schema");
+        const format = oc.format as {
+          schema?: { properties?: Record<string, unknown> };
+        };
+        expect(format.schema?.properties).toHaveProperty("care_contact_updates");
+        expect(format.schema?.properties).toHaveProperty("coordination_event_updates");
+        expect(format.schema?.properties).toHaveProperty("outreach_requests");
         return Promise.resolve(makeSuccessResponse());
       },
     );
