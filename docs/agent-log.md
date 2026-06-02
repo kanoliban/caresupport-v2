@@ -8,6 +8,49 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-02 — Codex
 
 ### What I did
+- Added `convex/coordinationLoop.test.ts`, a deterministic transcript-style
+  simulator for the Phase 2E one-to-many loop.
+- The test simulates:
+  - Rob describing a Monday 9-5 coverage need
+  - model-structured contact/event setup
+  - pending outreach creation
+  - coordinator approval
+  - approved outbound outreach being marked sent
+  - caregiver inbound reply resolution by Linq chat id
+  - partial availability being applied to source-linked current truth
+  - coordinator-facing status being stored as an outbound message
+- The simulator result asserts:
+  - event remains `waiting`
+  - no false confirmation is created
+  - Angela and Marcus remain pending
+  - last reply status is `partial`
+  - last reply source body is the stored caregiver message
+  - compiled prompt context contains the last reply status
+  - outreach/request/approval/sent/reply audit events exist
+  - the coordinator update message is linked to the contact/event/attempt
+
+### Validation
+- `npm test -- convex/coordinationLoop.test.ts --reporter verbose` passed.
+- `npm test -- convex/coordinationLoop.test.ts convex/contactReplies.test.ts convex/outreachAttempts.test.ts convex/handler.test.ts` passed.
+- `npm run typecheck` passed.
+- Full suite passed: 20 files / 268 tests.
+
+### State I'm leaving
+- Phase 2E now has transcript-style validation for the core coordination loop
+  through messages and Convex state only.
+- I left the reusable "CareSupport can summarize who replied / pending / open"
+  acceptance item unchecked because this test proves the state can support that
+  message, but it does not introduce a production summary API.
+
+### Concerns
+- The test intentionally avoids live model and Linq calls. It validates the
+  runtime contract and state transitions, not model quality or provider delivery.
+
+---
+
+## 2026-06-02 — Codex
+
+### What I did
 - Continued Phase 2E agent/context hardening after the Convex memory/retrieval
   policy slice.
 - Added optional source/current-truth fields to `careContacts` and

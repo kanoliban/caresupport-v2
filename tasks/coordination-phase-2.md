@@ -330,7 +330,7 @@ Implementation tasks:
       on-demand reference context before introducing Convex RAG.
 - [ ] Define a small retrieval interface that can later be backed by
       Convex-native RAG without changing the care graph source of truth.
-- [ ] Add transcript-style tests for the full agent loop:
+- [x] Add transcript-style tests for the full agent loop:
   coordinator need -> contact creation -> approval -> outbound -> caregiver
   reply -> context update -> coordinator status.
 - [ ] Keep the model general enough to learn non-scheduling coordination uses
@@ -341,7 +341,7 @@ Acceptance criteria:
 - [x] The CareSupport model constitution is loaded into every agent system prompt.
 - [x] The memory/retrieval policy is documented: structured truth first,
       Convex-native semantic retrieval second, external vector DB last.
-- [ ] The full coordination loop can be validated through messages and Convex
+- [x] The full coordination loop can be validated through messages and Convex
       state only.
 - [x] Caregiver availability replies update `careContacts.availabilityNotes`.
 - [x] Coverage replies update the correct `coordinationEvents` fields.
@@ -360,7 +360,7 @@ Test targets:
 - [x] `convex/contactReplies.test.ts`
 - [x] `convex/handler.test.ts`
 - [ ] `convex/lib/pipeline/responseParser.test.ts`
-- [ ] New transcript-style coordination loop tests if practical
+- [x] New transcript-style coordination loop tests if practical
 
 ## 2F — Follow-Up Cron / Next Action Scanner
 
