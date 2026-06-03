@@ -26,7 +26,8 @@ FIELD GUIDE:
 - self_corrections: Lessons the system should remember about how to behave. Prefix each with [behavioral], [factual], or [operational].
 - medication_updates: Typed medication add/update/remove operations.
 - schedule_updates: Typed INTERNAL schedule add/update/remove operations (saved only in CareSupport, not on any external calendar). Types are appointment, task, reminder. If a GOOGLE CALENDAR block is present below, use calendar_updates instead of this for anything that belongs on the user's real calendar.
-- calendar_updates: Writes to the user's REAL Google Calendar. Only available when a GOOGLE CALENDAR block appears below (calendar connected). Actions: create, update, delete. Fields: title, date (YYYY-MM-DD), startTime (HH:MM, 24h), endTime (HH:MM, 24h), description, location, eventId (required for update/delete).
+- calendar_updates: Writes to the user's REAL Google Calendar. Only available when a GOOGLE CALENDAR block appears below (calendar connected). Actions: create, update, delete. Fields: title, date (YYYY-MM-DD), startTime (HH:MM, 24h), endTime (HH:MM, 24h), location, eventId (required for update/delete).
+- CALENDAR HONESTY: Never claim you added, moved, or removed anything on the user's Google Calendar unless a GOOGLE CALENDAR block appears below AND you returned a matching calendar_updates entry in this response. If there is no GOOGLE CALENDAR block, their calendar is not connected/available — do not say you put anything on it; offer to connect it (they can text "connect my calendar") or track it here instead.
 - reactions: Optional tapbacks.
 - effect: Optional iMessage effect.
 

@@ -50,8 +50,12 @@ const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
 const MAX_RESPONSE_MS = 6_000;
 const MAX_REPLY_QUOTE_LENGTH = 200;
 
-const UNKNOWN_USER_RESPONSE =
-  "Hey! I'm CareSupport — I help you manage a loved one's care over text. No app needed.\nWhat's your name?";
+const TEST_ENV_MARKER = "TEST ENVIRONMENT INITIALIZED";
+
+// Detects first-person claims that something was written to the user's calendar,
+// used to suppress false "added it to your calendar" replies when no write landed.
+const CALENDAR_WRITE_CLAIM_PATTERN =
+  /\b(add(?:ed|ing)?|creat(?:e|ed|ing)|schedul(?:e|ed|ing)|put|plac(?:e|ed)|book(?:ed)?|sav(?:e|ed)|updat(?:e|ed)|mov(?:e|ed)|remov(?:e|ed)|delet(?:e|ed)|cancel(?:ed|led)?)\b[^.?!\n]{0,60}\b(calendar|gcal)\b/i;
 
 const COORDINATION_BOUNDARY_RESPONSE =
   "I can't add them or message them for you yet. I can draft the message and keep track of the coordination issue here. Want me to put one together?";
@@ -237,6 +241,9 @@ export const handleMessage = internalAction({
     let user = await ctx.runMutation(internal.mutations.getUserByPhone, {
       phone: senderPhone,
     }) as Doc<"users"> | null;
+
+    const isTestEnv = process.env.APP_ENV === "test";
+    const isNewUser = !user;
 
     if (!user) {
       const result = await ctx.runMutation(
@@ -451,6 +458,13 @@ export const handleMessage = internalAction({
       parsed.effect = null;
     }
 
+    // In the test environment, mark the first-contact introduction so it's
+    // unmistakable which environment is replying. Enforced mechanically rather
+    // than relying on the model to remember.
+    if (isTestEnv && isNewUser && !smsResponse.startsWith(TEST_ENV_MARKER)) {
+      smsResponse = `${TEST_ENV_MARKER}\n\n${smsResponse}`;
+    }
+
     const userMemoryUpdates = ensureExplicitUserMemoryUpdate(
       parsed.userMemoryUpdates,
       messageBody,
@@ -592,9 +606,9 @@ export const handleMessage = internalAction({
       }
     }
 
+    let calendarWriteSucceeded = false;
     if (parsed.calendarUpdates?.length) {
       const accessToken = await getValidGoogleToken(ctx, userId, timezone);
-      console.log("[calendar] updates requested:", parsed.calendarUpdates.length, "token present:", !!accessToken);
       if (accessToken) {
         for (const update of parsed.calendarUpdates) {
           try {
@@ -608,7 +622,7 @@ export const handleMessage = internalAction({
                 location: update.location,
                 timezone,
               });
-              console.log("[calendar] created event:", created.id, update.title);
+              calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
                 careCaseId,
                 userId,
@@ -627,7 +641,7 @@ export const handleMessage = internalAction({
                 location: update.location,
                 timezone,
               });
-              console.log("[calendar] updated event:", update.eventId);
+              calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
                 careCaseId,
                 userId,
@@ -638,7 +652,7 @@ export const handleMessage = internalAction({
               });
             } else if (update.action === "delete" && update.eventId) {
               await deleteCalendarEvent(accessToken, update.eventId);
-              console.log("[calendar] deleted event:", update.eventId);
+              calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
                 careCaseId,
                 userId,
@@ -666,10 +680,18 @@ export const handleMessage = internalAction({
           }
         }
       } else {
-        console.log("[calendar] no valid token — skipping calendar writes");
+        console.log("[calendar] calendar_updates requested but no valid Google token");
       }
-    } else {
-      console.log("[calendar] no calendar_updates in agent response");
+    }
+
+    // Mechanical honesty guard: never let the reply claim a calendar write that
+    // did not actually land on Google Calendar (e.g. calendar not connected, API
+    // disabled, or the write threw). The fast model ignores prompt instructions
+    // here, so enforce it in code.
+    if (!calendarWriteSucceeded && CALENDAR_WRITE_CLAIM_PATTERN.test(smsResponse)) {
+      smsResponse = calendarContext
+        ? "I hit a snag writing to your Google Calendar just now, so it didn't go through. Want me to try again, or track it here for now?"
+        : "I'm not connected to your Google Calendar yet, so I couldn't add that. Text \"connect my calendar\" to link it — or I can keep track of it here in the meantime.";
     }
 
     await ctx.runMutation(internal.mutations.logAudit, {
@@ -893,7 +915,8 @@ async function loadCalendarContext(
       formatEventsForPrompt(todayEvents, todayLabel, timezone),
       formatEventsForPrompt(tomorrowEvents, tomorrowLabel, timezone),
     ].join("\n\n");
-  } catch {
+  } catch (err) {
+    console.error("[calendar] loadContext fetch failed:", err instanceof Error ? err.message : String(err));
     return null;
   }
 }
