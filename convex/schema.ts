@@ -92,6 +92,25 @@ const coordinationUrgency = v.union(
   v.literal("urgent"),
 );
 
+const outreachAttemptStatus = v.union(
+  v.literal("pending_approval"),
+  v.literal("approved"),
+  v.literal("blocked"),
+  v.literal("cancelled"),
+  v.literal("sent"),
+  v.literal("failed"),
+);
+
+const careContactReplyStatus = v.union(
+  v.literal("confirmed"),
+  v.literal("declined"),
+  v.literal("partial"),
+  v.literal("deferred"),
+  v.literal("wrong_number"),
+  v.literal("stop_requested"),
+  v.literal("needs_clarification"),
+);
+
 const auditEvent = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
@@ -106,6 +125,12 @@ const auditEvent = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
+  v.literal("outreach_requested"),
+  v.literal("outreach_approved"),
+  v.literal("outreach_blocked"),
+  v.literal("outreach_sent"),
+  v.literal("outreach_failed"),
+  v.literal("care_contact_reply_received"),
 );
 
 const auditDetails = v.object({
@@ -124,6 +149,15 @@ const auditDetails = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
+  outreachAttemptId: v.optional(v.string()),
+  coordinationEventId: v.optional(v.string()),
+  careContactId: v.optional(v.string()),
+  messageBody: v.optional(v.string()),
+  status: v.optional(v.string()),
+  reason: v.optional(v.string()),
+  matchedCount: v.optional(v.number()),
+  linqChatId: v.optional(v.string()),
+  linqMessageId: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -164,12 +198,18 @@ export default defineSchema({
     readAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
     displayName: v.optional(v.string()),
+    careContactId: v.optional(v.id("careContacts")),
+    coordinationEventId: v.optional(v.id("coordinationEvents")),
+    outreachAttemptId: v.optional(v.id("outreachAttempts")),
   })
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
     .index("by_linq_message_id", ["linqMessageId"])
     .index("by_user", ["userId"])
-    .index("by_sender_phone", ["senderPhone"]),
+    .index("by_sender_phone", ["senderPhone"])
+    .index("by_care_contact", ["careContactId"])
+    .index("by_coordination_event", ["coordinationEventId"])
+    .index("by_outreach_attempt", ["outreachAttemptId"]),
 
   medications: defineTable({
     careCaseId: v.id("careCases"),
@@ -231,15 +271,23 @@ export default defineSchema({
     contactPriority: v.optional(v.number()),
     canReceiveTexts: v.boolean(),
     consentToContact: v.optional(v.boolean()),
+    linqChatId: v.optional(v.string()),
     active: v.boolean(),
     notes: v.optional(v.string()),
+    availabilitySourceMessageId: v.optional(v.id("messages")),
+    availabilityUpdatedAt: v.optional(v.number()),
+    lastReplyStatus: v.optional(careContactReplyStatus),
+    lastReplyMessageId: v.optional(v.id("messages")),
+    lastReplyAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_active", ["careCaseId", "active"])
     .index("by_care_case_type", ["careCaseId", "contactType"])
-    .index("by_care_case_phone", ["careCaseId", "phone"]),
+    .index("by_care_case_phone", ["careCaseId", "phone"])
+    .index("by_phone", ["phone"])
+    .index("by_linq_chat_id", ["linqChatId"]),
 
   coordinationEvents: defineTable({
     careCaseId: v.id("careCases"),
@@ -260,6 +308,10 @@ export default defineSchema({
     escalationAt: v.optional(v.number()),
     resolution: v.optional(v.string()),
     createdByUserId: v.optional(v.id("users")),
+    lastReplyContactId: v.optional(v.id("careContacts")),
+    lastReplyMessageId: v.optional(v.id("messages")),
+    lastReplyStatus: v.optional(careContactReplyStatus),
+    lastReplyAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     closedAt: v.optional(v.number()),
@@ -267,6 +319,41 @@ export default defineSchema({
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_status", ["careCaseId", "status"])
     .index("by_care_case_type", ["careCaseId", "type"])
+    .index("by_care_case_next_action", ["careCaseId", "status", "nextActionAt"]),
+
+  outreachAttempts: defineTable({
+    careCaseId: v.id("careCases"),
+    coordinationEventId: v.id("coordinationEvents"),
+    careContactId: v.id("careContacts"),
+    requestedByUserId: v.id("users"),
+    approvedByUserId: v.optional(v.id("users")),
+    status: outreachAttemptStatus,
+    purpose: v.string(),
+    messageBody: v.string(),
+    approvalPrompt: v.optional(v.string()),
+    linqChatId: v.optional(v.string()),
+    linqMessageId: v.optional(v.string()),
+    nextActionAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+  })
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_status", ["careCaseId", "status"])
+    .index("by_linq_chat_id", ["linqChatId"])
+    .index("by_care_case_event_status", [
+      "careCaseId",
+      "coordinationEventId",
+      "status",
+    ])
+    .index("by_care_case_contact_status", [
+      "careCaseId",
+      "careContactId",
+      "status",
+    ])
     .index("by_care_case_next_action", ["careCaseId", "status", "nextActionAt"]),
 
   auditLogs: defineTable({
@@ -280,4 +367,17 @@ export default defineSchema({
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
     .index("by_event", ["event"]),
+
+  waitlistSignups: defineTable({
+    email: v.string(),
+    phone: v.optional(v.string()),
+    fullName: v.optional(v.string()),
+    role: v.optional(v.string()),
+    source: v.string(),
+    userAgent: v.optional(v.string()),
+    submittedAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_source", ["source"])
+    .index("by_submitted_at", ["submittedAt"]),
 });

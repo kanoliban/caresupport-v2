@@ -5,6 +5,179 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-06-02 — Codex
+
+### What I did
+- Added `docs/caresupport-learning-retrieval-implementation.md` as the
+  implementation-facing plan for CareSupport learning and Convex-native
+  retrieval.
+- Defined learning as source-linked, revisable understanding that can be
+  clarified, confirmed, promoted into current truth, retrieved later, and
+  audited.
+- Proposed the new `careClaims` layer:
+  - heard
+  - inferred
+  - needs clarification
+  - confirmed
+  - rejected
+  - contradicted
+  - superseded
+  - archived
+- Defined the minimal retrieval interface that can start structured-only and
+  later be backed by Convex RAG.
+- Added the next implementation phases to `tasks/coordination-phase-2.md`:
+  - `2E1 — CareSupport Learning / Claim Layer`
+  - `2E2 — Convex-Native Retrieval / RAG Spike`
+- Added the new document to `AGENTS.md` canonical docs.
+
+### Validation
+- `git diff --check` passed.
+
+### State I'm leaving
+- The next implementation PR should start with `careClaims` and the Rob care
+  network clarification simulator, not with a RAG dependency.
+- Convex RAG is now explicitly sequenced after the claim layer and structured
+  retrieval interface.
+
+### Concerns
+- Sensitive claims such as dementia context need a product decision around
+  whether they can be stored as `needs_clarification` before explicit
+  confirmation, or whether explicit confirmation is required before any durable
+  storage.
+
+---
+
+## 2026-06-02 — Codex
+
+### What I did
+- Added `convex/coordinationLoop.test.ts`, a deterministic transcript-style
+  simulator for the Phase 2E one-to-many loop.
+- The test simulates:
+  - Rob describing a Monday 9-5 coverage need
+  - model-structured contact/event setup
+  - pending outreach creation
+  - coordinator approval
+  - approved outbound outreach being marked sent
+  - caregiver inbound reply resolution by Linq chat id
+  - partial availability being applied to source-linked current truth
+  - coordinator-facing status being stored as an outbound message
+- The simulator result asserts:
+  - event remains `waiting`
+  - no false confirmation is created
+  - Angela and Marcus remain pending
+  - last reply status is `partial`
+  - last reply source body is the stored caregiver message
+  - compiled prompt context contains the last reply status
+  - outreach/request/approval/sent/reply audit events exist
+  - the coordinator update message is linked to the contact/event/attempt
+
+### Validation
+- `npm test -- convex/coordinationLoop.test.ts --reporter verbose` passed.
+- `npm test -- convex/coordinationLoop.test.ts convex/contactReplies.test.ts convex/outreachAttempts.test.ts convex/handler.test.ts` passed.
+- `npm run typecheck` passed.
+- Full suite passed: 20 files / 268 tests.
+
+### State I'm leaving
+- Phase 2E now has transcript-style validation for the core coordination loop
+  through messages and Convex state only.
+- I left the reusable "CareSupport can summarize who replied / pending / open"
+  acceptance item unchecked because this test proves the state can support that
+  message, but it does not introduce a production summary API.
+
+### Concerns
+- The test intentionally avoids live model and Linq calls. It validates the
+  runtime contract and state transitions, not model quality or provider delivery.
+
+---
+
+## 2026-06-02 — Codex
+
+### What I did
+- Continued Phase 2E agent/context hardening after the Convex memory/retrieval
+  policy slice.
+- Added optional source/current-truth fields to `careContacts` and
+  `coordinationEvents`:
+  - last reply status/message/time
+  - availability source message/time
+  - coordination event last reply contact/message/status/time
+- Hardened caregiver reply classification and deterministic state transitions:
+  - clear yes -> confirmed contact on event
+  - clear no -> declined contact on event
+  - partial availability -> updates contact availability without confirming
+  - deferred reply -> keeps contact pending and sets a later next action when
+    possible
+  - wrong number / stop-texting -> disables future texting and removes the
+    contact from pending coverage
+- Linked caregiver reply state changes back to the stored inbound `messages` row.
+- Added last-reply status to compiled prompt context so the model can summarize
+  partial/deferred/declined state without a UI.
+- Added prompt guidance for care contact replies so model behavior matches the
+  runtime guardrails.
+- Expanded `convex/contactReplies.test.ts` for source-linked partial,
+  wrong-number, deferred, and confirmation behavior.
+
+### Validation
+- `npm test -- convex/contactReplies.test.ts` passed.
+- `npm test -- convex/handler.test.ts convex/mutations.test.ts` passed.
+- `npm test -- convex/lib/promptContent.test.ts convex/contactReplies.test.ts convex/handler.test.ts convex/mutations.test.ts` passed.
+- `npm run typecheck` passed.
+- Full suite passed: 19 files / 267 tests.
+
+### State I'm leaving
+- Phase 2E now has source-linked current truth for caregiver reply handling.
+- Remaining Phase 2E work is the broader transcript-style loop test and the
+  minimal retrieval interface definition before any Convex RAG spike.
+- No RAG dependency was added.
+
+### Concerns
+- This slice keeps source links directly on current records. If source history
+  grows beyond "last reply" semantics, introduce a narrow fact/decision-trace
+  table rather than overloading current-state rows.
+
+---
+
+## 2026-06-02 — Codex
+
+### What I did
+- Reviewed Obssa's memory/retrieval concern as a technical architecture question,
+  distinct from the product context graph.
+- Confirmed the current repo uses custom Convex tables plus custom prompt
+  compilation, not `@convex-dev/rag`, `@convex-dev/agent`, Pinecone, or
+  LangSmith runtime infrastructure.
+- Added `docs/convex-memory-retrieval-architecture.md` to define the current
+  memory/retrieval policy:
+  - structured Convex truth first
+  - messages/audits as the operational record
+  - `memoryEntries` for durable human/care context
+  - semantic retrieval for fuzzy or historical reference
+  - Convex-native RAG before external vector infrastructure
+  - Pinecone only after measured Convex-native limits
+- Added the new architecture doc to `AGENTS.md` canonical docs.
+- Updated `tasks/coordination-phase-2.md` with a completed 2E0 memory/retrieval
+  policy slice and revised Phase 2E acceptance criteria.
+
+### State I'm leaving
+- No runtime code changed.
+- The next implementation phase remains Phase 2E agent/context hardening.
+- The RAG question is now explicit and gated: do source-linked current truth and
+  transcript-loop tests first; run a Convex RAG spike only if those tests show
+  older/fuzzy context is being missed.
+
+### What the next agent should know
+- Do not add Pinecone or Convex RAG by default.
+- Before adding any retrieval dependency, define a small retrieval interface,
+  care-case-scoped namespaces, source links, filters, and eval questions.
+- Current truth must remain in typed Convex tables; semantic retrieval may add
+  reference context but must not override structured state.
+
+### Concerns
+- Two unrelated tracked web UI files were already locally modified and were left
+  untouched: `web/app/_components/feature-sections.tsx` and
+  `web/app/_components/iphone/message-bubble.tsx`.
+- The repo also has unrelated untracked local files that were not included.
+
+---
+
 ## 2026-05-19 - Codex
 
 ### What I did
@@ -680,3 +853,461 @@ Read the last 2-3 entries before starting work.
 ### Concerns
 - This was a synthetic Convex function smoke, not a real inbound Linq webhook/iMessage test.
 - Dev had to be cleared because stale data blocked schema validation. Treat prod separately; do not reset or deploy prod without an explicit production decision.
+
+---
+
+## 2026-05-30 — Codex
+
+### What I did
+- Started Phase 1 research on a clean branch:
+  `liban/coordination-mvp-spec`, based on `origin/liban/landing-2026-05`.
+- Initially drafted a blank-slate MVP spec and implementation checklist, then
+  corrected course after Liban pointed out that the repo already contains
+  substantial product doctrine, onboarding guidance, runtime substrate, and
+  tests.
+- Replaced the premature MVP spec with
+  `docs/coordination-research-objective.md`.
+- Replaced the speculative implementation checklist with
+  `tasks/coordination-research.md`.
+- Anchored the research on this thesis:
+  CareSupport is a text-native care coordination agent that learns a care
+  situation through conversation, turns that understanding into operational
+  state, and reduces the manual chasing burden on the primary coordinator.
+
+### State I'm leaving
+- Phase 1 is now a research/audit phase, not an implementation-spec phase.
+- No runtime implementation has been changed.
+- The Composio WIP remains separate on `liban/composio-integration-wip`; this
+  branch treats Google Calendar/Composio as research-adjacent but not the
+  current critical path.
+
+### What the next agent should know
+- Do not start implementation yet. The next step is a deep repo research pass
+  following `docs/coordination-research-objective.md` and
+  `tasks/coordination-research.md`.
+- The research should synthesize existing docs/code/tests before recommending
+  any implementation tasks.
+- Do not write speculative tests before auditing existing tests and runtime
+  behavior.
+- The important product line is: Rob's caregiver scheduling loop is the first
+  proof case, not the entire product identity.
+
+### Concerns
+- Existing untracked local docs/assets from earlier work are still present and
+  intentionally untouched.
+- Several existing docs may already contain the answer to onboarding,
+  conversation skills, scheduling, and knowledge visibility. The research must
+  preserve and reconcile that work rather than replacing it.
+
+---
+
+## 2026-05-30 — Codex
+
+### What I did
+- Completed the Phase 1 research pass for CareSupport one-to-many coordination.
+- Read the current product/rules docs, Convex schema/runtime, prompt/parser
+  contracts, Linq messaging layer, crons/reminders, existing tests, archived v1
+  one-to-many remnants, and the active companion app path under `web/app/app`.
+- Added `docs/coordination-research-synthesis.md` with:
+  - thesis anchor
+  - capability matrix
+  - product doctrine synthesis
+  - agent inference model
+  - runtime gaps
+  - preserve/reactivate/remove recommendations
+  - Phase 2 implementation objective
+  - validation targets
+- Updated `tasks/coordination-research.md` to mark the audited sections
+  complete.
+- Ran baseline checks:
+  - `npm run typecheck`
+  - `npm test` (17 files / 234 tests passing)
+
+### State I'm leaving
+- No runtime code changed.
+- No speculative tests were added.
+- Phase 1 research artifacts are uncommitted and ready for Liban review.
+- The current active branch remains `liban/coordination-mvp-spec`.
+
+### What the next agent should know
+- The repo already has the right substrate: `careContacts`,
+  `coordinationEvents`, `scheduleItems`, `messages`, `memoryEntries`, Linq
+  `createChat`, and companion-app schedule/memory reads.
+- The main gap is not a blank-slate scheduling spec. It is the bridge from
+  prompt/model output to permissioned outreach and event tracking.
+- Archived v1 had `needs_outreach` and `routing_updates`, but those should be
+  reactivated as current Convex primitives, not by reviving `families`,
+  `members`, access tiers, or `family.md`.
+- Phase 2 should focus on one permissioned messaging coordination loop before
+  Google Calendar or Composio becomes the critical path.
+
+### Concerns
+- Unknown caregiver phones currently create new `users` and new `careCases`,
+  which would break one-to-many reply mapping unless fixed.
+- The current mechanical coordination boundary in `convex/handler.ts` is a
+  useful safety guard, but Phase 2 must replace the blanket block with an
+  explicit permissioned path rather than just removing it.
+- The companion app is a web prototype in this checkout, not a native iOS target.
+
+---
+
+## 2026-05-30 — Codex
+
+### What I did
+- Added `tasks/coordination-phase-2.md` as the concrete Phase 2 build plan.
+- Structured Phase 2 into monitored slices:
+  - 2A structured coordination contract
+  - 2B permissioned outreach state
+  - 2C Linq outbound execution
+  - 2D caregiver reply mapping
+  - 2E web prototype coordination view
+  - 2F follow-up cron / next action scanner
+  - 2G Rob-style live test setup
+- Included acceptance criteria and test targets for each slice so implementation
+  can be checked incrementally rather than treated as one large feature.
+
+### State I'm leaving
+- No runtime code changed.
+- `git diff --check` passes after the docs/task update.
+- Phase 2 is ready to start with slice 2A once Liban approves the plan.
+
+### What the next agent should know
+- Use `tasks/coordination-phase-2.md` as the live checklist while implementing.
+- Do not skip the permissioned outreach state. The current blanket coordination
+  boundary should become a safe approval path, not disappear.
+- The first implementation target is model/schema/parser/handler agreement for
+  contact, event, and pending outreach outputs.
+
+### Concerns
+- The plan proposes an `outreachAttempts` table or equivalent narrow tool-action
+  primitive. Confirm the exact name during 2B, but do not try to overload
+  `coordinationEvents` alone with every message-attempt detail.
+
+---
+
+## 2026-05-30 — Codex
+
+### What I did
+- Completed Phase 2A: structured coordination contract.
+- Added typed model response fields for:
+  - `careContactUpdates`
+  - `coordinationEventUpdates`
+  - `outreachRequests`
+- Updated the Anthropic JSON schema, response parser, prompt builder, prompt
+  doctrine, and handler persistence path.
+- Added internal mutations that let model output create/update/deactivate
+  `careContacts` and create/update/cancel `coordinationEvents`.
+- Changed the coordination boundary from a blanket "cannot add/message" block to
+  an honest pending-outreach stance: CareSupport can save coordination details
+  and ask approval, but does not send third-party outreach in this slice.
+- Updated `tasks/coordination-phase-2.md` to mark 2A complete.
+
+### Validation
+- `npm run typecheck` passed.
+- Targeted tests passed:
+  - `convex/lib/pipeline/responseParser.test.ts`
+  - `convex/lib/pipeline/promptBuilder.test.ts`
+  - `convex/lib/promptContent.test.ts`
+  - `convex/lib/anthropicClient.test.ts`
+  - `convex/handler.test.ts`
+  - `convex/mutations.test.ts`
+- Full suite passed: 17 files / 237 tests.
+- `git diff --check` passed.
+- `npm run build` could not run because this package has no `build` script.
+
+### State I'm leaving
+- No outreach is sent yet. `outreachRequests` are parsed and available in the
+  structured response contract, but third-party execution remains blocked until
+  Phase 2B/2C.
+- Existing solo-thread memory, medication, schedule, care-contact, and
+  coordination-event tests are passing.
+
+### Next slice
+- Phase 2B should add the persisted permission layer for pending outreach:
+  likely an `outreachAttempts` table or equivalent narrow action table with
+  explicit requested/approved/sent state.
+
+---
+
+## 2026-05-31 — Codex
+
+### What I did
+- Completed Phase 2B: permissioned outreach state.
+- Added an `outreachAttempts` Convex table with a narrow lifecycle:
+  `pending_approval`, `approved`, `blocked`, `cancelled`, `sent`, `failed`.
+- Added `convex/outreachAttempts.ts` with:
+  - public care-case list/get queries
+  - internal model request persistence
+  - deterministic natural-language approval resolution
+  - audit writes for requested, approved, and blocked outreach
+- Wired `convex/handler.ts` so:
+  - parsed `outreachRequests` become pending/blocked outreach attempts
+  - simple coordinator approvals like "Yes, ask Angela" approve only the
+    matching pending attempt
+  - ambiguous approval replies ask a clarifying question instead of approving
+    the wrong attempt
+  - approval responses explicitly say outreach has not been sent yet
+- Updated admin reset/count/detail helpers to include `outreachAttempts`.
+- Updated `tasks/coordination-phase-2.md` to mark 2B complete.
+
+### Validation
+- `npm run typecheck` passed.
+- Targeted tests passed:
+  - `convex/outreachAttempts.test.ts`
+  - `convex/handler.test.ts`
+  - `convex/mutations.test.ts`
+  - `convex/careContacts.test.ts`
+  - `convex/coordinationEvents.test.ts`
+- Full suite passed: 18 files / 244 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- Third-party outreach is still not sent. The runtime can now persist a pending
+  outreach request and mark it approved, but Linq execution remains intentionally
+  absent until Phase 2C.
+- Contacts without a phone number, disabled texting, inactive status, or explicit
+  `consentToContact: false` create blocked outreach attempts instead of pending
+  sendable work.
+
+### Next slice
+- Phase 2C should execute only approved outreach attempts through Linq:
+  create/reuse one-to-one chats, send the approved message, persist outbound
+  message context, and update `outreachAttempts` to `sent` or `failed`.
+
+---
+
+## 2026-05-31 — Codex
+
+### What I did
+- Completed Phase 2C: Linq outbound execution.
+- Added `convex/outreachExecution.ts`, an internal action that executes only
+  `approved` outreach attempts.
+- Wired approval handling in `convex/handler.ts` so a coordinator approval can
+  immediately execute the approved attempt and respond truthfully based on the
+  send result.
+- Extended message persistence with optional `careContactId`,
+  `coordinationEventId`, and `outreachAttemptId` links so 2D reply mapping has
+  concrete context to use.
+- Added `linqChatId` to `careContacts` and save it after successful outreach.
+- Added sent/failed lifecycle handling on `outreachAttempts`, including
+  `outreach_sent` and `outreach_failed` audit events.
+- Updated `tasks/coordination-phase-2.md` to mark 2C complete.
+
+### Validation
+- `npm run typecheck` passed.
+- Targeted tests passed:
+  - `convex/outreachAttempts.test.ts`
+  - `convex/handler.test.ts`
+  - `convex/lib/linqClient.test.ts`
+- Full suite passed: 18 files / 249 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- One-to-many outbound is now active only behind approval:
+  pending outreach cannot execute, approved outreach can create/reuse a Linq
+  one-to-one chat, and failed sends move the attempt to `failed`.
+- Caregiver replies are still not mapped back to care contacts. Unknown inbound
+  phones can still enter the ordinary user onboarding path until Phase 2D fixes
+  identity resolution.
+
+### Next slice
+- Phase 2D should resolve inbound caregiver replies by Linq chat id and/or
+  contact phone before user onboarding, update the matching coordination event,
+  and notify the primary coordinator when useful.
+
+---
+
+## 2026-05-31 — Codex
+
+### What I did
+- Completed the Phase 2D prep pass for the approval and micro-onboarding
+  contract.
+- Updated `docs/onboarding.md` so "approved" now means explicit coordinator
+  authorization for one exact outreach message, one exact contact, one exact
+  care case, and, when relevant, one exact coordination event.
+- Clarified that approval is not global permission, blanket delegation,
+  caregiver consent, team membership, app signup, or role-based access.
+- Added caregiver micro-onboarding rules: the first one-to-one text should say
+  who CareSupport is, who asked it to reach out, why it is texting, whether this
+  is a good number to use, and only the next useful scheduling/context question.
+- Updated prompt doctrine in `convex/lib/promptContent.ts` and
+  `convex/lib/pipeline/promptBuilder.ts` so the model distinguishes proposed,
+  approved, and sent outreach now that approved Linq execution exists.
+- Updated `tasks/coordination-phase-2.md` to capture this as an explicit bridge
+  between approved outbound execution and caregiver reply mapping.
+
+### Validation
+- Targeted prompt/runtime tests passed:
+  - `convex/lib/promptContent.test.ts`
+  - `convex/lib/pipeline/promptBuilder.test.ts`
+  - `convex/handler.test.ts`
+  - `convex/outreachAttempts.test.ts`
+- `npm run typecheck` passed.
+- Full suite passed: 18 files / 251 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- The approval and caregiver micro-onboarding contract is now explicit in docs,
+  prompt content, prompt builder output, and tests.
+- Caregiver reply mapping itself is not implemented in this prep pass. Phase 2D
+  can now proceed against a clearer contract: inbound caregiver replies should
+  attach to the care contact and coordination event created by the approved
+  outreach attempt, not create a separate primary-coordinator onboarding path.
+
+---
+
+## 2026-05-31 — Codex
+
+### What I did
+- Completed Phase 2D: caregiver reply mapping.
+- Added `convex/contactReplies.ts` to resolve inbound caregiver replies before
+  normal user onboarding.
+- Resolution now prefers Linq chat id, then falls back to normalized phone only
+  when that phone is uniquely tied to a sent outreach attempt. Known contacts
+  without sent outreach do not receive care context by phone alone.
+- Wired `convex/handler.ts` so caregiver replies:
+  - use the primary coordinator's care case and user id
+  - store inbound/outbound messages with `careContactId`,
+    `coordinationEventId`, and `outreachAttemptId`
+  - skip primary-user profile and user-memory writes
+  - skip coordinator approval handling
+  - pass explicit "care contact reply" context into the model
+  - log `care_contact_reply_received`
+  - create a short coordinator-facing update message
+- Added deterministic reply classification for clear caregiver replies:
+  - `confirmed`
+  - `declined`
+  - `partial`
+  - `needs_clarification`
+- Clear "yes" replies move the contact from pending/declined to confirmed on
+  the coordination event. Clear "no" replies move the contact from
+  pending/confirmed to declined without resolving the event.
+- Updated `tasks/coordination-phase-2.md` to mark 2D complete.
+
+### Validation
+- Targeted tests passed:
+  - `convex/contactReplies.test.ts`
+  - `convex/handler.test.ts`
+  - `convex/outreachAttempts.test.ts`
+- `npm run typecheck` passed.
+- Full suite passed: 19 files / 259 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- The one-to-many runtime now has the core loop:
+  coordinator-approved outbound outreach can be sent, and caregiver replies map
+  back to the same care case/contact/event instead of creating unrelated care
+  cases.
+- Partial replies are classified and routed to the model with the right contact
+  context, but richer schedule extraction still depends on the model producing
+  `care_contact_updates` and `coordination_event_updates`.
+- Rob-facing visibility exists as persisted coordinator update messages, but the
+  web app has not yet been changed to show a purpose-built coordination view.
+
+### Next slice
+- Phase 2E should harden the agent/context engine before any web or iOS view
+  work: stronger caregiver reply interpretation, source-linked context graph
+  updates, transcript-style loop tests, and coordinator status behavior.
+
+---
+
+## 2026-05-31 — Codex
+
+### Product direction correction
+- Liban clarified that the web prototype coordination view should be postponed.
+- The current priority is exclusively the agent, coordination engine, context
+  engine, and whether CareSupport can complete the coordination job through
+  iMessage/runtime behavior.
+- The web/iOS companion app remains in development and should consume the
+  coordination graph later, after the agent loop is reliable.
+
+### What I changed
+- Updated `tasks/coordination-phase-2.md` so Phase 2E is now
+  "Agent/Context Engine Hardening" instead of "Web Prototype Coordination View."
+- Moved web/iOS companion views into a postponed Phase 2H.
+- Removed web app verification from the active Rob-style live-test acceptance
+  criteria.
+
+### Next slice
+- Phase 2E should validate and harden:
+  - caregiver reply interpretation
+  - context graph updates
+  - source-linked facts
+  - coordinator status updates
+  - transcript-style end-to-end coordination tests
+  - non-scheduling care coordination flexibility
+
+---
+
+## 2026-05-31 — Codex
+
+### What I did
+- Wrote the canonical CareSupport model constitution at
+  `docs/caresupport-model-constitution.md`.
+- Defined the care model as three projections of one care reality:
+  - relationship graph
+  - coordination state machine
+  - time-sequenced operational record
+- Added `MODEL_CONSTITUTION_CONTENT` to `convex/lib/promptContent.ts`.
+- Updated `convex/lib/pipeline/promptBuilder.ts` so the constitution is loaded
+  into every agent call as its own system block before operational guidance.
+- Passed `MODEL_CONSTITUTION_CONTENT` from `convex/handler.ts` into the prompt
+  builder.
+- Updated prompt tests to assert the constitution exists and is loaded.
+- Added the constitution to `AGENTS.md` canonical docs and corrected the stale
+  current-runtime summary to reflect approved outreach and caregiver reply
+  mapping.
+- Updated `tasks/coordination-phase-2.md` to mark constitution adoption as the
+  first completed slice of Phase 2E.
+
+### Validation
+- Targeted tests passed:
+  - `convex/lib/promptContent.test.ts`
+  - `convex/lib/pipeline/promptBuilder.test.ts`
+  - `convex/handler.test.ts`
+- `npm run typecheck` passed.
+- Full suite passed: 19 files / 263 tests.
+- `git diff --check` passed.
+- Full suite passed: 19 files / 262 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- The constitution is now human-readable doctrine and runtime prompt doctrine.
+- Safety-critical parts remain enforced by code; the constitution explains the
+  operating model, while outreach approval, send truthfulness, reply mapping,
+  persistence, and audit remain mechanical runtime responsibilities.
+
+---
+
+## 2026-06-01 — Codex
+
+### What I did
+- Reviewed the old `CareSupport_Soul_Document.md` artifact as historical
+  doctrine rather than current implementation guidance.
+- Added `docs/caresupport-soul-revision-notes.md` to capture what carries
+  forward and what conflicts with the current CareSupport v2 runtime.
+- Rewrote root `SOUL.md` as the current CareSupport v2 soul document.
+- Updated live prompt soul in `convex/lib/promptContent.ts` so CareSupport is
+  framed as a family care assistant that can respond to the user's current
+  human need, not a care-task-only form.
+- Replaced the old hard redirect for unrelated topics with conversational range
+  guidance: answer naturally when useful, but do not save unrelated content as
+  care context or structured care records.
+- Updated `convex/lib/promptContent.test.ts` to validate emotional/cognitive
+  intelligence and the new conversational range behavior.
+- Updated `tasks/coordination-phase-2.md` to mark the soul revision as part of
+  Phase 2E agent/context hardening.
+
+### What I intentionally did not carry forward
+- Provider-specific identity like "CareSupport is Claude."
+- Anthropic-specific principal hierarchy as product doctrine.
+- Old architecture primitives as implementation guidance.
+- Autonomous outreach defaults that would bypass exact coordinator approval.
+- Claims that CareSupport can guarantee coverage or make care judgments.
+
+### Validation
+- Targeted tests passed:
+  - `convex/lib/promptContent.test.ts`
+  - `convex/lib/pipeline/promptBuilder.test.ts`
+  - `convex/handler.test.ts`
+- `npm run typecheck` passed.

@@ -31,6 +31,7 @@ import {
 import type { MessageEffect } from "./lib/linqClient";
 import {
   SOUL_CONTENT,
+  MODEL_CONSTITUTION_CONTENT,
   ROUTING_CONTENT,
   CAPABILITIES_CONTENT,
   SKILLS_CONTENT,
@@ -46,10 +47,10 @@ const UNKNOWN_USER_RESPONSE =
   "Hey! I'm CareSupport — I help you manage a loved one's care over text. No app needed.\nWhat's your name?";
 
 const COORDINATION_BOUNDARY_RESPONSE =
-  "I can't add them or message them for you yet. I can draft the message and keep track of the coordination issue here. Want me to put one together?";
+  "I can get that ready, but I need your approval before I message anyone. I can save the contact or coordination details here and keep the outreach pending.";
 
 const COORDINATION_BOUNDARY_OUTBOUND_MARKER =
-  "I can't add them or message them for you yet";
+  "I need your approval before I message anyone";
 const COORDINATION_BOUNDARY_RECENT_HISTORY_WINDOW = 5;
 
 const PROFILE_SAVE_PATTERNS = [
@@ -63,6 +64,42 @@ const COORDINATION_REQUEST_PATTERN =
   /\b(add|invite|include|loop in|bring in|text|message|call|reach out to|contact)\b.*\b(sister|brother|mom|mother|dad|father|family|caregiver|doctor|provider|nurse|someone|team|friend|aunt|uncle)\b/i;
 
 const VALID_LESSON_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
+
+type OutreachApprovalResolution =
+  | { action: "none" }
+  | { action: "ambiguous"; contactNames: string[]; matchedCount: number }
+  | { action: "blocked"; contactName: string; reason: string }
+  | {
+      action: "approved";
+      id: Id<"outreachAttempts">;
+      contactName: string;
+      messageBody: string;
+    };
+
+type OutreachExecutionResult = {
+  sent: boolean;
+  reason?: string;
+  contactName?: string;
+  chatId?: string;
+  messageId?: string;
+};
+
+type CareContactReplyContext = {
+  careCaseId: Id<"careCases">;
+  userId: Id<"users">;
+  careContactId: Id<"careContacts">;
+  careContactName: string;
+  contactPhone?: string;
+  contactRelationship?: string;
+  contactRole?: string;
+  contactAvailabilityNotes?: string;
+  coordinationEventId?: Id<"coordinationEvents">;
+  coordinationEventTitle?: string;
+  coordinationEventDescription?: string;
+  outreachAttemptId?: Id<"outreachAttempts">;
+  outreachPurpose?: string;
+  outreachMessageBody?: string;
+};
 
 export function stripMarkdown(text: string): string {
   const withoutLinePrefixes = text
@@ -91,6 +128,58 @@ function truncateReplyQuote(text: string): string {
 
 function prependReplyContext(messageBody: string, quotedBody: string): string {
   return `[Replying to: "${truncateReplyQuote(quotedBody)}"] ${messageBody}`;
+}
+
+export function buildCareContactReplyMessage(
+  messageBody: string,
+  context: {
+    careContactName: string;
+    contactRelationship?: string;
+    contactRole?: string;
+    contactAvailabilityNotes?: string;
+    coordinationEventTitle?: string;
+    coordinationEventDescription?: string;
+    outreachPurpose?: string;
+    outreachMessageBody?: string;
+  },
+): string {
+  const contextLines = [
+    `Incoming speaker: care contact ${context.careContactName}.`,
+    context.contactRelationship
+      ? `Relationship: ${context.contactRelationship}.`
+      : "",
+    context.contactRole ? `Role: ${context.contactRole}.` : "",
+    context.contactAvailabilityNotes
+      ? `Known availability/context: ${context.contactAvailabilityNotes}.`
+      : "",
+    context.coordinationEventTitle
+      ? `Related coordination event: ${context.coordinationEventTitle}.`
+      : "",
+    context.coordinationEventDescription
+      ? `Event description: ${context.coordinationEventDescription}.`
+      : "",
+    context.outreachPurpose ? `Original outreach purpose: ${context.outreachPurpose}.` : "",
+    context.outreachMessageBody
+      ? `Original CareSupport message to this contact: "${truncateReplyQuote(
+          context.outreachMessageBody,
+        )}".`
+      : "",
+    "Do not treat this speaker as the primary coordinator. Use care_contact_updates for facts about this contact and coordination_event_updates for scheduling/coverage state.",
+  ].filter(Boolean);
+
+  return `[Care contact reply context]\n${contextLines.join("\n")}\n\n[Message]\n${messageBody}`;
+}
+
+function buildCoordinatorReplyUpdate(
+  context: CareContactReplyContext,
+  messageBody: string,
+): string {
+  const eventText = context.coordinationEventTitle
+    ? ` about ${context.coordinationEventTitle}`
+    : "";
+  return `${context.careContactName} replied${eventText}: "${truncateReplyQuote(
+    messageBody,
+  )}"`;
 }
 
 function getInitialResponseDelayMs(bubbleCount: number): number {
@@ -209,6 +298,59 @@ function buildIntent(careCaseStatus: string, messageBody: string): Intent {
   return route(messageBody).intent;
 }
 
+function formatOutreachBlockReason(reason: string): string {
+  switch (reason) {
+    case "no_phone":
+      return "there is no phone number saved";
+    case "texting_disabled":
+      return "texting is disabled for that contact";
+    case "contact_consent_denied":
+      return "outreach consent is marked no";
+    case "contact_inactive":
+      return "that contact is inactive";
+    default:
+      return "the contact is not ready for outreach";
+  }
+}
+
+function formatOutreachFailureReason(reason: string | undefined): string {
+  if (!reason) return "the send step failed";
+  switch (reason) {
+    case "linq_env_missing":
+      return "the Linq sending credentials are not configured";
+    case "not_approved_or_not_found":
+      return "the approved outreach could not be found";
+    default:
+      return reason;
+  }
+}
+
+export function approvalResolutionResponse(
+  resolution: OutreachApprovalResolution,
+  executionResult?: OutreachExecutionResult,
+): string | null {
+  if (resolution.action === "none") return null;
+
+  if (resolution.action === "ambiguous") {
+    const names = resolution.contactNames.join(", ");
+    return `I found pending outreach for ${names}. Which one do you want me to approve?`;
+  }
+
+  if (resolution.action === "blocked") {
+    return `I can't approve outreach to ${resolution.contactName} yet because ${formatOutreachBlockReason(resolution.reason)}. I have not messaged them.`;
+  }
+
+  if (executionResult?.sent) {
+    return `Done. I asked ${resolution.contactName}. I will let you know when they reply.`;
+  }
+
+  if (executionResult && !executionResult.sent) {
+    return `I have your approval to ask ${resolution.contactName}, but I could not send the message yet because ${formatOutreachFailureReason(executionResult.reason)}. I have not messaged them.`;
+  }
+
+  return `Got it. I have your approval to ask ${resolution.contactName}. I am preparing the send step now.`;
+}
+
 export const handleMessage = internalAction({
   args: {
     senderPhone: v.string(),
@@ -223,29 +365,42 @@ export const handleMessage = internalAction({
     const now = startedAt;
     const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
 
-    let user = await ctx.runMutation(internal.mutations.getUserByPhone, {
-      phone: senderPhone,
-    }) as Doc<"users"> | null;
+    const careContactReply = await ctx.runMutation(
+      internal.contactReplies.resolveInbound,
+      { senderPhone, chatId },
+    ) as CareContactReplyContext | null;
 
-    if (!user) {
-      const result = await ctx.runMutation(
-        internal.mutations.createOnboardingUserAndCareCase,
-        { phone: senderPhone, chatId },
-      );
-
+    let user: Doc<"users"> | null = null;
+    if (careContactReply) {
       user = await ctx.runMutation(
         internal.mutations.getUserById,
-        { id: result.userId },
+        { id: careContactReply.userId },
       ) as Doc<"users"> | null;
-
-      await ctx.runMutation(internal.mutations.logAudit, {
-        careCaseId: result.careCaseId,
-        userId: result.userId,
-        event: "user_created",
+    } else {
+      user = await ctx.runMutation(internal.mutations.getUserByPhone, {
         phone: senderPhone,
-        details: { triggerMessage: "self-service onboarding" },
-        timestamp: now,
-      });
+      }) as Doc<"users"> | null;
+
+      if (!user) {
+        const result = await ctx.runMutation(
+          internal.mutations.createOnboardingUserAndCareCase,
+          { phone: senderPhone, chatId },
+        );
+
+        user = await ctx.runMutation(
+          internal.mutations.getUserById,
+          { id: result.userId },
+        ) as Doc<"users"> | null;
+
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId: result.careCaseId,
+          userId: result.userId,
+          event: "user_created",
+          phone: senderPhone,
+          details: { triggerMessage: "self-service onboarding" },
+          timestamp: now,
+        });
+      }
     }
 
     if (!user) {
@@ -253,10 +408,10 @@ export const handleMessage = internalAction({
     }
 
     let activeUser: Doc<"users"> = user;
-    const careCaseId = activeUser.careCaseId;
+    const careCaseId = careContactReply?.careCaseId ?? activeUser.careCaseId;
     const userId = activeUser._id;
 
-    if (!activeUser.chatId && chatId) {
+    if (!careContactReply && !activeUser.chatId && chatId) {
       await ctx.runMutation(internal.mutations.updateUserChatId, {
         userId,
         chatId,
@@ -279,17 +434,50 @@ export const handleMessage = internalAction({
       }
     }
 
-    await ctx.runMutation(internal.mutations.logMessage, {
+    const inboundMessageId = await ctx.runMutation(internal.mutations.logMessage, {
       careCaseId,
       userId,
       senderPhone,
       actorType: "user",
       direction: "inbound",
-      displayName: activeUser.name,
+      displayName: careContactReply?.careContactName ?? activeUser.name,
       body: messageBody,
       timestamp: now,
       linqMessageId: args.sourceMessageId,
+      careContactId: careContactReply?.careContactId,
+      coordinationEventId: careContactReply?.coordinationEventId,
+      outreachAttemptId: careContactReply?.outreachAttemptId,
     });
+
+    if (careContactReply) {
+      const replyState = await ctx.runMutation(
+        internal.contactReplies.applyInboundReplyToEvent,
+        {
+          careCaseId,
+          careContactId: careContactReply.careContactId,
+          coordinationEventId: careContactReply.coordinationEventId,
+          messageBody,
+          sourceMessageId: inboundMessageId,
+        },
+      );
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId,
+        userId,
+        event: "care_contact_reply_received",
+        phone: senderPhone,
+        details: {
+          careContactId: careContactReply.careContactId,
+          coordinationEventId: careContactReply.coordinationEventId,
+          outreachAttemptId: careContactReply.outreachAttemptId,
+          sourceMessageId: inboundMessageId,
+          messageBody: messageBody.slice(0, 500),
+          status: replyState.status,
+          linqChatId: chatId,
+          linqMessageId: args.sourceMessageId,
+        },
+        timestamp: now,
+      });
+    }
 
     const compiledContext = await ctx.runMutation(
       internal.mutations.getCompiledPromptContext,
@@ -298,6 +486,7 @@ export const handleMessage = internalAction({
     if (!compiledContext) {
       throw new Error("Unable to compile prompt context");
     }
+    const replyDisplayName = careContactReply?.careContactName ?? compiledContext.user.name;
 
     const recentMessages = await ctx.runMutation(
       internal.mutations.getCareCaseRecentMessages,
@@ -327,6 +516,81 @@ export const handleMessage = internalAction({
       timestamp: now,
     });
 
+    const approvalResolution = careContactReply
+      ? ({ action: "none" } as OutreachApprovalResolution)
+      : await ctx.runMutation(
+          internal.outreachAttempts.resolveApprovalFromMessage,
+          { careCaseId, approvedByUserId: userId, messageBody },
+        ) as OutreachApprovalResolution;
+    let outreachExecutionResult: OutreachExecutionResult | undefined;
+    if (approvalResolution.action === "approved") {
+      try {
+        outreachExecutionResult = await ctx.runAction(
+          internal.outreachExecution.executeApproved,
+          { outreachAttemptId: approvalResolution.id },
+        ) as OutreachExecutionResult;
+      } catch (error) {
+        outreachExecutionResult = {
+          sent: false,
+          reason: error instanceof Error ? error.message : String(error),
+          contactName: approvalResolution.contactName,
+        };
+      }
+    }
+    const deterministicApprovalResponse = approvalResolutionResponse(
+      approvalResolution,
+      outreachExecutionResult,
+    );
+    if (deterministicApprovalResponse) {
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId,
+        userId,
+        event: "response_sent",
+        phone: senderPhone,
+        details: {
+          triggerMessage: "outreach_approval_resolution",
+          responseLength: deterministicApprovalResponse.length,
+          leakageCheckPassed: true,
+          matchedCount:
+            approvalResolution.action === "ambiguous"
+              ? approvalResolution.matchedCount
+              : undefined,
+        },
+        timestamp: now,
+      });
+
+      const outboundMessageId = await logOutbound(
+        ctx,
+        careCaseId,
+        userId,
+        senderPhone,
+        compiledContext.user.name,
+        deterministicApprovalResponse,
+        now,
+      );
+      const linqMessageIds = await sendResponse(
+        chatId,
+        deterministicApprovalResponse,
+        env(),
+        startedAt,
+      );
+      if (linqMessageIds.length > 0) {
+        await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+          messageId: outboundMessageId,
+          linqMessageId: linqMessageIds[0],
+        });
+      }
+
+      return {
+        success: true,
+        response: deterministicApprovalResponse,
+        routedIntent: "GENERAL",
+        lessonsLearned: 0,
+        memoriesSaved: 0,
+        blocked: approvalResolution.action === "blocked",
+      };
+    }
+
     let messageForModel = messageBody;
     if (replyToMessageId) {
       const repliedToMessage = await ctx.runMutation(
@@ -338,9 +602,17 @@ export const handleMessage = internalAction({
         messageForModel = prependReplyContext(messageBody, quotedBody);
       }
     }
+    if (careContactReply) {
+      messageForModel = buildCareContactReplyMessage(
+        messageForModel,
+        careContactReply,
+      );
+    }
 
     const routeResult = route(messageForModel);
-    const intent = buildIntent(compiledContext.careCase.status, messageForModel);
+    const intent = careContactReply
+      ? routeResult.intent
+      : buildIntent(compiledContext.careCase.status, messageForModel);
 
     const nowDate = new Date(now);
     const currentDateIso = nowDate.toISOString().slice(0, 10);
@@ -353,6 +625,7 @@ export const handleMessage = internalAction({
 
     const systemBlocks = buildSystemBlocks({
       soulContent: SOUL_CONTENT,
+      modelConstitutionContent: MODEL_CONSTITUTION_CONTENT,
       routingContent: ROUTING_CONTENT,
       capabilitiesContent: CAPABILITIES_CONTENT,
       skillsContent: SKILLS_CONTENT,
@@ -399,32 +672,40 @@ export const handleMessage = internalAction({
       const errorMessage =
         error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       const fallback =
-        `Sorry ${compiledContext.user.name}, I wasn't able to process that. Can you send it again?`;
-      await logOutbound(ctx, careCaseId, userId, senderPhone, compiledContext.user.name, fallback, now);
+        `Sorry ${replyDisplayName}, I wasn't able to process that. Can you send it again?`;
+      await logOutbound(
+        ctx,
+        careCaseId,
+        userId,
+        senderPhone,
+        replyDisplayName,
+        fallback,
+        now,
+        careContactReply,
+      );
       await sendResponse(chatId, fallback, env());
       return { success: false, response: fallback, error: errorMessage };
     }
 
     let smsResponse = stripMarkdown(parsed.smsResponse);
-    if (shouldFireCoordinationBoundaryOverride(messageBody, recentMessages)) {
+    const coordinationBoundaryBlocked = careContactReply
+      ? false
+      : shouldFireCoordinationBoundaryOverride(messageBody, recentMessages);
+    if (coordinationBoundaryBlocked) {
       smsResponse = COORDINATION_BOUNDARY_RESPONSE;
-      parsed.userProfileUpdate = null;
-      parsed.careCaseProfileUpdate = null;
-      parsed.userMemoryUpdates = [];
-      parsed.careCaseMemoryUpdates = [];
-      parsed.medicationUpdates = [];
-      parsed.scheduleUpdates = [];
       parsed.reactions = [];
       parsed.effect = null;
     }
 
-    const userMemoryUpdates = ensureExplicitUserMemoryUpdate(
-      parsed.userMemoryUpdates,
-      messageBody,
-      compiledContext.userContext,
-    );
+    const userMemoryUpdates = careContactReply
+      ? []
+      : ensureExplicitUserMemoryUpdate(
+          parsed.userMemoryUpdates,
+          messageBody,
+          compiledContext.userContext,
+        );
 
-    if (parsed.userProfileUpdate) {
+    if (!careContactReply && parsed.userProfileUpdate) {
       await ctx.runMutation(internal.mutations.updateUserProfile, {
         userId,
         name: parsed.userProfileUpdate.name || undefined,
@@ -559,6 +840,35 @@ export const handleMessage = internalAction({
       }
     }
 
+    if (parsed.careContactUpdates?.length) {
+      for (const contact of parsed.careContactUpdates) {
+        await ctx.runMutation(internal.mutations.upsertCareContactFromModel, {
+          careCaseId,
+          update: contact,
+        });
+      }
+    }
+
+    if (parsed.coordinationEventUpdates?.length) {
+      for (const event of parsed.coordinationEventUpdates) {
+        await ctx.runMutation(internal.mutations.upsertCoordinationEventFromModel, {
+          careCaseId,
+          update: event,
+        });
+      }
+    }
+
+    if (!careContactReply && parsed.outreachRequests?.length) {
+      for (const request of parsed.outreachRequests) {
+        await ctx.runMutation(internal.outreachAttempts.createPendingFromModel, {
+          careCaseId,
+          requestedByUserId: userId,
+          request,
+          approvalPrompt: smsResponse,
+        });
+      }
+    }
+
     await ctx.runMutation(internal.mutations.logAudit, {
       careCaseId,
       userId,
@@ -580,9 +890,10 @@ export const handleMessage = internalAction({
       careCaseId,
       userId,
       senderPhone,
-      compiledContext.user.name,
+      replyDisplayName,
       smsResponse,
       now,
+      careContactReply,
     );
     const linqMessageIds = await sendResponse(chatId, smsResponse, env(), startedAt, effectForSend);
     if (linqMessageIds.length > 0) {
@@ -590,6 +901,37 @@ export const handleMessage = internalAction({
         messageId: outboundMessageId,
         linqMessageId: linqMessageIds[0],
       });
+    }
+
+    if (careContactReply) {
+      const coordinatorUpdate = buildCoordinatorReplyUpdate(
+        careContactReply,
+        messageBody,
+      );
+      const coordinatorMessageId = await logOutbound(
+        ctx,
+        careCaseId,
+        userId,
+        activeUser.phone,
+        activeUser.name,
+        coordinatorUpdate,
+        Date.now(),
+        careContactReply,
+      );
+      if (activeUser.chatId && activeUser.chatId !== chatId) {
+        const coordinatorLinqMessageIds = await sendResponse(
+          activeUser.chatId,
+          coordinatorUpdate,
+          env(),
+          Date.now() - MAX_RESPONSE_MS,
+        );
+        if (coordinatorLinqMessageIds.length > 0) {
+          await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+            messageId: coordinatorMessageId,
+            linqMessageId: coordinatorLinqMessageIds[0],
+          });
+        }
+      }
     }
 
     const envVars = env();
@@ -615,7 +957,7 @@ export const handleMessage = internalAction({
       routedIntent: intent,
       lessonsLearned: parsed.selfCorrections.length,
       memoriesSaved,
-      blocked: shouldFireCoordinationBoundaryOverride(messageBody, recentMessages),
+      blocked: coordinationBoundaryBlocked,
     };
   },
 });
@@ -635,6 +977,11 @@ async function logOutbound(
   displayName: string,
   body: string,
   timestamp: number,
+  context?: {
+    careContactId?: Id<"careContacts">;
+    coordinationEventId?: Id<"coordinationEvents">;
+    outreachAttemptId?: Id<"outreachAttempts">;
+  } | null,
 ): Promise<Id<"messages">> {
   return await ctx.runMutation(internal.mutations.logMessage, {
     careCaseId,
@@ -645,6 +992,9 @@ async function logOutbound(
     displayName,
     body,
     timestamp,
+    careContactId: context?.careContactId,
+    coordinationEventId: context?.coordinationEventId,
+    outreachAttemptId: context?.outreachAttemptId,
   });
 }
 

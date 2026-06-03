@@ -10,6 +10,8 @@ import type { SystemBlocksInput } from "./types";
 function makeInput(overrides: Partial<SystemBlocksInput> = {}): SystemBlocksInput {
   return {
     soulContent: "You are CareSupport.",
+    modelConstitutionContent:
+      "The CareSupport model represents each care situation through a relationship graph, coordination state machine, and operational record.",
     routingContent: "",
     capabilitiesContent: "",
     skillsContent: "",
@@ -67,9 +69,26 @@ describe("buildSystemBlocks", () => {
     const blocks = buildSystemBlocks(makeInput());
     const breakpoints = blocks.filter((block) => block.cacheBreakpoint);
 
-    expect(breakpoints).toHaveLength(2);
-    expect(breakpoints[0].text).toContain("RESPONSE FORMAT");
-    expect(breakpoints[1].text).toContain("YOU ARE TEXTING WITH: Alex");
+    expect(breakpoints).toHaveLength(3);
+    expect(breakpoints[0].text).toContain("CARESUPPORT MODEL CONSTITUTION");
+    expect(breakpoints[1].text).toContain("RESPONSE FORMAT");
+    expect(breakpoints[2].text).toContain("YOU ARE TEXTING WITH: Alex");
+  });
+
+  it("loads the model constitution as its own system block before operational guidance", () => {
+    const blocks = buildSystemBlocks(makeInput());
+    const constitutionIndex = blocks.findIndex((block) =>
+      block.text.includes("CARESUPPORT MODEL CONSTITUTION"),
+    );
+    const operationalIndex = blocks.findIndex((block) =>
+      block.text.includes("RESPONSE FORMAT"),
+    );
+
+    expect(constitutionIndex).toBeGreaterThan(-1);
+    expect(operationalIndex).toBeGreaterThan(constitutionIndex);
+    expect(blocks[constitutionIndex].text).toContain("relationship graph");
+    expect(blocks[constitutionIndex].text).toContain("coordination state machine");
+    expect(blocks[constitutionIndex].text).toContain("operational record");
   });
 
   it("includes onboarding guidance when intent is onboarding", () => {
@@ -105,11 +124,11 @@ describe("buildSystemBlocks", () => {
     const blocks = buildSystemBlocks(input);
 
     // #then the second block is the TIME anchor
-    expect(blocks[1].text).toContain("── TIME ──");
-    expect(blocks[1].text).toContain("Today is 2026-05-15 (Friday).");
-    expect(blocks[1].text).toContain("Current time: 09:14 UTC.");
-    expect(blocks[1].text).toContain("Care recipient timezone: America/Chicago.");
-    expect(blocks[1].cacheBreakpoint).toBe(false);
+    const timeBlock = blocks.find((block) => block.text.includes("── TIME ──"));
+    expect(timeBlock?.text).toContain("Today is 2026-05-15 (Friday).");
+    expect(timeBlock?.text).toContain("Current time: 09:14 UTC.");
+    expect(timeBlock?.text).toContain("Care recipient timezone: America/Chicago.");
+    expect(timeBlock?.cacheBreakpoint).toBe(false);
   });
 
   it("falls back to UTC when timezone is empty", () => {
@@ -120,7 +139,8 @@ describe("buildSystemBlocks", () => {
     const blocks = buildSystemBlocks(input);
 
     // #then the TIME block falls back to UTC for the recipient timezone
-    expect(blocks[1].text).toContain("Care recipient timezone: UTC.");
+    const timeBlock = blocks.find((block) => block.text.includes("── TIME ──"));
+    expect(timeBlock?.text).toContain("Care recipient timezone: UTC.");
   });
 
   it("instructs the model not to store relative date words", () => {
@@ -148,7 +168,15 @@ describe("buildSystemBlocks", () => {
     expect(responseFormatBlock?.text).toContain(
       "CareSupport is currently one trusted thread around one care situation",
     );
-    expect(responseFormatBlock?.text).toContain("cannot do that yet");
+    expect(responseFormatBlock?.text).toContain(
+      "execute approved one-to-one outreach to known contacts",
+    );
+    expect(responseFormatBlock?.text).toContain(
+      "unless the runtime reports that the send succeeded",
+    );
+    expect(responseFormatBlock?.text).toContain(
+      "use caregiver micro-onboarding language",
+    );
   });
 });
 

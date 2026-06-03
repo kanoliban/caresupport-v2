@@ -1,0 +1,29 @@
+# Heavy monorepo dirs not needed for the web build.
+# The web/ build only depends on convex/ (for generated types) and itself.
+docs/
+archive/
+fork/
+families/
+tasks/
+runtime/
+research/
+caresupport-rev1.png
+caresupport-rev2.png
+caresupport-rev3.png
+images__1_-removebg-preview.png
+*.png
+*.pdf
+!web/public/**
+
+# Convex source — only _generated/ is needed by the web build, not the full
+# function implementations. But shipping the full convex/ folder is small and
+# avoids accidental missing-imports, so we keep it.
+convex/_generated/api.js.map
+convex/_generated/server.js.map
+
+# Build artifacts
+.next/
+out/
+dist/
+.turbo/
+node_modules/

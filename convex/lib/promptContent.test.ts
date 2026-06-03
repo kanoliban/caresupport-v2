@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CAPABILITIES_CONTENT,
+  MODEL_CONSTITUTION_CONTENT,
   ROUTING_CONTENT,
   SKILLS_CONTENT,
   SOUL_CONTENT,
@@ -14,9 +15,38 @@ describe("SOUL_CONTENT", () => {
   });
 
   it("frames the product as a family care agent in the first-thread runtime", () => {
-    expect(SOUL_CONTENT).toContain("family care agent starting in one trusted text thread");
+    expect(SOUL_CONTENT).toContain("family care assistant starting in one trusted text thread");
     expect(CAPABILITIES_CONTENT).toContain("one trusted user, one care situation, one thread");
     expect(CAPABILITIES_CONTENT).toContain("CareSupport is free during the concierge beta");
+  });
+
+  it("makes the model emotionally and cognitively intelligent without forcing every turn into care tracking", () => {
+    expect(SOUL_CONTENT).toContain("Respond to that need first");
+    expect(SOUL_CONTENT).toContain("ordinary conversation");
+    expect(SOUL_CONTENT).toContain("emotionally and cognitively intelligent");
+    expect(SOUL_CONTENT).toContain("Do not force every message into a care workflow");
+  });
+
+  it("defines the CareSupport model as graph, state machine, and record", () => {
+    expect(MODEL_CONSTITUTION_CONTENT).toContain("CareSupport Model Constitution");
+    expect(MODEL_CONSTITUTION_CONTENT).toContain("Relationship graph");
+    expect(MODEL_CONSTITUTION_CONTENT).toContain("Coordination state machine");
+    expect(MODEL_CONSTITUTION_CONTENT).toContain("Time-sequenced operational record");
+    expect(MODEL_CONSTITUTION_CONTENT).toContain(
+      "Rob's schedule coordination is the launch proof",
+    );
+  });
+
+  it("keeps permission and truthfulness in the runtime doctrine", () => {
+    expect(MODEL_CONSTITUTION_CONTENT).toContain(
+      "runtime code owns permission, execution, routing, persistence, audit, and truthfulness",
+    );
+    expect(MODEL_CONSTITUTION_CONTENT).toContain(
+      "Never contact another person unless the primary coordinator approved",
+    );
+    expect(MODEL_CONSTITUTION_CONTENT).toContain(
+      "Never claim a save, contact, confirmation, schedule, or completed action",
+    );
   });
 
   it("tells the model not to save inferred emotional summaries as durable memory", () => {
@@ -73,16 +103,16 @@ describe("SOUL_CONTENT", () => {
     expect(SOUL_CONTENT).toContain("ask ONE calibrating question");
   });
 
-  it("rejects tracking clearly out-of-scope content as care items", () => {
-    // #given the SKILLS_CONTENT Scope check block
-    // #then it explicitly redirects firearms/hobbies/work content
-    expect(SKILLS_CONTENT).toContain("## Scope check");
-    expect(SKILLS_CONTENT).toContain("firearms");
+  it("allows normal conversation without saving unrelated content as care context", () => {
+    // #given the SKILLS_CONTENT conversational range block
+    // #then it allows non-care conversation while blocking unrelated structured saves
+    expect(SKILLS_CONTENT).toContain("## Conversational range and scope");
+    expect(SKILLS_CONTENT).toContain("respond naturally to the current need");
     expect(SKILLS_CONTENT).toContain(
-      "do NOT offer to \"track\" it as a care item",
+      "Do not force every message into tracking",
     );
     expect(SKILLS_CONTENT).toContain(
-      "Do not save scheduleItems, medications, or memory entries",
+      "do not pretend it is care context",
     );
   });
 
@@ -98,8 +128,34 @@ describe("SOUL_CONTENT", () => {
 
   it("keeps third-party coordination as a current runtime boundary, not a product non-goal", () => {
     expect(SKILLS_CONTENT).toContain("## Current coordination boundary");
-    expect(SKILLS_CONTENT).toContain("CareSupport cannot do that yet");
+    expect(SKILLS_CONTENT).toContain("use care_contact_updates");
+    expect(SKILLS_CONTENT).toContain(
+      "outreach_requests are proposed until approved",
+    );
     expect(SKILLS_CONTENT).toContain("Do not imply multiplayer coordination is outside CareSupport's purpose");
+  });
+
+  it("defines approval as specific, not blanket permission", () => {
+    expect(SKILLS_CONTENT).toContain("## Primary coordinator approval");
+    expect(SKILLS_CONTENT).toContain(
+      "one exact outreach message to one exact contact",
+    );
+    expect(SKILLS_CONTENT).toContain("It does NOT mean global permission");
+    expect(SKILLS_CONTENT).toContain("caregiver account creation");
+  });
+
+  it("defines caregiver micro-onboarding as one-to-one text, not app signup", () => {
+    expect(SKILLS_CONTENT).toContain("## Caregiver micro-onboarding");
+    expect(SKILLS_CONTENT).toContain("Caregivers do not need the app");
+    expect(SKILLS_CONTENT).toContain("identify CareSupport");
+    expect(SKILLS_CONTENT).toContain("ask whether this is a good number to text");
+  });
+
+  it("teaches care contact reply handling without false confirmations", () => {
+    expect(SKILLS_CONTENT).toContain("## Care contact replies");
+    expect(SKILLS_CONTENT).toContain("do not treat them as the primary coordinator");
+    expect(SKILLS_CONTENT).toContain("Partial availability is not confirmation");
+    expect(SKILLS_CONTENT).toContain("wrong number, stop texting, unsubscribe");
   });
 
   it("instructs the model to extract all onboarding slots from one message when possible", () => {
