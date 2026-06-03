@@ -382,11 +382,11 @@ Implementation tasks:
   - preserve source and confirming message ids
 - [x] Keep claims separate from current truth until a deterministic promotion
       rule runs.
-- [ ] Add promotion helpers from confirmed claims into current tables such as
+- [x] Add promotion helpers from confirmed claims into current tables such as
       `careContacts`, `coordinationEvents`, and `memoryEntries`.
 - [x] Add unresolved-claim context to compiled prompt context so CareSupport can
       say what it thinks it heard and what still needs confirmation.
-- [ ] Ensure non-scheduling claims remain possible:
+- [x] Ensure non-scheduling claims remain possible:
   relationship, role, constraint, preference, coordination rule, and care note.
 
 Acceptance criteria:
@@ -396,8 +396,8 @@ Acceptance criteria:
 - [x] Ambiguous/risky claims are marked `needs_clarification`.
 - [x] CareSupport can ask targeted clarification questions before outreach or
       schedule creation.
-- [ ] Confirmed claims can promote into current truth with source links.
-- [ ] Contradicted/superseded claims do not continue to appear as current truth.
+- [x] Confirmed claims can promote into current truth with source links.
+- [x] Contradicted/superseded claims do not continue to appear as current truth.
 
 Test targets:
 

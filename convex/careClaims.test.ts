@@ -286,6 +286,266 @@ describe("careClaims", () => {
     );
   });
 
+  it("promotes confirmed availability claims into source-linked care contacts", async () => {
+    const { t, userId, careCaseId } = await createRuntime(
+      "+16515559007",
+      "chat-care-claims-promote-contact",
+    );
+    const sourceMessageId = await t.mutation(api.messages.create, {
+      careCaseId,
+      userId,
+      actorType: "user",
+      direction: "inbound",
+      body: "Yes, Jim is Monday-Friday 9am-5pm.",
+      timestamp: Date.now(),
+      senderPhone: "+16515559007",
+      displayName: "Rob",
+    });
+    const [claimId] = await t.mutation(api.careClaims.createManyFromSource, {
+      careCaseId,
+      sourceMessageId,
+      claims: [
+        {
+          subjectType: "availability",
+          subjectLabel: "Jim",
+          predicate: "weekday_coverage",
+          valueText: "Jim is Monday-Friday 9am-5pm.",
+          normalizedValue: "Monday-Friday 9am-5pm",
+          status: "confirmed",
+          confidence: "high",
+        },
+      ],
+    });
+
+    const promoted = await t.mutation(api.careClaims.promoteConfirmed, {
+      careCaseId,
+      id: claimId,
+    });
+    const contacts = await t.query(api.careContacts.listByCareCase, {
+      careCaseId,
+    });
+    const claim = await t.query(api.careClaims.get, {
+      careCaseId,
+      id: claimId,
+    });
+    const compiled = await t.mutation(
+      internal.mutations.getCompiledPromptContext,
+      {
+        userId,
+        careCaseId,
+      },
+    );
+
+    expect(promoted).toMatchObject({
+      action: "created",
+      targetType: "care_contact",
+    });
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]).toMatchObject({
+      name: "Jim",
+      availabilityNotes: "Monday-Friday 9am-5pm",
+      availabilitySourceMessageId: sourceMessageId,
+      canReceiveTexts: false,
+      active: true,
+    });
+    expect(claim).toMatchObject({
+      status: "confirmed",
+      promotedToType: "care_contact",
+      promotedToCareContactId: contacts[0]._id,
+      subjectContactId: contacts[0]._id,
+    });
+    expect(claim?.promotedAt).toEqual(expect.any(Number));
+    expect(compiled?.contextSections).toContain("care_contacts");
+    expect(compiled?.contextSections).not.toContain("unconfirmed_understanding");
+    expect(compiled?.careCaseContext).toContain("Jim [other]");
+    expect(compiled?.careCaseContext).toContain("Monday-Friday 9am-5pm");
+
+    const secondPromotion = await t.mutation(api.careClaims.promoteConfirmed, {
+      careCaseId,
+      id: claimId,
+    });
+    const contactsAfterSecondPromotion = await t.query(
+      api.careContacts.listByCareCase,
+      { careCaseId },
+    );
+    expect(secondPromotion).toMatchObject({
+      action: "already_promoted",
+      targetType: "care_contact",
+      targetId: contacts[0]._id,
+    });
+    expect(contactsAfterSecondPromotion).toHaveLength(1);
+  });
+
+  it("promotes confirmed preference claims into durable memory entries", async () => {
+    const { t, userId, careCaseId } = await createRuntime(
+      "+16515559008",
+      "chat-care-claims-promote-memory",
+    );
+    const sourceMessageId = await t.mutation(api.messages.create, {
+      careCaseId,
+      userId,
+      actorType: "user",
+      direction: "inbound",
+      body: "Confirmed: please do not ask Uncle Jim unless it is urgent.",
+      timestamp: Date.now(),
+      senderPhone: "+16515559008",
+      displayName: "Rob",
+    });
+    const [claimId] = await t.mutation(api.careClaims.createManyFromSource, {
+      careCaseId,
+      sourceMessageId,
+      claims: [
+        {
+          subjectType: "preference",
+          subjectLabel: "Rob",
+          predicate: "avoid_uncle_jim_unless_urgent",
+          valueText: "Do not ask Uncle Jim unless it is urgent.",
+          status: "confirmed",
+          confidence: "high",
+        },
+      ],
+    });
+
+    const promoted = await t.mutation(api.careClaims.promoteConfirmed, {
+      careCaseId,
+      id: claimId,
+    });
+    const memoryEntries = await t.query(api.memoryEntries.listByCareCase, {
+      careCaseId,
+    });
+    const claim = await t.query(api.careClaims.get, {
+      careCaseId,
+      id: claimId,
+    });
+
+    expect(promoted).toMatchObject({
+      action: "created",
+      targetType: "memory_entry",
+    });
+    expect(memoryEntries).toHaveLength(1);
+    expect(memoryEntries[0]).toMatchObject({
+      scope: "care_case",
+      category: "care_preference",
+      content: "Rob: Do not ask Uncle Jim unless it is urgent.",
+      active: true,
+    });
+    expect(memoryEntries[0].source).toContain(`careClaim:${claimId}`);
+    expect(memoryEntries[0].source).toContain(`sourceMessage:${sourceMessageId}`);
+    expect(claim).toMatchObject({
+      promotedToType: "memory_entry",
+      promotedToMemoryEntryId: memoryEntries[0]._id,
+    });
+  });
+
+  it("promotes confirmed schedule claims into coordination events", async () => {
+    const { t, userId, careCaseId } = await createRuntime(
+      "+16515559009",
+      "chat-care-claims-promote-event",
+    );
+    const sourceMessageId = await t.mutation(api.messages.create, {
+      careCaseId,
+      userId,
+      actorType: "user",
+      direction: "inbound",
+      body: "Confirmed: Monday evening has a 5pm-8pm coverage gap.",
+      timestamp: Date.now(),
+      senderPhone: "+16515559009",
+      displayName: "Rob",
+    });
+    const [claimId] = await t.mutation(api.careClaims.createManyFromSource, {
+      careCaseId,
+      sourceMessageId,
+      claims: [
+        {
+          subjectType: "schedule",
+          subjectLabel: "Monday evening",
+          predicate: "coverage_gap_5pm_8pm",
+          valueText: "Monday evening has a 5pm-8pm coverage gap.",
+          status: "confirmed",
+          confidence: "high",
+        },
+      ],
+    });
+
+    const promoted = await t.mutation(api.careClaims.promoteConfirmed, {
+      careCaseId,
+      id: claimId,
+    });
+    const events = await t.query(api.coordinationEvents.listByCareCase, {
+      careCaseId,
+    });
+    const claim = await t.query(api.careClaims.get, {
+      careCaseId,
+      id: claimId,
+    });
+
+    expect(promoted).toMatchObject({
+      action: "created",
+      targetType: "coordination_event",
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "coverage_gap",
+      title: "Monday evening: coverage gap 5pm 8pm",
+      status: "open",
+      urgency: "normal",
+      description: "Monday evening has a 5pm-8pm coverage gap.",
+      createdByUserId: userId,
+    });
+    expect(claim).toMatchObject({
+      promotedToType: "coordination_event",
+      promotedToCoordinationEventId: events[0]._id,
+    });
+  });
+
+  it("blocks promotion for unconfirmed or inactive claims", async () => {
+    const { t, userId, careCaseId } = await createRuntime(
+      "+16515559010",
+      "chat-care-claims-promotion-blocked",
+    );
+    const sourceMessageId = await t.mutation(api.messages.create, {
+      careCaseId,
+      userId,
+      actorType: "user",
+      direction: "inbound",
+      body: "Jim might do weekdays.",
+      timestamp: Date.now(),
+      senderPhone: "+16515559010",
+      displayName: "Rob",
+    });
+    const [claimId] = await t.mutation(api.careClaims.createManyFromSource, {
+      careCaseId,
+      sourceMessageId,
+      claims: [
+        {
+          subjectType: "availability",
+          subjectLabel: "Jim",
+          predicate: "might_do_weekdays",
+          valueText: "Jim might do weekdays.",
+          status: "needs_clarification",
+        },
+      ],
+    });
+
+    await expect(
+      t.mutation(api.careClaims.promoteConfirmed, {
+        careCaseId,
+        id: claimId,
+      }),
+    ).rejects.toThrow("Only active confirmed care claims can be promoted");
+
+    await t.mutation(api.careClaims.reject, {
+      careCaseId,
+      id: claimId,
+    });
+    await expect(
+      t.mutation(api.careClaims.promoteConfirmed, {
+        careCaseId,
+        id: claimId,
+      }),
+    ).rejects.toThrow("Only active confirmed care claims can be promoted");
+  });
+
   it("supersedes one claim with another claim in the same care case", async () => {
     const { t, userId, careCaseId } = await createRuntime(
       "+16515559003",
@@ -351,6 +611,12 @@ describe("careClaims", () => {
       active: true,
       confidence: "high",
     });
+    await expect(
+      t.mutation(api.careClaims.promoteConfirmed, {
+        careCaseId,
+        id: oldClaimId,
+      }),
+    ).rejects.toThrow("Only active confirmed care claims can be promoted");
   });
 
   it("enforces care-case boundaries for source messages and claim transitions", async () => {
