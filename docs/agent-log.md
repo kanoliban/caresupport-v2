@@ -8,6 +8,44 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-02 — Codex
 
 ### What I did
+- Opened Phase 2E as PR #57:
+  `https://github.com/kanoliban/caresupport-v2/pull/57`.
+- Created stacked branch `liban/care-claims-learning-layer` from the Phase 2E
+  branch.
+- Added the first CareSupport learning layer implementation:
+  - new `careClaims` table in Convex schema
+  - `convex/careClaims.ts` lifecycle API
+  - source-message validation
+  - care-case boundary validation
+  - claim status transitions for confirm, reject, contradict, supersede, and
+    archive
+- Added `convex/careClaims.test.ts` to prove messy fragments can become
+  source-linked claims without changing current truth.
+- Updated generated Convex API bindings with `npx convex codegen`.
+
+### Validation
+- `npm test -- convex/careClaims.test.ts --reporter verbose` passed.
+- `npm run typecheck` passed.
+- `npm test -- convex/careClaims.test.ts convex/coordinationLoop.test.ts convex/contactReplies.test.ts convex/outreachAttempts.test.ts convex/handler.test.ts` passed.
+- Full suite passed: 21 files / 272 tests.
+
+### State I'm leaving
+- `careClaims` exists as evidence/learning state only.
+- No promotion into `careContacts`, `coordinationEvents`, `memoryEntries`, or
+  schedule state has been added yet.
+- No Convex RAG dependency has been added.
+
+### Concerns
+- `npx convex codegen` required network access because the CLI attempted a
+  telemetry/deployment-state call. It completed successfully after escalation.
+- The next slice should add unresolved-claim prompt context and then the Rob
+  care network clarification simulator.
+
+---
+
+## 2026-06-02 — Codex
+
+### What I did
 - Added `docs/caresupport-learning-retrieval-implementation.md` as the
   implementation-facing plan for CareSupport learning and Convex-native
   retrieval.

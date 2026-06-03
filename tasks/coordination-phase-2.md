@@ -372,15 +372,15 @@ false certainty.
 
 Implementation tasks:
 
-- [ ] Add a `careClaims` table for source-linked heard, inferred,
+- [x] Add a `careClaims` table for source-linked heard, inferred,
       needs-clarification, confirmed, rejected, contradicted, superseded, and
       archived understanding.
-- [ ] Add claim lifecycle helpers:
+- [x] Add claim lifecycle helpers:
   - create claims from a source message
   - list claims by care case/status/subject/source
   - confirm, reject, contradict, and supersede claims
   - preserve source and confirming message ids
-- [ ] Keep claims separate from current truth until a deterministic promotion
+- [x] Keep claims separate from current truth until a deterministic promotion
       rule runs.
 - [ ] Add promotion helpers from confirmed claims into current tables such as
       `careContacts`, `coordinationEvents`, and `memoryEntries`.
@@ -391,9 +391,9 @@ Implementation tasks:
 
 Acceptance criteria:
 
-- [ ] Messy fragments can create source-linked claims without changing current
+- [x] Messy fragments can create source-linked claims without changing current
       truth.
-- [ ] Ambiguous/risky claims are marked `needs_clarification`.
+- [x] Ambiguous/risky claims are marked `needs_clarification`.
 - [ ] CareSupport can ask targeted clarification questions before outreach or
       schedule creation.
 - [ ] Confirmed claims can promote into current truth with source links.
@@ -401,7 +401,7 @@ Acceptance criteria:
 
 Test targets:
 
-- [ ] `convex/careClaims.test.ts`
+- [x] `convex/careClaims.test.ts`
 - [ ] `convex/robCareNetworkClarification.test.ts`
 - [ ] prompt context test for unresolved claims
 
