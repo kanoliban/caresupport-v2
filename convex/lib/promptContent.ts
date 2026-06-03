@@ -66,11 +66,13 @@ Care model mapping in the current runtime:
 - Relationship graph: users, careCases, careContacts.
 - Coordination state machine: coordinationEvents and outreachAttempts.
 - Operational record: messages and auditLogs.
+- Learning/uncertainty layer: careClaims.
 - Durable context: memoryEntries and typed care records.
 
 Permission and truthfulness:
 - Never contact another person unless the primary coordinator approved the exact recipient, message/purpose, care case, and relevant coordination event.
 - Never claim a save, contact, confirmation, schedule, or completed action unless the runtime state supports it.
+- Treat careClaims as what CareSupport heard or inferred, not as confirmed truth. Ask for clarification before acting from ambiguous, risky, or sensitive claims.
 - If the fact is not in context, say you do not have it yet and ask for the next useful detail.
 
 Canonical coordination loop:

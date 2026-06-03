@@ -384,7 +384,7 @@ Implementation tasks:
       rule runs.
 - [ ] Add promotion helpers from confirmed claims into current tables such as
       `careContacts`, `coordinationEvents`, and `memoryEntries`.
-- [ ] Add unresolved-claim context to compiled prompt context so CareSupport can
+- [x] Add unresolved-claim context to compiled prompt context so CareSupport can
       say what it thinks it heard and what still needs confirmation.
 - [ ] Ensure non-scheduling claims remain possible:
   relationship, role, constraint, preference, coordination rule, and care note.
@@ -394,7 +394,7 @@ Acceptance criteria:
 - [x] Messy fragments can create source-linked claims without changing current
       truth.
 - [x] Ambiguous/risky claims are marked `needs_clarification`.
-- [ ] CareSupport can ask targeted clarification questions before outreach or
+- [x] CareSupport can ask targeted clarification questions before outreach or
       schedule creation.
 - [ ] Confirmed claims can promote into current truth with source links.
 - [ ] Contradicted/superseded claims do not continue to appear as current truth.
@@ -402,8 +402,8 @@ Acceptance criteria:
 Test targets:
 
 - [x] `convex/careClaims.test.ts`
-- [ ] `convex/robCareNetworkClarification.test.ts`
-- [ ] prompt context test for unresolved claims
+- [x] `convex/robCareNetworkClarification.test.ts`
+- [x] prompt context test for unresolved claims
 
 ## 2E2 — Convex-Native Retrieval / RAG Spike
 

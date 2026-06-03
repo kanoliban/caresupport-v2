@@ -47,6 +47,9 @@ describe("SOUL_CONTENT", () => {
     expect(MODEL_CONSTITUTION_CONTENT).toContain(
       "Never claim a save, contact, confirmation, schedule, or completed action",
     );
+    expect(MODEL_CONSTITUTION_CONTENT).toContain(
+      "Treat careClaims as what CareSupport heard or inferred, not as confirmed truth",
+    );
   });
 
   it("tells the model not to save inferred emotional summaries as durable memory", () => {
