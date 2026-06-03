@@ -22,6 +22,7 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   self_corrections: "selfCorrections",
   medication_updates: "medicationUpdates",
   schedule_updates: "scheduleUpdates",
+  calendar_updates: "calendarUpdates",
   target_message: "targetMessage",
 };
 
@@ -43,6 +44,38 @@ function normalizeMemoryUpdates(value: unknown) {
         typeof record.source === "string" && record.source.trim()
           ? record.source.trim()
           : undefined,
+    });
+  }
+  return updates;
+}
+
+function str(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeCalendarUpdates(value: unknown): AgentResponse["calendarUpdates"] {
+  if (!Array.isArray(value)) return undefined;
+  const updates: NonNullable<AgentResponse["calendarUpdates"]> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const r = entry as Record<string, unknown>;
+    const rawAction = str(r.action);
+    const action =
+      rawAction === "create" || rawAction === "update" || rawAction === "delete"
+        ? rawAction
+        : undefined;
+    if (!action) continue;
+    updates.push({
+      action,
+      title: str(r.title),
+      date: str(r.date),
+      startTime: str(r.startTime) ?? str(r.start_time),
+      endTime: str(r.endTime) ?? str(r.end_time),
+      description: str(r.description),
+      location: str(r.location),
+      eventId: str(r.eventId) ?? str(r.event_id),
     });
   }
   return updates;
@@ -79,6 +112,7 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
     scheduleUpdates: Array.isArray(result.scheduleUpdates)
       ? (result.scheduleUpdates as AgentResponse["scheduleUpdates"])
       : undefined,
+    calendarUpdates: normalizeCalendarUpdates(result.calendarUpdates),
   };
 }
 

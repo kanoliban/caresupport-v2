@@ -25,7 +25,8 @@ FIELD GUIDE:
 - Do not use memory updates for inferred emotional summaries, empathy coaching, or temporary feelings unless the user explicitly asks you to remember them.
 - self_corrections: Lessons the system should remember about how to behave. Prefix each with [behavioral], [factual], or [operational].
 - medication_updates: Typed medication add/update/remove operations.
-- schedule_updates: Typed schedule add/update/remove operations. Types are appointment, task, reminder.
+- schedule_updates: Typed INTERNAL schedule add/update/remove operations (saved only in CareSupport, not on any external calendar). Types are appointment, task, reminder. If a GOOGLE CALENDAR block is present below, use calendar_updates instead of this for anything that belongs on the user's real calendar.
+- calendar_updates: Writes to the user's REAL Google Calendar. Only available when a GOOGLE CALENDAR block appears below (calendar connected). Actions: create, update, delete. Fields: title, date (YYYY-MM-DD), startTime (HH:MM, 24h), endTime (HH:MM, 24h), description, location, eventId (required for update/delete).
 - reactions: Optional tapbacks.
 - effect: Optional iMessage effect.
 
@@ -117,6 +118,21 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     cacheBreakpoint: false,
   });
 
+  if (input.isTestEnv) {
+    blocks.push({
+      type: "text",
+      text: [
+        "── ENVIRONMENT: TEST ──",
+        "You are running in the TEST environment.",
+        "Whenever you introduce or describe yourself to the user — a greeting, first contact, onboarding's first message, or answering who/what you are — begin that message with this exact line, on its own line:",
+        "TEST ENVIRONMENT INITIALIZED",
+        "Then a blank line, then your normal introduction.",
+        "Only include this marker on self-introduction messages. Never add it to any other reply.",
+      ].join("\n"),
+      cacheBreakpoint: false,
+    });
+  }
+
   blocks.push({
     type: "text",
     text: [
@@ -170,6 +186,25 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     blocks.push({
       type: "text",
       text: `── CARE CASE ──\n${input.careCaseContext.trim()}`,
+      cacheBreakpoint: false,
+    });
+  }
+
+  if (input.calendarContext) {
+    blocks.push({
+      type: "text",
+      text: [
+        "── GOOGLE CALENDAR (CONNECTED) ──",
+        "Google Calendar is connected for this user. The events below are read live from their real Google Calendar — treat them as the source of truth when they ask what's on their calendar or schedule.",
+        "",
+        input.calendarContext,
+        "",
+        "WRITING TO THE CALENDAR:",
+        "When the user wants to add, move, reschedule, rename, or remove anything on their calendar (a meeting, appointment, event, or calendar reminder), you MUST return a calendar_updates entry. That is the ONLY field that writes to their real Google Calendar.",
+        "Do NOT use schedule_updates for this — schedule_updates only saves an internal note and will NOT appear on the user's Google Calendar. When the calendar is connected, prefer calendar_updates and do not also duplicate the same item into schedule_updates.",
+        "For create: include title and date (YYYY-MM-DD); include startTime/endTime (HH:MM, 24h) for timed events. For update/delete: include the eventId of the target event (the ids shown above). Always confirm with the user before deleting.",
+        "Only claim you added/changed/removed something on their calendar if the matching calendar_updates entry is present in this response.",
+      ].join("\n"),
       cacheBreakpoint: false,
     });
   }

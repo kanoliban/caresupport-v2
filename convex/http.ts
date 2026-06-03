@@ -12,7 +12,12 @@ import {
   extractFailureReason,
   extractReactionData,
   extractParticipantData,
+  sendMessage,
 } from "./lib/linqClient";
+import {
+  buildOAuthUrl,
+  exchangeCodeForTokens,
+} from "./lib/providers/googleCalendar";
 
 const http = httpRouter();
 
@@ -186,6 +191,103 @@ http.route({
     }
 
     return jsonResponse({ handled: false, event: eventType });
+  }),
+});
+
+http.route({
+  path: "/oauth/google/start",
+  method: "GET",
+  handler: httpAction(async (_ctx, request) => {
+    const url = new URL(request.url);
+    const userId = url.searchParams.get("u");
+    if (!userId) {
+      return new Response("Missing user parameter", { status: 400 });
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      return new Response("Google OAuth not configured", { status: 503 });
+    }
+
+    const redirectUri = `${process.env.CONVEX_SITE_URL}/oauth/google/callback`;
+    const oauthUrl = buildOAuthUrl(clientId, redirectUri, userId);
+    return Response.redirect(oauthUrl, 302);
+  }),
+});
+
+http.route({
+  path: "/oauth/google/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state"); // userId
+    const error = url.searchParams.get("error");
+
+    const htmlPage = (title: string, body: string) =>
+      new Response(
+        `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:sans-serif;text-align:center;padding:60px 20px;max-width:480px;margin:0 auto}h2{margin-bottom:8px}p{color:#555}</style></head><body><h2>${title}</h2><p>${body}</p><p style="margin-top:32px;font-size:13px;color:#aaa">You can close this tab.</p></body></html>`,
+        { headers: { "Content-Type": "text/html" } },
+      );
+
+    if (error || !code || !state) {
+      return htmlPage("Connection cancelled", "Google Calendar was not connected.");
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID ?? "";
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
+    const redirectUri = `${process.env.CONVEX_SITE_URL}/oauth/google/callback`;
+
+    let tokens;
+    try {
+      tokens = await exchangeCodeForTokens(code, clientId, clientSecret, redirectUri);
+    } catch {
+      return htmlPage("Something went wrong", "Could not complete Google authorization. Please try again.");
+    }
+
+    const tokenExpiresAt = Date.now() + tokens.expires_in * 1000;
+
+    // Resolve userId → user doc so we have phone + chatId for the confirmation SMS
+    const user = await ctx.runMutation(internal.mutations.getUserByRawId, {
+      id: state,
+    });
+
+    if (!user) {
+      return htmlPage("Link expired", "This authorization link is no longer valid.");
+    }
+
+    await ctx.runMutation(internal.mutations.saveConnectedAccount, {
+      userId: user._id,
+      provider: "google",
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      tokenExpiresAt,
+      scope: tokens.scope,
+    });
+
+    await ctx.runMutation(internal.mutations.logAudit, {
+      userId: user._id,
+      event: "calendar_connected",
+      phone: user.phone,
+      details: {},
+      timestamp: Date.now(),
+    });
+
+    // Send confirmation SMS if we have credentials
+    const linqToken = process.env.LINQ_API_TOKEN ?? "";
+    const chatId = user.chatId ?? "";
+    if (linqToken && chatId) {
+      await sendMessage(
+        chatId,
+        "✓ Google Calendar connected! I'll include your schedule in every conversation from now on.",
+        linqToken,
+      );
+    }
+
+    return htmlPage(
+      "Google Calendar connected ✓",
+      "CareSupport can now see and update your calendar. You can close this tab.",
+    );
   }),
 });
 

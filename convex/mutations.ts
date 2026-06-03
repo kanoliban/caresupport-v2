@@ -59,6 +59,10 @@ const eventValidator = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
+  v.literal("calendar_connected"),
+  v.literal("calendar_event_created"),
+  v.literal("calendar_event_updated"),
+  v.literal("calendar_event_deleted"),
 );
 
 const detailsValidator = v.object({
@@ -77,6 +81,7 @@ const detailsValidator = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
+  calendarEventId: v.optional(v.string()),
 });
 
 const scheduleTypeValidator = v.union(
@@ -168,6 +173,20 @@ export const getUserById = internalMutation({
   args: { id: v.id("users") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.id);
+  },
+});
+
+// Used by the OAuth callback where the state is a raw string, not a typed Id
+export const getUserByRawId = internalMutation({
+  args: { id: v.string() },
+  handler: async (ctx, args): Promise<{ _id: import("./_generated/dataModel").Id<"users">; phone: string; chatId?: string; name: string } | null> => {
+    try {
+      const doc = await ctx.db.get(args.id as import("./_generated/dataModel").Id<"users">);
+      if (!doc || !("phone" in doc)) return null;
+      return doc as never;
+    } catch {
+      return null;
+    }
   },
 });
 
@@ -572,6 +591,82 @@ export const upsertScheduleItem = internalMutation({
         notes: args.notes,
         provider: args.provider,
         status: "scheduled",
+      });
+    }
+  },
+});
+
+export const saveConnectedAccount = internalMutation({
+  args: {
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    tokenExpiresAt: v.number(),
+    scope: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", args.userId).eq("provider", args.provider),
+      )
+      .first();
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken ?? existing.refreshToken,
+        tokenExpiresAt: args.tokenExpiresAt,
+        scope: args.scope,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+    return ctx.db.insert("connectedAccounts", {
+      userId: args.userId,
+      provider: args.provider,
+      accessToken: args.accessToken,
+      refreshToken: args.refreshToken,
+      tokenExpiresAt: args.tokenExpiresAt,
+      scope: args.scope,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const getConnectedAccount = internalMutation({
+  args: { userId: v.id("users"), provider: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", args.userId).eq("provider", args.provider),
+      )
+      .first();
+  },
+});
+
+export const updateConnectedAccountTokens = internalMutation({
+  args: {
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    tokenExpiresAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const account = await ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", args.userId).eq("provider", args.provider),
+      )
+      .first();
+    if (account) {
+      await ctx.db.patch(account._id, {
+        accessToken: args.accessToken,
+        tokenExpiresAt: args.tokenExpiresAt,
+        updatedAt: Date.now(),
       });
     }
   },
