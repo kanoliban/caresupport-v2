@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as auditLogs from "../auditLogs.js";
 import type * as careCases from "../careCases.js";
+import type * as careClaims from "../careClaims.js";
 import type * as careContacts from "../careContacts.js";
 import type * as contactReplies from "../contactReplies.js";
 import type * as coordinationEvents from "../coordinationEvents.js";
@@ -33,8 +34,8 @@ import type * as medications from "../medications.js";
 import type * as memoryEntries from "../memoryEntries.js";
 import type * as messages from "../messages.js";
 import type * as mutations from "../mutations.js";
-import type * as outreachExecution from "../outreachExecution.js";
 import type * as outreachAttempts from "../outreachAttempts.js";
+import type * as outreachExecution from "../outreachExecution.js";
 import type * as reminders from "../reminders.js";
 import type * as scheduleItems from "../scheduleItems.js";
 import type * as seed from "../seed.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auditLogs: typeof auditLogs;
   careCases: typeof careCases;
+  careClaims: typeof careClaims;
   careContacts: typeof careContacts;
   contactReplies: typeof contactReplies;
   coordinationEvents: typeof coordinationEvents;
@@ -73,8 +75,8 @@ declare const fullApi: ApiFromModules<{
   memoryEntries: typeof memoryEntries;
   messages: typeof messages;
   mutations: typeof mutations;
-  outreachExecution: typeof outreachExecution;
   outreachAttempts: typeof outreachAttempts;
+  outreachExecution: typeof outreachExecution;
   reminders: typeof reminders;
   scheduleItems: typeof scheduleItems;
   seed: typeof seed;

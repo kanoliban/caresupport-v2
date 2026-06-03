@@ -111,6 +111,41 @@ const careContactReplyStatus = v.union(
   v.literal("needs_clarification"),
 );
 
+const careClaimSubjectType = v.union(
+  v.literal("care_recipient"),
+  v.literal("care_contact"),
+  v.literal("schedule"),
+  v.literal("availability"),
+  v.literal("relationship"),
+  v.literal("role"),
+  v.literal("constraint"),
+  v.literal("preference"),
+  v.literal("coordination_rule"),
+  v.literal("other"),
+);
+
+const careClaimStatus = v.union(
+  v.literal("heard"),
+  v.literal("inferred"),
+  v.literal("needs_clarification"),
+  v.literal("confirmed"),
+  v.literal("rejected"),
+  v.literal("contradicted"),
+  v.literal("superseded"),
+  v.literal("archived"),
+);
+
+const careClaimConfidence = v.union(
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high"),
+);
+
+const careClaimSensitivity = v.union(
+  v.literal("normal"),
+  v.literal("sensitive"),
+);
+
 const auditEvent = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
@@ -258,6 +293,34 @@ export default defineSchema({
     .index("by_care_case_scope", ["careCaseId", "scope"])
     .index("by_care_case_scope_category", ["careCaseId", "scope", "category"])
     .index("by_user_scope", ["userId", "scope"]),
+
+  careClaims: defineTable({
+    careCaseId: v.id("careCases"),
+    sourceMessageId: v.id("messages"),
+    sourceActorType: messageActorType,
+    sourceCareContactId: v.optional(v.id("careContacts")),
+    subjectType: careClaimSubjectType,
+    subjectLabel: v.string(),
+    subjectContactId: v.optional(v.id("careContacts")),
+    predicate: v.string(),
+    valueText: v.string(),
+    normalizedValue: v.optional(v.string()),
+    status: careClaimStatus,
+    confidence: careClaimConfidence,
+    sensitivity: careClaimSensitivity,
+    clarificationQuestion: v.optional(v.string()),
+    clarifiedByMessageId: v.optional(v.id("messages")),
+    confirmedAt: v.optional(v.number()),
+    supersededByClaimId: v.optional(v.id("careClaims")),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_care_case", ["careCaseId"])
+    .index("by_care_case_status", ["careCaseId", "status"])
+    .index("by_care_case_subject", ["careCaseId", "subjectType", "subjectLabel"])
+    .index("by_source_message", ["sourceMessageId"])
+    .index("by_subject_contact", ["subjectContactId"]),
 
   careContacts: defineTable({
     careCaseId: v.id("careCases"),
