@@ -12,6 +12,7 @@ import {
   shouldPersistMemoryUpdate,
   uniqueMemoryUpdates,
 } from "./lib/memory";
+import { normalizeHandle } from "./lib/handles";
 
 const directionValidator = v.union(
   v.literal("inbound"),
@@ -104,15 +105,10 @@ const memoryUpdateValidator = v.object({
   source: v.optional(v.string()),
 });
 
+// Backwards-compatible alias. Phone *and* email handles are accepted; the name
+// is retained until the schema-wide `phone` → `handle` rename lands.
 export function normalizePhone(raw: string): string | null {
-  if (!raw) return null;
-  const stripped = raw.replace(/[^\d+]/g, "");
-  const digits = stripped.replace(/\+/g, "");
-  if (digits.length < 7) return null;
-  if (stripped.startsWith("+")) return `+${digits}`;
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return null;
+  return normalizeHandle(raw);
 }
 
 export const createOnboardingUserAndCareCase = internalMutation({

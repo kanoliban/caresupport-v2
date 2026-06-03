@@ -8,13 +8,15 @@
 
 ## Root cause
 
-Three duplicated phone normalizers, each with identical buggy logic:
+Duplicated phone normalizers, each with identical buggy logic:
 
 | File:line | Function | Used for |
 |-----------|----------|----------|
 | `convex/careContacts.ts:35` | `normalizeOptionalPhone` | Contacts the user adds via the agent |
 | `convex/mutations.ts:107` | `normalizePhone` | Inbound webhook → user/care_case creation |
-| `convex/waitlist.ts:10` | `normalizePhone` | Web signup form |
+
+> Note: the planned `convex/waitlist.ts` normalizer does not exist in this repo;
+> only the two above were present.
 
 All three:
 
@@ -38,17 +40,17 @@ The Linq webhook payload already passes through whatever handle Linq sends (E.16
 
 ## Plan
 
-- [ ] 1. Create shared `convex/lib/handles.ts` with `normalizeHandle(raw): string | null`
+- [x] 1. Create shared `convex/lib/handles.ts` with `normalizeHandle(raw): string | null`
   - Email branch: trim, lowercase, validate with a conservative regex
   - Phone branch: strip non-digit non-`+`; accept anything 8–15 digits as international E.164 (prepend `+` if missing); preserve existing US-default for bare 10/11-digit input
   - Return `null` on truly invalid input only
-- [ ] 2. Replace `normalizeOptionalPhone` in `convex/careContacts.ts` with import from `lib/handles.ts`
-- [ ] 3. Replace `normalizePhone` in `convex/mutations.ts` with import
-- [ ] 4. Replace `normalizePhone` in `convex/waitlist.ts` with import
-- [ ] 5. Add unit tests in `convex/lib/handles.test.ts` covering the matrix below
-- [ ] 6. Update `convex/mutations.test.ts` and `convex/careContacts.test.ts` for new accepted inputs
-- [ ] 7. `npx tsc --noEmit` + `npm test` clean
-- [ ] 8. Smoke test on `dev` Convex deployment: send a webhook payload with an email sender; add a UK contact via the agent
+- [x] 2. Replace `normalizeOptionalPhone` in `convex/careContacts.ts` with import from `lib/handles.ts`
+- [x] 3. Replace `normalizePhone` in `convex/mutations.ts` with delegating wrapper (kept the export name; `handler.ts` and `mutations.test.ts` still import it)
+- [~] 4. ~~Replace `normalizePhone` in `convex/waitlist.ts`~~ — file does not exist; nothing to change
+- [x] 5. Add unit tests in `convex/lib/handles.test.ts` covering the matrix below
+- [x] 6. Reviewed `convex/mutations.test.ts` — existing `698-4328 → null` still holds (min 8 digits); no change needed. `convex/careContacts.test.ts` does not exist.
+- [ ] 7. `npx tsc --noEmit` + `npm test` clean — **BLOCKED**: `node_modules` not installed and disk is full (~195 MB free), so `npm install` fails with ENOSPC. Needs disk space freed, then `npm install` + `npx convex dev` (for `_generated/`) before checks can run.
+- [ ] 8. Smoke test on `dev` Convex deployment: send a webhook payload with an email sender; add a UK contact via the agent — **BLOCKED** on same.
 
 ## Test matrix
 
@@ -86,4 +88,24 @@ The Linq webhook payload already passes through whatever handle Linq sends (E.16
 
 ## Review
 
-(filled in after implementation)
+**Root cause confirmed at runtime path:** an inbound iMessage from an Apple-ID
+email arrives as `senderPhone = "clintonksang@gmail.com"`
+(`extractSenderPhone`, `linqClient.ts`). In `handler.ts`, a new sender hits
+`createOnboardingUserAndCareCase`, which calls `normalizePhone(email)` → `null`
+→ `throw new Error("Cannot normalize phone")`. The whole handler aborts before
+any reply is sent. Phone senders normalize fine, so they reply. This matches the
+reported symptom exactly.
+
+**Changes:**
+- Added `convex/lib/handles.ts` — single `normalizeHandle()` accepting E.164
+  phones, bare international numbers (8–15 digits), bare US 10/11-digit, and
+  email handles (trim + lowercase + conservative regex). Returns `null` only on
+  truly invalid input.
+- `convex/mutations.ts` — `normalizePhone` now delegates to `normalizeHandle`
+  (export name kept to avoid churn in `handler.ts` / tests; rename deferred).
+- `convex/careContacts.ts` — `normalizeOptionalPhone` now delegates.
+- Added `convex/lib/handles.test.ts` covering the full test matrix.
+
+**Verification not yet run** — environment blocker (no `node_modules`, disk
+full). Once unblocked: `npm install` → `npx convex dev` → `npx tsc --noEmit` →
+`npm test`, then the dev smoke test with an email sender.

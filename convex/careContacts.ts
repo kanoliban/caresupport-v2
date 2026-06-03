@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { normalizeHandle } from "./lib/handles";
 
 const contactTypeValidator = v.union(
   v.literal("family"),
@@ -33,14 +34,7 @@ interface CareContactPatch {
 }
 
 function normalizeOptionalPhone(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const stripped = raw.replace(/[^\d+]/g, "");
-  const digits = stripped.replace(/\+/g, "");
-  if (digits.length < 7) return undefined;
-  if (stripped.startsWith("+")) return `+${digits}`;
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return undefined;
+  return normalizeHandle(raw) ?? undefined;
 }
 
 export const listByCareCase = query({
