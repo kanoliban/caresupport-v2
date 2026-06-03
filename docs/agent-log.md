@@ -8,6 +8,44 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-03 — Codex
 
 ### What I did
+- Merged PR #60 into `main`, making confirmed claim promotion the current
+  baseline.
+- Created branch `liban/structured-care-retrieval` for the 2E2 structured
+  retrieval slice.
+- Added `convex/lib/knowledge/retrieveCareContext.ts` as a structured-only
+  retrieval interface before installing Convex RAG.
+- Added `internal.mutations.retrieveStructuredCareContext` as the stable runtime
+  entrypoint.
+- Returned current truth, unresolved claims, reference snippets, and source
+  links as separate sections.
+- Added tests proving:
+  - unresolved Rob-network claims return with source ids
+  - older message history can be retrieved as reference context
+  - current structured contact truth remains separate from older references
+  - unresolved claims can be omitted from retrieval context
+- Updated the Phase 2 task tracker to mark only the structured retrieval pieces
+  complete; RAG indexing, namespaces, filters, and evals remain deferred.
+
+### Validation
+- `npm test -- convex/lib/knowledge/retrieveCareContext.test.ts --reporter verbose` passed.
+- `npm run typecheck` passed.
+
+### State I'm leaving
+- No `@convex-dev/rag` dependency has been added.
+- No Pinecone or external vector database has been introduced.
+- The retrieval boundary is now ready for future Convex-native RAG behind the
+  same return contract.
+
+### Concerns
+- This slice proves retrieval shape and source separation, not live model
+  decision quality. The next RAG/eval slice should show whether retrieved
+  references improve a concrete response or next-step decision.
+
+---
+
+## 2026-06-03 — Codex
+
+### What I did
 - Merged PR #59 into `main`, making unresolved-claim prompt context and the Rob
   clarification simulator the current baseline.
 - Created branch `liban/confirmed-claim-promotion` for the next 2E1 slice.

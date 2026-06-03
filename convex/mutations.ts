@@ -14,6 +14,7 @@ import {
   shouldPersistMemoryUpdate,
   uniqueMemoryUpdates,
 } from "./lib/memory";
+import { retrieveCareContext } from "./lib/knowledge/retrieveCareContext";
 
 const directionValidator = v.union(
   v.literal("inbound"),
@@ -113,6 +114,14 @@ const medicationStatusValidator = v.union(
   v.literal("held"),
   v.literal("tapering"),
   v.literal("discontinued"),
+);
+
+const retrievalPurposeValidator = v.union(
+  v.literal("prompt_context"),
+  v.literal("clarification"),
+  v.literal("coordination"),
+  v.literal("summary"),
+  v.literal("reference"),
 );
 
 const modelUpdateActionValidator = v.union(
@@ -720,6 +729,21 @@ export const getCompiledPromptContext = internalMutation({
       contextSections: careCaseContext.sections,
       lessons: careCaseContext.lessons,
     };
+  },
+});
+
+export const retrieveStructuredCareContext = internalMutation({
+  args: {
+    userId: v.id("users"),
+    careCaseId: v.id("careCases"),
+    query: v.optional(v.string()),
+    purpose: v.optional(retrievalPurposeValidator),
+    includeUnresolvedClaims: v.optional(v.boolean()),
+    includeResolvedHistory: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await retrieveCareContext(ctx, args);
   },
 });
 

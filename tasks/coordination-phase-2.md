@@ -277,7 +277,7 @@ Implementation tasks:
 - [x] Define the Pinecone/external-vector gate.
 - [x] Before installing any RAG dependency, define the minimal retrieval
       interface and eval questions it must satisfy.
-- [ ] Revisit after Phase 2E transcript tests show whether older/fuzzy context
+- [x] Revisit after Phase 2E transcript tests show whether older/fuzzy context
       is actually being missed.
 
 Acceptance criteria:
@@ -296,7 +296,7 @@ Validation targets:
 - [x] `docs/caresupport-learning-retrieval-implementation.md`
 - [x] `AGENTS.md`
 - [x] this task tracker
-- [ ] future retrieval/eval tests if a Convex RAG spike is started
+- [x] structured retrieval/eval tests before a Convex RAG spike
 
 ## 2E — Agent/Context Engine Hardening
 
@@ -412,9 +412,9 @@ without letting retrieved text override structured current truth.
 
 Implementation tasks:
 
-- [ ] Add `convex/lib/knowledge/retrieveCareContext.ts` with a structured-only
+- [x] Add `convex/lib/knowledge/retrieveCareContext.ts` with a structured-only
       backend first.
-- [ ] Return current truth, unresolved claims, reference snippets, and source
+- [x] Return current truth, unresolved claims, reference snippets, and source
       links as separate sections.
 - [ ] Install `@convex-dev/rag` only after the structured retrieval interface
       and claim simulator pass.
@@ -430,15 +430,15 @@ Implementation tasks:
 
 Acceptance criteria:
 
-- [ ] Current structured truth always wins over retrieved reference context.
+- [x] Current structured truth always wins over retrieved reference context.
 - [ ] RAG entries are care-case scoped.
-- [ ] Retrieved references include source ids.
+- [x] Retrieved references include source ids.
 - [ ] Tests prove retrieval improves a response or next-step decision.
-- [ ] No Pinecone or external vector database is introduced.
+- [x] No Pinecone or external vector database is introduced.
 
 Test targets:
 
-- [ ] `convex/lib/knowledge/retrieveCareContext.test.ts`
+- [x] `convex/lib/knowledge/retrieveCareContext.test.ts`
 - [ ] RAG index payload construction tests
 - [ ] transcript/eval test with mocked retrieval results
 
