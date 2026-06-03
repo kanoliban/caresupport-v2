@@ -5,6 +5,43 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-06-03 — Codex
+
+### What I did
+- Merged PR #58 into `main`, making `careClaims` the current foundation.
+- Created branch `liban/unresolved-claims-context` for the next 2E1 slice.
+- Added unresolved claim retrieval into `getCompiledPromptContext`.
+- Extended `buildCareCaseContext` with a new `## Unconfirmed Understanding`
+  section that loads active `heard`, `inferred`, and `needs_clarification`
+  claims without treating them as current truth.
+- Updated model doctrine so `careClaims` are described as heard/inferred
+  learning evidence, not confirmed truth.
+- Added prompt-context coverage to `convex/careClaims.test.ts`.
+- Added `convex/robCareNetworkClarification.test.ts`, which simulates Rob
+  giving messy care-network fragments and asserts that CareSupport asks
+  accuracy-seeking clarification questions before creating contacts, events, or
+  outreach.
+
+### Validation
+- `npm test -- convex/careClaims.test.ts convex/robCareNetworkClarification.test.ts convex/lib/promptContent.test.ts --reporter verbose` passed.
+- `npm run typecheck` passed.
+- `npm test -- convex/careClaims.test.ts convex/robCareNetworkClarification.test.ts convex/coordinationLoop.test.ts convex/contactReplies.test.ts convex/outreachAttempts.test.ts convex/handler.test.ts convex/mutations.test.ts` passed.
+- Full suite passed: 22 files / 274 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- Unresolved claims now appear in compiled prompt context as uncertainty.
+- The Rob simulator proves the correct first move is clarification, not
+  premature graph promotion or outreach.
+- Confirmed-claim promotion into `careContacts`, `coordinationEvents`, and
+  `memoryEntries` remains the next implementation slice.
+
+### Concerns
+- The simulator is deterministic and does not call the live model. It validates
+  runtime/prompt-context contracts, not provider output quality.
+
+---
+
 ## 2026-06-02 — Codex
 
 ### What I did

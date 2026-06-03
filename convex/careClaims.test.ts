@@ -203,6 +203,89 @@ describe("careClaims", () => {
     });
   });
 
+  it("loads unresolved claims into prompt context without treating them as current truth", async () => {
+    const { t, userId, careCaseId } = await createRuntime(
+      "+16515559006",
+      "chat-care-claims-context",
+    );
+    const sourceMessageId = await t.mutation(api.messages.create, {
+      careCaseId,
+      userId,
+      actorType: "user",
+      direction: "inbound",
+      body: "Jim usually does weekdays.",
+      timestamp: Date.now(),
+      senderPhone: "+16515559006",
+      displayName: "Rob",
+    });
+    const [claimId] = await t.mutation(api.careClaims.createManyFromSource, {
+      careCaseId,
+      sourceMessageId,
+      claims: [
+        {
+          subjectType: "availability",
+          subjectLabel: "Jim",
+          predicate: "usually_does_weekdays",
+          valueText: "Jim usually does weekdays.",
+          status: "needs_clarification",
+          confidence: "medium",
+          clarificationQuestion:
+            "When you say Jim usually does weekdays, should I treat that as Monday-Friday 9am-5pm right now?",
+        },
+      ],
+    });
+
+    const compiled = await t.mutation(
+      internal.mutations.getCompiledPromptContext,
+      {
+        userId,
+        careCaseId,
+      },
+    );
+
+    expect(compiled?.contextSections).toContain("unconfirmed_understanding");
+    expect(compiled?.careCaseContext).toContain("## Unconfirmed Understanding");
+    expect(compiled?.careCaseContext).toContain(
+      "These are source-linked claims CareSupport has heard or inferred",
+    );
+    expect(compiled?.careCaseContext).toContain(
+      "Jim / usually_does_weekdays: Jim usually does weekdays.",
+    );
+    expect(compiled?.careCaseContext).toContain(
+      "Clarify: When you say Jim usually does weekdays",
+    );
+
+    const clarificationMessageId = await t.mutation(api.messages.create, {
+      careCaseId,
+      userId,
+      actorType: "user",
+      direction: "inbound",
+      body: "Yes, Jim is Monday-Friday 9am-5pm.",
+      timestamp: Date.now(),
+      senderPhone: "+16515559006",
+      displayName: "Rob",
+    });
+    await t.mutation(api.careClaims.confirm, {
+      careCaseId,
+      id: claimId,
+      clarifiedByMessageId: clarificationMessageId,
+    });
+
+    const afterConfirmation = await t.mutation(
+      internal.mutations.getCompiledPromptContext,
+      {
+        userId,
+        careCaseId,
+      },
+    );
+    expect(afterConfirmation?.contextSections).not.toContain(
+      "unconfirmed_understanding",
+    );
+    expect(afterConfirmation?.careCaseContext).not.toContain(
+      "Jim / usually_does_weekdays",
+    );
+  });
+
   it("supersedes one claim with another claim in the same care case", async () => {
     const { t, userId, careCaseId } = await createRuntime(
       "+16515559003",
