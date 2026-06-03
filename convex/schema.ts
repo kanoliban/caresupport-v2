@@ -146,6 +146,12 @@ const careClaimSensitivity = v.union(
   v.literal("sensitive"),
 );
 
+const careClaimPromotionTarget = v.union(
+  v.literal("care_contact"),
+  v.literal("coordination_event"),
+  v.literal("memory_entry"),
+);
+
 const auditEvent = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
@@ -312,6 +318,11 @@ export default defineSchema({
     clarifiedByMessageId: v.optional(v.id("messages")),
     confirmedAt: v.optional(v.number()),
     supersededByClaimId: v.optional(v.id("careClaims")),
+    promotedToType: v.optional(careClaimPromotionTarget),
+    promotedToCareContactId: v.optional(v.id("careContacts")),
+    promotedToCoordinationEventId: v.optional(v.id("coordinationEvents")),
+    promotedToMemoryEntryId: v.optional(v.id("memoryEntries")),
+    promotedAt: v.optional(v.number()),
     active: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),

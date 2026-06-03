@@ -8,6 +8,48 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-03 — Codex
 
 ### What I did
+- Merged PR #59 into `main`, making unresolved-claim prompt context and the Rob
+  clarification simulator the current baseline.
+- Created branch `liban/confirmed-claim-promotion` for the next 2E1 slice.
+- Added explicit promotion target fields to `careClaims` so source links can run
+  from source message -> claim -> promoted current-truth row.
+- Added `api.careClaims.promoteConfirmed`.
+- Implemented deterministic promotion routing:
+  - contact/relationship/role/availability/constraint claims promote into
+    `careContacts`
+  - schedule claims promote into `coordinationEvents`
+  - preference, coordination-rule, and other claims promote into `memoryEntries`
+- Added idempotency so rerunning promotion does not duplicate current truth.
+- Added tests for confirmed availability -> contact, preference -> memory,
+  schedule -> coordination event, blocked unconfirmed/inactive promotion, and
+  blocked superseded promotion.
+
+### Validation
+- `npm test -- convex/careClaims.test.ts --reporter verbose` passed.
+- `npm run typecheck` passed.
+- `npm test -- convex/careClaims.test.ts convex/robCareNetworkClarification.test.ts convex/coordinationLoop.test.ts convex/contactReplies.test.ts convex/outreachAttempts.test.ts convex/handler.test.ts convex/mutations.test.ts` passed.
+- Full suite passed: 22 files / 278 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- The claim layer now supports the full first loop:
+  source message -> claim -> clarification/confirmation -> promotion into
+  current truth.
+- No Convex RAG dependency has been added.
+- Promotion is intentionally narrow and deterministic; it does not yet parse
+  recurring schedule patterns into calendar instances.
+
+### Concerns
+- Promotion currently stores source links on the claim and, for memory, in the
+  memory source string. Some current-truth tables may eventually need richer
+  provenance fields if the UI needs to show "why does CareSupport know this?"
+  directly from those rows.
+
+---
+
+## 2026-06-03 — Codex
+
+### What I did
 - Merged PR #58 into `main`, making `careClaims` the current foundation.
 - Created branch `liban/unresolved-claims-context` for the next 2E1 slice.
 - Added unresolved claim retrieval into `getCompiledPromptContext`.
