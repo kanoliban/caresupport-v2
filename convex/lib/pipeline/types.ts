@@ -54,6 +54,8 @@ export interface SystemBlocksInput {
   currentDayOfWeek: string;
   currentTimeUtc: string;
   timezone: string;
+  calendarContext?: string;
+  isTestEnv?: boolean;
 }
 
 export interface MemoryUpdate {
@@ -117,6 +119,17 @@ export interface ScheduleUpdate {
   provider?: string;
 }
 
+export interface CalendarUpdate {
+  action: "create" | "update" | "delete";
+  title?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  description?: string;
+  location?: string;
+  eventId?: string;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
@@ -129,4 +142,5 @@ export interface AgentResponse {
   effect: EffectRequest | null;
   medicationUpdates?: MedicationUpdate[];
   scheduleUpdates?: ScheduleUpdate[];
+  calendarUpdates?: CalendarUpdate[];
 }

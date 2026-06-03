@@ -106,6 +106,10 @@ const auditEvent = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
+  v.literal("calendar_connected"),
+  v.literal("calendar_event_created"),
+  v.literal("calendar_event_updated"),
+  v.literal("calendar_event_deleted"),
 );
 
 const auditDetails = v.object({
@@ -124,6 +128,7 @@ const auditDetails = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
+  calendarEventId: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -280,4 +285,15 @@ export default defineSchema({
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
     .index("by_event", ["event"]),
+
+  connectedAccounts: defineTable({
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    tokenExpiresAt: v.number(),
+    scope: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user_provider", ["userId", "provider"]),
 });

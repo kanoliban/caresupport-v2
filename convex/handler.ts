@@ -36,14 +36,26 @@ import {
   SKILLS_CONTENT,
 } from "./lib/promptContent";
 import { normalizeMemoryCategory } from "./lib/memory";
+import {
+  refreshAccessToken,
+  fetchEventsForRange,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+  formatEventsForPrompt,
+} from "./lib/providers/googleCalendar";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
 const MAX_RESPONSE_MS = 6_000;
 const MAX_REPLY_QUOTE_LENGTH = 200;
 
-const UNKNOWN_USER_RESPONSE =
-  "Hey! I'm CareSupport — I help you manage a loved one's care over text. No app needed.\nWhat's your name?";
+const TEST_ENV_MARKER = "TEST ENVIRONMENT INITIALIZED";
+
+// Detects first-person claims that something was written to the user's calendar,
+// used to suppress false "added it to your calendar" replies when no write landed.
+const CALENDAR_WRITE_CLAIM_PATTERN =
+  /\b(add(?:ed|ing)?|creat(?:e|ed|ing)|schedul(?:e|ed|ing)|put|plac(?:e|ed)|book(?:ed)?|sav(?:e|ed)|updat(?:e|ed)|mov(?:e|ed)|remov(?:e|ed)|delet(?:e|ed)|cancel(?:ed|led)?)\b[^.?!\n]{0,60}\b(calendar|gcal)\b/i;
 
 const COORDINATION_BOUNDARY_RESPONSE =
   "I can't add them or message them for you yet. I can draft the message and keep track of the coordination issue here. Want me to put one together?";
@@ -63,6 +75,9 @@ const COORDINATION_REQUEST_PATTERN =
   /\b(add|invite|include|loop in|bring in|text|message|call|reach out to|contact)\b.*\b(sister|brother|mom|mother|dad|father|family|caregiver|doctor|provider|nurse|someone|team|friend|aunt|uncle)\b/i;
 
 const VALID_LESSON_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
+
+const CALENDAR_CONNECT_PATTERN =
+  /\b(connect|add|link|sync|attach|set\s*up)\b.{0,30}\b(google\s*calendar|calendar|gcal)\b/i;
 
 export function stripMarkdown(text: string): string {
   const withoutLinePrefixes = text
@@ -227,6 +242,9 @@ export const handleMessage = internalAction({
       phone: senderPhone,
     }) as Doc<"users"> | null;
 
+    const isTestEnv = process.env.APP_ENV === "test";
+    const isNewUser = !user;
+
     if (!user) {
       const result = await ctx.runMutation(
         internal.mutations.createOnboardingUserAndCareCase,
@@ -277,6 +295,24 @@ export const handleMessage = internalAction({
       } catch {
         // best effort
       }
+    }
+
+    // Handle "connect my calendar" intent before routing to the AI
+    if (CALENDAR_CONNECT_PATTERN.test(messageBody)) {
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        await logInbound(ctx, careCaseId, userId, senderPhone, activeUser.name, messageBody, now, args.sourceMessageId);
+        const reply = "Google Calendar isn't configured yet — check back soon!";
+        await logOutbound(ctx, careCaseId, userId, senderPhone, activeUser.name, reply, now);
+        await sendResponse(chatId, reply, envVarsEarly);
+        return { success: true, response: reply };
+      }
+      const oauthUrl = `${process.env.CONVEX_SITE_URL}/oauth/google/start?u=${userId}`;
+      await logInbound(ctx, careCaseId, userId, senderPhone, activeUser.name, messageBody, now, args.sourceMessageId);
+      const reply = `Tap this link to connect your Google Calendar:\n\n${oauthUrl}\n\nYou'll be redirected back here once it's done.`;
+      await logOutbound(ctx, careCaseId, userId, senderPhone, activeUser.name, reply, now);
+      await sendResponse(chatId, reply, envVarsEarly);
+      return { success: true, response: reply };
     }
 
     await ctx.runMutation(internal.mutations.logMessage, {
@@ -351,6 +387,8 @@ export const handleMessage = internalAction({
     const currentTimeUtc = nowDate.toISOString().slice(11, 16);
     const timezone = compiledContext.careCase.timezone || "UTC";
 
+    const calendarContext = await loadCalendarContext(ctx, userId, timezone, nowDate);
+
     const systemBlocks = buildSystemBlocks({
       soulContent: SOUL_CONTENT,
       routingContent: ROUTING_CONTENT,
@@ -378,6 +416,8 @@ export const handleMessage = internalAction({
       currentDayOfWeek,
       currentTimeUtc,
       timezone,
+      calendarContext: calendarContext ?? undefined,
+      isTestEnv: process.env.APP_ENV === "test",
     });
     const messages = buildMessages(messageForModel, conversationLog);
 
@@ -416,6 +456,13 @@ export const handleMessage = internalAction({
       parsed.scheduleUpdates = [];
       parsed.reactions = [];
       parsed.effect = null;
+    }
+
+    // In the test environment, mark the first-contact introduction so it's
+    // unmistakable which environment is replying. Enforced mechanically rather
+    // than relying on the model to remember.
+    if (isTestEnv && isNewUser && !smsResponse.startsWith(TEST_ENV_MARKER)) {
+      smsResponse = `${TEST_ENV_MARKER}\n\n${smsResponse}`;
     }
 
     const userMemoryUpdates = ensureExplicitUserMemoryUpdate(
@@ -559,6 +606,94 @@ export const handleMessage = internalAction({
       }
     }
 
+    let calendarWriteSucceeded = false;
+    if (parsed.calendarUpdates?.length) {
+      const accessToken = await getValidGoogleToken(ctx, userId, timezone);
+      if (accessToken) {
+        for (const update of parsed.calendarUpdates) {
+          try {
+            if (update.action === "create" && update.title && update.date) {
+              const created = await createCalendarEvent(accessToken, {
+                title: update.title,
+                date: update.date,
+                startTime: update.startTime,
+                endTime: update.endTime,
+                description: update.description,
+                location: update.location,
+                timezone,
+              });
+              calendarWriteSucceeded = true;
+              await ctx.runMutation(internal.mutations.logAudit, {
+                careCaseId,
+                userId,
+                event: "calendar_event_created",
+                phone: senderPhone,
+                details: { calendarEventId: created.id },
+                timestamp: Date.now(),
+              });
+            } else if (update.action === "update" && update.eventId) {
+              await updateCalendarEvent(accessToken, update.eventId, {
+                title: update.title,
+                date: update.date,
+                startTime: update.startTime,
+                endTime: update.endTime,
+                description: update.description,
+                location: update.location,
+                timezone,
+              });
+              calendarWriteSucceeded = true;
+              await ctx.runMutation(internal.mutations.logAudit, {
+                careCaseId,
+                userId,
+                event: "calendar_event_updated",
+                phone: senderPhone,
+                details: { calendarEventId: update.eventId },
+                timestamp: Date.now(),
+              });
+            } else if (update.action === "delete" && update.eventId) {
+              await deleteCalendarEvent(accessToken, update.eventId);
+              calendarWriteSucceeded = true;
+              await ctx.runMutation(internal.mutations.logAudit, {
+                careCaseId,
+                userId,
+                event: "calendar_event_deleted",
+                phone: senderPhone,
+                details: { calendarEventId: update.eventId },
+                timestamp: Date.now(),
+              });
+            } else {
+              console.log("[calendar] skipped update — missing required fields:", JSON.stringify(update));
+            }
+          } catch (err) {
+            const failureReason = err instanceof Error ? err.message : String(err);
+            console.error("[calendar] write failed:", update.action, update.title, failureReason);
+            await ctx.runMutation(internal.mutations.logAudit, {
+              careCaseId,
+              userId,
+              event: "message_failed",
+              phone: senderPhone,
+              details: {
+                failureReason: `Calendar ${update.action} failed for "${update.title ?? update.eventId ?? "event"}": ${failureReason}`,
+              },
+              timestamp: Date.now(),
+            });
+          }
+        }
+      } else {
+        console.log("[calendar] calendar_updates requested but no valid Google token");
+      }
+    }
+
+    // Mechanical honesty guard: never let the reply claim a calendar write that
+    // did not actually land on Google Calendar (e.g. calendar not connected, API
+    // disabled, or the write threw). The fast model ignores prompt instructions
+    // here, so enforce it in code.
+    if (!calendarWriteSucceeded && CALENDAR_WRITE_CLAIM_PATTERN.test(smsResponse)) {
+      smsResponse = calendarContext
+        ? "I hit a snag writing to your Google Calendar just now, so it didn't go through. Want me to try again, or track it here for now?"
+        : "I'm not connected to your Google Calendar yet, so I couldn't add that. Text \"connect my calendar\" to link it — or I can keep track of it here in the meantime.";
+    }
+
     await ctx.runMutation(internal.mutations.logAudit, {
       careCaseId,
       userId,
@@ -679,4 +814,109 @@ async function sendResponse(
   return results
     .filter((result) => result.success && result.messageId)
     .map((result) => result.messageId as string);
+}
+
+async function logInbound(
+  ctx: ActionCtx,
+  careCaseId: Id<"careCases">,
+  userId: Id<"users">,
+  phone: string,
+  displayName: string,
+  body: string,
+  timestamp: number,
+  linqMessageId?: string,
+): Promise<void> {
+  await ctx.runMutation(internal.mutations.logMessage, {
+    careCaseId,
+    userId,
+    senderPhone: phone,
+    actorType: "user",
+    direction: "inbound",
+    displayName,
+    body,
+    timestamp,
+    linqMessageId,
+  });
+}
+
+async function getValidGoogleToken(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  _timezone: string,
+): Promise<string | null> {
+  const account = await ctx.runMutation(internal.mutations.getConnectedAccount, {
+    userId,
+    provider: "google",
+  });
+  if (!account) return null;
+
+  const BUFFER_MS = 5 * 60 * 1000;
+  if (account.tokenExpiresAt > Date.now() + BUFFER_MS) {
+    return account.accessToken;
+  }
+
+  if (!account.refreshToken) return null;
+
+  const clientId = process.env.GOOGLE_CLIENT_ID ?? "";
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
+  try {
+    const tokens = await refreshAccessToken(account.refreshToken, clientId, clientSecret);
+    const newExpiresAt = Date.now() + tokens.expires_in * 1000;
+    await ctx.runMutation(internal.mutations.updateConnectedAccountTokens, {
+      userId,
+      provider: "google",
+      accessToken: tokens.access_token,
+      tokenExpiresAt: newExpiresAt,
+    });
+    return tokens.access_token;
+  } catch {
+    return null;
+  }
+}
+
+async function loadCalendarContext(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  timezone: string,
+  now: Date,
+): Promise<string | null> {
+  const accessToken = await getValidGoogleToken(ctx, userId, timezone);
+  if (!accessToken) return null;
+
+  try {
+    const todayStart = new Date(now);
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const tomorrowEnd = new Date(todayStart);
+    tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 2);
+
+    const events = await fetchEventsForRange(
+      accessToken,
+      todayStart.toISOString(),
+      tomorrowEnd.toISOString(),
+      timezone,
+    );
+
+    const todayIso = todayStart.toISOString().slice(0, 10);
+    const tomorrowIso = new Date(todayStart.getTime() + 86400000).toISOString().slice(0, 10);
+
+    const todayEvents = events.filter((e) => {
+      const d = e.start.dateTime ?? e.start.date ?? "";
+      return d.startsWith(todayIso);
+    });
+    const tomorrowEvents = events.filter((e) => {
+      const d = e.start.dateTime ?? e.start.date ?? "";
+      return d.startsWith(tomorrowIso);
+    });
+
+    const todayLabel = `Today (${todayIso})`;
+    const tomorrowLabel = `Tomorrow (${tomorrowIso})`;
+
+    return [
+      formatEventsForPrompt(todayEvents, todayLabel, timezone),
+      formatEventsForPrompt(tomorrowEvents, tomorrowLabel, timezone),
+    ].join("\n\n");
+  } catch (err) {
+    console.error("[calendar] loadContext fetch failed:", err instanceof Error ? err.message : String(err));
+    return null;
+  }
 }

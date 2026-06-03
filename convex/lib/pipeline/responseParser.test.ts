@@ -67,4 +67,60 @@ describe("normalizeResponse", () => {
     expect(result.userProfileUpdate?.name).toBe("Alex");
     expect(result.selfCorrections).toEqual(["[behavioral] Keep it short"]);
   });
+
+  it("normalizes calendar updates with camelCase fields", () => {
+    const result = normalizeResponse({
+      sms_response: "Added it.",
+      calendar_updates: [
+        {
+          action: "create",
+          title: "Meeting with Liban",
+          date: "2026-06-03",
+          startTime: "20:08",
+          endTime: "21:08",
+          location: "Office",
+        },
+      ],
+    });
+
+    expect(result.calendarUpdates).toHaveLength(1);
+    expect(result.calendarUpdates?.[0]).toMatchObject({
+      action: "create",
+      title: "Meeting with Liban",
+      date: "2026-06-03",
+      startTime: "20:08",
+      endTime: "21:08",
+      location: "Office",
+    });
+  });
+
+  it("accepts snake_case time and event id fields on calendar updates", () => {
+    const result = normalizeResponse({
+      sms_response: "Updated.",
+      calendar_updates: [
+        {
+          action: "update",
+          event_id: "evt_123",
+          start_time: "09:00",
+          end_time: "10:00",
+        },
+      ],
+    });
+
+    expect(result.calendarUpdates?.[0]).toMatchObject({
+      action: "update",
+      eventId: "evt_123",
+      startTime: "09:00",
+      endTime: "10:00",
+    });
+  });
+
+  it("drops calendar updates with an unknown action", () => {
+    const result = normalizeResponse({
+      sms_response: "Hmm.",
+      calendar_updates: [{ action: "frobnicate", title: "x" }],
+    });
+
+    expect(result.calendarUpdates).toEqual([]);
+  });
 });

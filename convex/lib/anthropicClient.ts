@@ -27,7 +27,6 @@ const MEMORY_UPDATE_SCHEMA = {
       ],
     },
     content: { type: "string" },
-    source: { type: "string" },
   },
 } as const;
 
@@ -125,7 +124,6 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
             name: { type: "string" },
             dose: { type: "string" },
             schedule: { type: "string" },
-            prescriber: { type: "string" },
             notes: { type: "string" },
           },
         },
@@ -145,7 +143,23 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
             end_time: { type: "string" },
             location: { type: "string" },
             notes: { type: "string" },
-            provider: { type: "string" },
+          },
+        },
+      },
+      calendar_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["action"],
+          additionalProperties: false,
+          properties: {
+            action: { type: "string", enum: ["create", "update", "delete"] },
+            title: { type: "string" },
+            date: { type: "string" },
+            startTime: { type: "string" },
+            endTime: { type: "string" },
+            location: { type: "string" },
+            eventId: { type: "string" },
           },
         },
       },
