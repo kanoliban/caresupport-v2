@@ -476,9 +476,9 @@ Purpose: prove the loop with realistic data before widening beta behavior.
 
 Implementation tasks:
 
-- [ ] Seed or manually create one active coordinator care case.
-- [ ] Add 12-13 care contacts with phone, role, textability, and priority.
-- [ ] Create one coverage/schedule coordination event.
+- [x] Seed or manually create one active coordinator care case.
+- [x] Add 12-13 care contacts with phone, role, textability, and priority.
+- [x] Create one coverage/schedule coordination event.
 - [ ] Run a controlled outreach sequence with test numbers first.
 - [ ] Then run with Rob only after the controlled sequence passes.
 
@@ -488,13 +488,13 @@ Acceptance criteria:
 - [ ] CareSupport asks permission before outreach.
 - [ ] CareSupport texts at least two contacts one-on-one.
 - [ ] Replies update Convex contact/event state.
-- [ ] Convex contact/event/outreach state reflects replies without UI
+- [x] Convex contact/event/outreach state reflects replies without UI
       intervention.
 - [ ] Rob receives concise status updates and does not need to pull status.
 
 Test targets:
 
-- [ ] Local/Dev Convex smoke script or manual checklist
+- [x] Local/Dev Convex smoke script or manual checklist
 - [ ] Linq test-number verification
 - [ ] Agent-log entry with exact data state left behind
 

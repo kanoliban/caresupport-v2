@@ -8,6 +8,40 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-04 — Codex
 
 ### What I did
+- Started Phase 2G preparation on branch `liban/rob-activation-setup`, stacked
+  on the Phase 2F follow-up scanner branch while PR #62 waits for CodeRabbit.
+- Added `internal.admin.seedRobMultiplayerFixture`.
+- The fixture creates/updates:
+  - Rob's active coordinator user and care case
+  - 15 Rob care contacts with roles, schedule context, textability, and priority
+  - 5 recurring schedule rows for known routine coverage
+  - one controlled coordination event for Jim/Jennifer schedule confirmation
+  - one durable memory note explaining the multiplayer activation purpose
+- Added `docs/rob-multiplayer-activation.md` with the controlled activation
+  checklist and commands.
+- Added `convex/robActivation.test.ts` to prove fixture idempotency and a seeded
+  controlled loop through approval, outreach, caregiver reply mapping, and
+  Convex state update.
+
+### Validation
+- `npm test -- convex/robActivation.test.ts --reporter verbose` passed.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq messages were sent.
+- Real caregiver activation remains gated on approved test numbers/chat IDs and
+  a controlled test run.
+
+### Concerns
+- The fixture includes 15 non-Rob contacts because Rob's supplied care network
+  list is larger than the earlier 12-13 shorthand. Real outreach should still
+  start with two contacts, not the whole network.
+
+---
+
+## 2026-06-04 — Codex
+
+### What I did
 - Merged PR #61 into `main`, making structured care retrieval the baseline.
 - Created branch `liban/follow-up-scanner` for Phase 2F.
 - Added the coordination follow-up scanner:
