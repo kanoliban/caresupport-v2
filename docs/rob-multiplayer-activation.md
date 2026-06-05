@@ -178,6 +178,8 @@ Controlled test passes when Convex shows:
 - The controlled event reflects the reply state.
 - The outreach attempt remains source-linked and its follow-up clock is cleared
   or deferred.
+- Rob's status message/audit is newer than the latest controlled caregiver
+  reply, so stale dry-run updates do not count as live pass evidence.
 - Audit logs include request, approval, sent, reply, and follow-up/status events
   as applicable.
 
