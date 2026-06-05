@@ -44,7 +44,7 @@ import {
   deleteCalendarEvent,
   formatEventsForPrompt,
 } from "./lib/providers/googleCalendar";
-import { computeReminderFireAt } from "./lib/reminderTiming";
+import { computeReminderFireAt, zonedDateTimeToUtcMs } from "./lib/reminderTiming";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
@@ -600,21 +600,45 @@ export const handleMessage = internalAction({
       }
     }
 
+    const scheduledItemReminders: Array<{
+      scheduleItemId: Id<"scheduleItems">;
+      title: string;
+      startMs: number;
+    }> = [];
     if (parsed.scheduleUpdates?.length) {
       for (const schedule of parsed.scheduleUpdates) {
         try {
-          await ctx.runMutation(internal.mutations.upsertScheduleItem, {
-            careCaseId,
-            action: schedule.action,
-            type: schedule.type,
-            title: schedule.title,
-            date: schedule.date,
-            time: schedule.time,
-            endTime: schedule.end_time,
-            location: schedule.location,
-            notes: schedule.notes,
-            provider: schedule.provider,
-          });
+          const result = await ctx.runMutation(
+            internal.mutations.upsertScheduleItem,
+            {
+              careCaseId,
+              action: schedule.action,
+              type: schedule.type,
+              title: schedule.title,
+              date: schedule.date,
+              time: schedule.time,
+              endTime: schedule.end_time,
+              location: schedule.location,
+              notes: schedule.notes,
+              provider: schedule.provider,
+            },
+          );
+          // Queue a pre-event reminder for timed items. (Items created via this
+          // path are one-off; recurring items go through the daily digest.)
+          if (result) {
+            const startMs = zonedDateTimeToUtcMs(
+              result.date,
+              result.time,
+              timezone,
+            );
+            if (startMs !== null) {
+              scheduledItemReminders.push({
+                scheduleItemId: result.scheduleItemId,
+                title: schedule.title,
+                startMs,
+              });
+            }
+          }
         } catch (err) {
           const failureReason =
             err instanceof Error ? err.message : String(err);
@@ -729,6 +753,33 @@ export const handleMessage = internalAction({
         }
       } else {
         console.log("[calendar] calendar_updates requested but no valid Google token");
+      }
+    }
+
+    // Schedule pre-event reminders for plain schedule items. Skipped when a
+    // Google Calendar event was written this turn, since that path schedules its
+    // own reminder and we don't want to double-notify.
+    if (!calendarWriteSucceeded && scheduledItemReminders.length > 0) {
+      for (const reminder of scheduledItemReminders) {
+        const fireAt = computeReminderFireAt(
+          reminder.startMs,
+          Date.now(),
+          isTestEnv,
+        );
+        if (fireAt !== null) {
+          await ctx.scheduler.runAt(
+            fireAt,
+            internal.reminders.sendScheduleItemReminder,
+            {
+              scheduleItemId: reminder.scheduleItemId,
+              careCaseId,
+              userId,
+              chatId,
+              expectedStartMs: reminder.startMs,
+              title: reminder.title,
+            },
+          );
+        }
       }
     }
 

@@ -4,7 +4,7 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
-import { getValidGoogleToken } from "./handler";
+import { getValidGoogleToken, isTestChat } from "./handler";
 import { getCalendarEvent } from "./lib/providers/googleCalendar";
 import { sendMessageSequence, splitIntoBubbles } from "./lib/linqClient";
 
@@ -63,11 +63,6 @@ export const sendCalendarReminder = internalAction({
       }
     }
 
-    const linqToken = process.env.LINQ_API_TOKEN ?? "";
-    if (!linqToken || !args.chatId) {
-      return { sent: false, reason: "no_channel" };
-    }
-
     const minutes = Math.max(
       1,
       Math.round((args.expectedStartMs - Date.now()) / 60000),
@@ -78,10 +73,7 @@ export const sendCalendarReminder = internalAction({
         : `in about ${minutes} minute${minutes === 1 ? "" : "s"}`;
     const body = `Reminder: "${title}" starts ${when}. Hope you're ready!`;
 
-    const bubbles = splitIntoBubbles(body);
-    const results = await sendMessageSequence(args.chatId, bubbles, linqToken);
-    const firstSuccess = results.find((r) => r.success && r.messageId);
-
+    // Always record the reminder so it shows in the messages thread / web UI.
     const messageId = await ctx.runMutation(internal.mutations.logMessage, {
       careCaseId: args.careCaseId,
       userId: args.userId,
@@ -90,11 +82,21 @@ export const sendCalendarReminder = internalAction({
       body,
       timestamp: Date.now(),
     });
-    if (firstSuccess?.messageId) {
-      await ctx.runMutation(internal.mutations.updateMessageLinqId, {
-        messageId,
-        linqMessageId: firstSuccess.messageId,
-      });
+
+    // Push over Linq only for real iMessage users — never for test chats.
+    const linqToken = process.env.LINQ_API_TOKEN ?? "";
+    let linqSent = false;
+    if (linqToken && args.chatId && !isTestChat(args.chatId)) {
+      const bubbles = splitIntoBubbles(body);
+      const results = await sendMessageSequence(args.chatId, bubbles, linqToken);
+      const firstSuccess = results.find((r) => r.success && r.messageId);
+      if (firstSuccess?.messageId) {
+        linqSent = true;
+        await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+          messageId,
+          linqMessageId: firstSuccess.messageId,
+        });
+      }
     }
 
     await ctx.runMutation(internal.mutations.logAudit, {
@@ -109,8 +111,6 @@ export const sendCalendarReminder = internalAction({
       timestamp: Date.now(),
     });
 
-    return firstSuccess
-      ? { sent: true }
-      : { sent: false, reason: "linq_send_failed" };
+    return { sent: true, reason: linqSent ? undefined : "logged_only" };
   },
 });

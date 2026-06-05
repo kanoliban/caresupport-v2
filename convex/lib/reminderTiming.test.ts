@@ -1,8 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { computeReminderFireAt } from "./reminderTiming";
+import { computeReminderFireAt, zonedDateTimeToUtcMs } from "./reminderTiming";
 
 const MIN = 60 * 1000;
 const NOW = 1_000_000_000_000;
+
+describe("zonedDateTimeToUtcMs", () => {
+  it("converts a Denver wall-clock time to the right UTC instant", () => {
+    // #given 3:00 PM on 2026-06-06 in Denver (MDT, UTC-6 in summer)
+    const ms = zonedDateTimeToUtcMs("2026-06-06", "15:00", "America/Denver");
+
+    // #then it equals 21:00 UTC
+    expect(ms).toBe(Date.parse("2026-06-06T21:00:00Z"));
+  });
+
+  it("treats a UTC zone as a direct mapping", () => {
+    const ms = zonedDateTimeToUtcMs("2026-06-06", "09:30", "UTC");
+    expect(ms).toBe(Date.parse("2026-06-06T09:30:00Z"));
+  });
+
+  it("returns null for missing or malformed input", () => {
+    expect(zonedDateTimeToUtcMs(undefined, "15:00", "UTC")).toBeNull();
+    expect(zonedDateTimeToUtcMs("2026-06-06", undefined, "UTC")).toBeNull();
+    expect(zonedDateTimeToUtcMs("not-a-date", "15:00", "UTC")).toBeNull();
+  });
+});
 
 describe("computeReminderFireAt", () => {
   it("test env fires 1 minute before (5-min-out event)", () => {

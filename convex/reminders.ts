@@ -13,8 +13,11 @@ import {
 } from "./lib/digestComposer";
 import type { DigestItem } from "./lib/digestComposer";
 import { sendMessageSequence, splitIntoBubbles } from "./lib/linqClient";
+import { zonedDateTimeToUtcMs } from "./lib/reminderTiming";
+import { isTestChat } from "./handler";
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+const MOVED_TOLERANCE_MS = 2 * 60 * 1000;
 
 type DigestSkipReason =
   | "no_chat_id"
@@ -114,6 +117,98 @@ export const sendDailyDigest = internalAction({
     });
 
     return { sent: true };
+  },
+});
+
+/**
+ * Fires a "heads up" text ahead of a (non-calendar) schedule item. Scheduled by
+ * the handler via ctx.scheduler.runAt when a timed schedule item is created.
+ *
+ * Re-validates against the live item at fire time so we don't nag about an event
+ * that was since cancelled or rescheduled — this avoids cancel/reschedule of the
+ * job when the item changes (same approach as the Google Calendar reminder).
+ *
+ * Always logs the reminder to the messages table (so the web UI shows it) and
+ * additionally pushes over Linq for real iMessage users — never for test chats.
+ */
+export const sendScheduleItemReminder = internalAction({
+  args: {
+    scheduleItemId: v.id("scheduleItems"),
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    chatId: v.string(),
+    expectedStartMs: v.number(),
+    title: v.string(),
+  },
+  handler: async (ctx, args): Promise<DigestResult> => {
+    const snapshot = await ctx.runQuery(
+      internal.mutations.getScheduleItemForReminder,
+      { scheduleItemId: args.scheduleItemId },
+    );
+    if (!snapshot) {
+      return { sent: false, reason: "item_deleted" };
+    }
+    const { item, timezone } = snapshot;
+    if (item.status === "cancelled") {
+      return { sent: false, reason: "item_cancelled" };
+    }
+    // If the item's start moved, a fresh reminder was scheduled for the new
+    // time — let this stale one drop.
+    const currentStart = zonedDateTimeToUtcMs(item.date, item.time, timezone);
+    if (
+      currentStart !== null &&
+      Math.abs(currentStart - args.expectedStartMs) > MOVED_TOLERANCE_MS
+    ) {
+      return { sent: false, reason: "item_moved" };
+    }
+
+    const minutes = Math.max(
+      1,
+      Math.round((args.expectedStartMs - Date.now()) / 60000),
+    );
+    const when =
+      minutes >= 55
+        ? "in about an hour"
+        : `in about ${minutes} minute${minutes === 1 ? "" : "s"}`;
+    const body = `Reminder: "${item.title}" starts ${when}. Hope you're ready!`;
+
+    const messageId = await ctx.runMutation(internal.mutations.logMessage, {
+      careCaseId: args.careCaseId,
+      userId: args.userId,
+      actorType: "assistant",
+      direction: "outbound",
+      body,
+      timestamp: Date.now(),
+    });
+
+    const linqToken = process.env.LINQ_API_TOKEN ?? "";
+    let linqSent = false;
+    if (linqToken && args.chatId && !isTestChat(args.chatId)) {
+      const bubbles = splitIntoBubbles(body);
+      const results = await sendMessageSequence(args.chatId, bubbles, linqToken);
+      const firstSuccess = results.find((r) => r.success && r.messageId);
+      if (firstSuccess?.messageId) {
+        linqSent = true;
+        await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+          messageId,
+          linqMessageId: firstSuccess.messageId,
+        });
+      }
+    }
+
+    await ctx.runMutation(internal.mutations.logAudit, {
+      careCaseId: args.careCaseId,
+      userId: args.userId,
+      event: "response_sent",
+      details: {
+        triggerMessage: "schedule_item_reminder",
+        responseLength: body.length,
+        leakageCheckPassed: true,
+      },
+      timestamp: Date.now(),
+    });
+
+    return { sent: true, reason: linqSent ? undefined : "logged_only" };
   },
 });
 

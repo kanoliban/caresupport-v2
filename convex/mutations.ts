@@ -1,4 +1,4 @@
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   validateIsoDate,
@@ -566,7 +566,7 @@ export const upsertScheduleItem = internalMutation({
 
     if (args.action === "remove" && existing) {
       await ctx.db.patch(existing._id, { status: "cancelled" });
-      return;
+      return null;
     }
 
     if (existing) {
@@ -579,8 +579,12 @@ export const upsertScheduleItem = internalMutation({
       if (args.notes) patch.notes = args.notes;
       if (args.provider) patch.provider = args.provider;
       await ctx.db.patch(existing._id, patch);
+      // Returning the id + resolved start lets the caller (handler) schedule a
+      // pre-event reminder. We re-validate at fire time, so no need to cancel
+      // the prior job on reschedule.
+      return { scheduleItemId: existing._id, date, time };
     } else if (args.action === "add") {
-      await ctx.db.insert("scheduleItems", {
+      const scheduleItemId = await ctx.db.insert("scheduleItems", {
         careCaseId: args.careCaseId,
         type: args.type,
         title: args.title,
@@ -593,7 +597,23 @@ export const upsertScheduleItem = internalMutation({
         provider: args.provider,
         status: "scheduled",
       });
+      return { scheduleItemId, date, time };
     }
+    return null;
+  },
+});
+
+/**
+ * Snapshot a schedule item plus its care-case timezone, for a pre-event
+ * reminder to re-validate against just before it fires.
+ */
+export const getScheduleItemForReminder = internalQuery({
+  args: { scheduleItemId: v.id("scheduleItems") },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.scheduleItemId);
+    if (!item) return null;
+    const careCase = await ctx.db.get(item.careCaseId);
+    return { item, timezone: careCase?.timezone ?? "UTC" };
   },
 });
 

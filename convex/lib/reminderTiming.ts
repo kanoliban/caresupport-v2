@@ -43,3 +43,63 @@ export function computeReminderFireAt(
   // leads on a borderline event), fire right away instead of skipping.
   return fireAt <= nowMs ? nowMs + 5 * 1000 : fireAt;
 }
+
+/** Offset (ms) of `timeZone` at the instant `utcMs`, such that local = utc + offset. */
+function tzOffsetMs(timeZone: string, utcMs: number): number {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const map: Record<string, string> = {};
+    for (const part of dtf.formatToParts(new Date(utcMs))) {
+      map[part.type] = part.value;
+    }
+    const hour = map.hour === "24" ? "0" : map.hour;
+    const asLocal = Date.UTC(
+      Number(map.year),
+      Number(map.month) - 1,
+      Number(map.day),
+      Number(hour),
+      Number(map.minute),
+      Number(map.second),
+    );
+    return asLocal - utcMs;
+  } catch {
+    return 0; // unknown zone → treat as UTC
+  }
+}
+
+/**
+ * Convert a wall-clock `date` (YYYY-MM-DD) and `time` (HH:MM) interpreted in
+ * `timeZone` into an absolute UTC timestamp (ms). Schedule items store local
+ * wall-clock time, so this is how we get the true instant an event starts.
+ * Returns null if date or time is missing/malformed.
+ */
+export function zonedDateTimeToUtcMs(
+  dateIso: string | undefined,
+  timeHHMM: string | undefined,
+  timeZone: string,
+): number | null {
+  if (!dateIso || !timeHHMM) return null;
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateIso);
+  const tm = /^(\d{1,2}):(\d{2})$/.exec(timeHHMM);
+  if (!dm || !tm) return null;
+  // First treat the wall-clock numbers as if they were UTC, then correct by the
+  // zone's offset at that instant.
+  const guess = Date.UTC(
+    Number(dm[1]),
+    Number(dm[2]) - 1,
+    Number(dm[3]),
+    Number(tm[1]),
+    Number(tm[2]),
+  );
+  if (Number.isNaN(guess)) return null;
+  return guess - tzOffsetMs(timeZone, guess);
+}
