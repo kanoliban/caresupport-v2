@@ -162,6 +162,7 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
             recurrence: {
               type: "string",
               enum: [
+                "none",
                 "daily",
                 "weekdays",
                 "weekly",

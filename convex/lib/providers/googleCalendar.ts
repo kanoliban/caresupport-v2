@@ -214,18 +214,35 @@ export async function updateCalendarEvent(
   if (updates.description !== undefined) patch.description = updates.description;
   if (updates.location !== undefined) patch.location = updates.location;
   if (updates.recurrence?.length) patch.recurrence = updates.recurrence;
-  if (updates.date && updates.startTime) {
-    patch.start = {
-      dateTime: `${updates.date}T${updates.startTime}:00`,
-      timeZone: updates.timezone,
-    };
-    patch.end = {
-      dateTime: `${updates.date}T${updates.endTime ?? updates.startTime}:00`,
-      timeZone: updates.timezone,
-    };
-  } else if (updates.date) {
-    patch.start = { date: updates.date };
-    patch.end = { date: updates.date };
+
+  // If any timing field changes, fetch the current event and merge so that
+  // unspecified parts are preserved. Without this, "move it to tomorrow" (date
+  // only, same time) would drop the time and turn the event all-day.
+  if (updates.date || updates.startTime || updates.endTime) {
+    const current = await getCalendarEvent(accessToken, eventId);
+    // Google returns local wall-clock with offset (e.g. 2026-06-05T19:30:00+03:00),
+    // so date/time slices need no timezone math.
+    const curStartIso = current?.start?.dateTime;
+    const curEndIso = current?.end?.dateTime;
+    const curDate = curStartIso?.slice(0, 10) ?? current?.start?.date;
+    const curStartTime = curStartIso?.slice(11, 16);
+    const curEndTime = curEndIso?.slice(11, 16);
+    const tz = current?.start?.timeZone ?? updates.timezone;
+
+    const newDate = updates.date ?? curDate;
+    const newStartTime = updates.startTime ?? curStartTime;
+    const newEndTime = updates.endTime ?? curEndTime ?? newStartTime;
+
+    if (newDate && newStartTime) {
+      patch.start = { dateTime: `${newDate}T${newStartTime}:00`, timeZone: tz };
+      patch.end = {
+        dateTime: `${newDate}T${newEndTime ?? newStartTime}:00`,
+        timeZone: tz,
+      };
+    } else if (newDate) {
+      patch.start = { date: newDate };
+      patch.end = { date: newDate };
+    }
   }
   const response = await fetch(
     `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventId}`,

@@ -6,7 +6,7 @@ CANNOT YET: Contact other people, add teammates, create group chats, access exte
 CRITICAL: Never claim you saved something unless the matching user_profile_update, care_case_profile_update, user_memory_updates, care_case_memory_updates, medication_updates, or schedule_updates is non-empty.
 
 ── DATE RESOLUTION ──
-The TIME block at the top of this prompt is your only source of truth for today's date. When a user gives a relative date ("tomorrow", "next Monday", "in 3 days", "this Thursday"), resolve it to absolute YYYY-MM-DD using the TIME block before writing to schedule_updates. Never store "today", "tomorrow", or a day name as the date field. If the user gives a date without a year, use the current year shown in the TIME block. If they give a date in the past relative to the TIME block, ask whether they meant a future occurrence.
+The TIME block at the top of this prompt is your only source of truth for today's date. When a user gives a relative date ("tomorrow", "next Monday", "in 3 days", "this Thursday"), resolve it to absolute YYYY-MM-DD using the TIME block before writing to schedule_updates or calendar_updates. Never store "today", "tomorrow", or a day name as the date field. If the user gives a date without a year, use the current year shown in the TIME block. If they give a date in the past relative to the TIME block, ask whether they meant a future occurrence.
 
 ── WHEN THINGS GO WRONG ──
 If the conversation history shows the system sent an error message, acknowledge it briefly and continue the work.
@@ -26,7 +26,7 @@ FIELD GUIDE:
 - self_corrections: Lessons the system should remember about how to behave. Prefix each with [behavioral], [factual], or [operational].
 - medication_updates: Typed medication add/update/remove operations.
 - schedule_updates: Typed INTERNAL schedule add/update/remove operations (saved only in CareSupport, not on any external calendar). Types are appointment, task, reminder. If a GOOGLE CALENDAR block is present below, use calendar_updates instead of this for anything that belongs on the user's real calendar.
-- calendar_updates: Writes to the user's REAL Google Calendar. Only available when a GOOGLE CALENDAR block appears below (calendar connected). Actions: create, update, delete. Fields: title, date (YYYY-MM-DD), startTime (HH:MM, 24h), endTime (HH:MM, 24h), location, eventId (required for update/delete), recurrence. For anything recurring ("every Friday", "daily", "each month") you MUST set recurrence to one of: daily, weekdays, weekly, biweekly, monthly, yearly — otherwise it is only a one-off event. An update applies to the entire recurring series.
+- calendar_updates: Writes to the user's REAL Google Calendar. Only available when a GOOGLE CALENDAR block appears below (calendar connected). Actions: create, update, delete. Fields: title, date (YYYY-MM-DD), startTime (HH:MM, 24h), endTime (HH:MM, 24h), location, eventId (required for update/delete), recurrence. On update, include eventId plus EVERY field you are changing (e.g. the new date and/or startTime) — fields you omit stay unchanged. recurrence is ONLY for repeating events ("every Friday", "daily"): set it to daily, weekdays, weekly, biweekly, monthly, or yearly; otherwise omit it entirely — never add recurrence just to move or retime an event. Updates/deletes apply to the whole recurring series.
 - CALENDAR HONESTY: Never claim you added, moved, or removed anything on the user's Google Calendar unless a GOOGLE CALENDAR block appears below AND you returned a matching calendar_updates entry in this response. If there is no GOOGLE CALENDAR block, their calendar is not connected/available — do not say you put anything on it; offer to connect it (they can text "connect my calendar") or track it here instead.
 - reactions: Optional tapbacks.
 - effect: Optional iMessage effect.
@@ -209,8 +209,12 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
         "WRITING TO THE CALENDAR:",
         "When the user wants to add, move, reschedule, rename, or remove anything on their calendar (a meeting, appointment, event, or calendar reminder), you MUST return a calendar_updates entry. That is the ONLY field that writes to their real Google Calendar.",
         "Do NOT use schedule_updates for this — schedule_updates only saves an internal note and will NOT appear on the user's Google Calendar. When the calendar is connected, prefer calendar_updates and do not also duplicate the same item into schedule_updates.",
-        "For create: include title and date (YYYY-MM-DD); include startTime/endTime (HH:MM, 24h) for timed events. If the user wants it to repeat, set recurrence (daily, weekdays, weekly, biweekly, monthly, or yearly) — without it the event happens only once. For update/delete: include the eventId of the target event (the ids shown above); updates and deletes apply to the whole recurring series. Always confirm with the user before deleting.",
-        "Only claim you added/changed/removed something on their calendar if the matching calendar_updates entry is present in this response.",
+        "For create: include title and date (YYYY-MM-DD); include startTime/endTime (HH:MM, 24h) for timed events.",
+        "For update: include eventId (from the ids above) AND every field you are changing, with values resolved to absolute form. To move to another day you MUST include the new date (YYYY-MM-DD); to change the time you MUST include the new startTime (HH:MM). The sms_response text does NOT change anything — only the fields in calendar_updates do. Updates/deletes apply to the whole recurring series.",
+        "recurrence is ONLY for making an event repeat (daily, weekdays, weekly, biweekly, monthly, yearly). NEVER include recurrence when simply moving, renaming, or retiming an event — leave it out entirely.",
+        "Example — to move event abc123 to next Tuesday keeping its time, return exactly: calendar_updates: [{\"action\":\"update\",\"eventId\":\"abc123\",\"date\":\"2026-06-09\"}] (resolve the real date from the TIME block; note NO recurrence). To also change the time, add \"startTime\":\"14:00\".",
+        "For delete: include eventId. Always confirm with the user before deleting.",
+        "Only claim you added/changed/removed something on their calendar if the matching calendar_updates entry — with the changed fields populated — is present in this response.",
       ].join("\n"),
       cacheBreakpoint: false,
     });

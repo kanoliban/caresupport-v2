@@ -658,8 +658,23 @@ export const handleMessage = internalAction({
       }
     }
 
+    // The fast model often tacks a spurious recurrence onto a simple move/retime,
+    // which corrupts a one-off event into a repeating series. Only honor
+    // recurrence when the user actually asked for repetition — checked across the
+    // last few inbound messages so the "...make it weekly" → "yes" flow still works.
+    const recentInboundText = recentMessages
+      .filter((m: { direction: string }) => m.direction === "inbound")
+      .slice(0, 4)
+      .map((m: { body: string }) => m.body)
+      .join(" ");
+    const userWantsRecurrence =
+      /\b(every|each|recurring|recur|repeat|weekly|daily|monthly|bi-?weekly|fortnight|yearly|annual|biweekly)\b/i.test(
+        `${messageBody} ${recentInboundText}`,
+      );
+
     let calendarWriteSucceeded = false;
     if (parsed.calendarUpdates?.length) {
+      console.log("[calendar] updates payload:", JSON.stringify(parsed.calendarUpdates));
       const accessToken = await getValidGoogleToken(ctx, userId, timezone);
       if (accessToken) {
         for (const update of parsed.calendarUpdates) {
@@ -673,7 +688,9 @@ export const handleMessage = internalAction({
                 description: update.description,
                 location: update.location,
                 timezone,
-                recurrence: buildRecurrenceRule(update.recurrence),
+                recurrence: userWantsRecurrence
+                  ? buildRecurrenceRule(update.recurrence)
+                  : undefined,
               });
               calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
@@ -718,7 +735,9 @@ export const handleMessage = internalAction({
                 description: update.description,
                 location: update.location,
                 timezone,
-                recurrence: buildRecurrenceRule(update.recurrence),
+                recurrence: userWantsRecurrence
+                  ? buildRecurrenceRule(update.recurrence)
+                  : undefined,
               });
               calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
@@ -791,14 +810,20 @@ export const handleMessage = internalAction({
       }
     }
 
-    // Mechanical honesty guard: never let the reply claim a calendar write that
+    // Mechanical honesty guard: never let the reply claim a calendar change that
     // did not actually land on Google Calendar (e.g. calendar not connected, API
     // disabled, or the write threw). The fast model ignores prompt instructions
-    // here, so enforce it in code.
-    if (!calendarWriteSucceeded && CALENDAR_WRITE_CLAIM_PATTERN.test(smsResponse)) {
+    // here, so enforce it in code. Fire when the model TRIED to write but nothing
+    // succeeded (catches "moved it to tomorrow" with no "calendar" wording), or
+    // when the reply makes a calendar-write claim with no successful write.
+    const calendarWriteAttempted = Boolean(parsed.calendarUpdates?.length);
+    if (
+      !calendarWriteSucceeded &&
+      (calendarWriteAttempted || CALENDAR_WRITE_CLAIM_PATTERN.test(smsResponse))
+    ) {
       smsResponse = calendarContext
-        ? "I hit a snag writing to your Google Calendar just now, so it didn't go through. Want me to try again, or track it here for now?"
-        : "I'm not connected to your Google Calendar yet, so I couldn't add that. Text \"connect my calendar\" to link it — or I can keep track of it here in the meantime.";
+        ? "I hit a snag updating your Google Calendar just now, so that change didn't go through. Want me to try again?"
+        : "I'm not connected to your Google Calendar yet, so I couldn't do that. Text \"connect my calendar\" to link it — or I can keep track of it here in the meantime.";
     }
 
     await ctx.runMutation(internal.mutations.logAudit, {
