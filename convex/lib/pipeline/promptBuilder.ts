@@ -26,7 +26,7 @@ FIELD GUIDE:
 - self_corrections: Lessons the system should remember about how to behave. Prefix each with [behavioral], [factual], or [operational].
 - medication_updates: Typed medication add/update/remove operations.
 - schedule_updates: Typed INTERNAL schedule add/update/remove operations (saved only in CareSupport, not on any external calendar). Types are appointment, task, reminder. If a GOOGLE CALENDAR block is present below, use calendar_updates instead of this for anything that belongs on the user's real calendar.
-- calendar_updates: Writes to the user's REAL Google Calendar. Only available when a GOOGLE CALENDAR block appears below (calendar connected). Actions: create, update, delete. Fields: title, date (YYYY-MM-DD), startTime (HH:MM, 24h), endTime (HH:MM, 24h), location, eventId (required for update/delete).
+- calendar_updates: Writes to the user's REAL Google Calendar. Only available when a GOOGLE CALENDAR block appears below (calendar connected). Actions: create, update, delete. Fields: title, date (YYYY-MM-DD), startTime (HH:MM, 24h), endTime (HH:MM, 24h), location, eventId (required for update/delete), recurrence. For anything recurring ("every Friday", "daily", "each month") you MUST set recurrence to one of: daily, weekdays, weekly, biweekly, monthly, yearly — otherwise it is only a one-off event. An update applies to the entire recurring series.
 - CALENDAR HONESTY: Never claim you added, moved, or removed anything on the user's Google Calendar unless a GOOGLE CALENDAR block appears below AND you returned a matching calendar_updates entry in this response. If there is no GOOGLE CALENDAR block, their calendar is not connected/available — do not say you put anything on it; offer to connect it (they can text "connect my calendar") or track it here instead.
 - reactions: Optional tapbacks.
 - effect: Optional iMessage effect.
@@ -209,7 +209,7 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
         "WRITING TO THE CALENDAR:",
         "When the user wants to add, move, reschedule, rename, or remove anything on their calendar (a meeting, appointment, event, or calendar reminder), you MUST return a calendar_updates entry. That is the ONLY field that writes to their real Google Calendar.",
         "Do NOT use schedule_updates for this — schedule_updates only saves an internal note and will NOT appear on the user's Google Calendar. When the calendar is connected, prefer calendar_updates and do not also duplicate the same item into schedule_updates.",
-        "For create: include title and date (YYYY-MM-DD); include startTime/endTime (HH:MM, 24h) for timed events. For update/delete: include the eventId of the target event (the ids shown above). Always confirm with the user before deleting.",
+        "For create: include title and date (YYYY-MM-DD); include startTime/endTime (HH:MM, 24h) for timed events. If the user wants it to repeat, set recurrence (daily, weekdays, weekly, biweekly, monthly, or yearly) — without it the event happens only once. For update/delete: include the eventId of the target event (the ids shown above); updates and deletes apply to the whole recurring series. Always confirm with the user before deleting.",
         "Only claim you added/changed/removed something on their calendar if the matching calendar_updates entry is present in this response.",
       ].join("\n"),
       cacheBreakpoint: false,

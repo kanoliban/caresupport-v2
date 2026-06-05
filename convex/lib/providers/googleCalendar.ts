@@ -124,6 +124,33 @@ export async function getCalendarEvent(
   return event;
 }
 
+// Maps a simple recurrence keyword to a Google Calendar RRULE array.
+// Returns undefined for a one-off event (no keyword / "none"/"once").
+export function buildRecurrenceRule(keyword?: string): string[] | undefined {
+  switch (keyword?.trim().toLowerCase()) {
+    case "daily":
+      return ["RRULE:FREQ=DAILY"];
+    case "weekdays":
+      return ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"];
+    case "weekly":
+      return ["RRULE:FREQ=WEEKLY"];
+    case "biweekly":
+      return ["RRULE:FREQ=WEEKLY;INTERVAL=2"];
+    case "monthly":
+      return ["RRULE:FREQ=MONTHLY"];
+    case "yearly":
+      return ["RRULE:FREQ=YEARLY"];
+    default:
+      return undefined;
+  }
+}
+
+// Strips Google's instance suffix (e.g. "_20260605T193000Z") so an update or
+// delete targets the whole recurring series rather than a single occurrence.
+export function toSeriesEventId(eventId: string): string {
+  return eventId.replace(/_\d{8}T\d{6}Z$/, "");
+}
+
 export async function createCalendarEvent(
   accessToken: string,
   event: {
@@ -134,6 +161,7 @@ export async function createCalendarEvent(
     description?: string;
     location?: string;
     timezone: string;
+    recurrence?: string[];
   },
 ): Promise<CalendarEvent> {
   const isAllDay = !event.startTime;
@@ -141,6 +169,7 @@ export async function createCalendarEvent(
     summary: event.title,
     ...(event.description && { description: event.description }),
     ...(event.location && { location: event.location }),
+    ...(event.recurrence?.length && { recurrence: event.recurrence }),
     start: isAllDay
       ? { date: event.date }
       : { dateTime: `${event.date}T${event.startTime}:00`, timeZone: event.timezone },
@@ -177,12 +206,14 @@ export async function updateCalendarEvent(
     description?: string;
     location?: string;
     timezone: string;
+    recurrence?: string[];
   },
 ): Promise<CalendarEvent> {
   const patch: Record<string, unknown> = {};
   if (updates.title) patch.summary = updates.title;
   if (updates.description !== undefined) patch.description = updates.description;
   if (updates.location !== undefined) patch.location = updates.location;
+  if (updates.recurrence?.length) patch.recurrence = updates.recurrence;
   if (updates.date && updates.startTime) {
     patch.start = {
       dateTime: `${updates.date}T${updates.startTime}:00`,

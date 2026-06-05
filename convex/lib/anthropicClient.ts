@@ -142,7 +142,6 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
             time: { type: "string" },
             end_time: { type: "string" },
             location: { type: "string" },
-            notes: { type: "string" },
           },
         },
       },
@@ -160,6 +159,17 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
             endTime: { type: "string" },
             location: { type: "string" },
             eventId: { type: "string" },
+            recurrence: {
+              type: "string",
+              enum: [
+                "daily",
+                "weekdays",
+                "weekly",
+                "biweekly",
+                "monthly",
+                "yearly",
+              ],
+            },
           },
         },
       },
@@ -310,10 +320,10 @@ export async function callAnthropic(
       );
     } catch (error: unknown) {
       lastError = error;
-      if (isAbortError(error)) {
-        throw error;
-      }
-      if (isRetryableStatus(error)) {
+      // A timeout (abort) or an overloaded/rate-limited model should fall back
+      // to the next model in the chain rather than failing the whole request.
+      // Only surface the error once every model has been exhausted.
+      if (isAbortError(error) || isRetryableStatus(error)) {
         continue;
       }
       throw error;

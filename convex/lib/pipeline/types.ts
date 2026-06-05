@@ -130,6 +130,8 @@ export interface CalendarUpdate {
   description?: string;
   location?: string;
   eventId?: string;
+  // Simple recurrence keyword: daily | weekdays | weekly | biweekly | monthly | yearly
+  recurrence?: string;
 }
 
 export interface AgentResponse {

@@ -43,6 +43,8 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
   formatEventsForPrompt,
+  buildRecurrenceRule,
+  toSeriesEventId,
 } from "./lib/providers/googleCalendar";
 import { computeReminderFireAt, zonedDateTimeToUtcMs } from "./lib/reminderTiming";
 
@@ -671,6 +673,7 @@ export const handleMessage = internalAction({
                 description: update.description,
                 location: update.location,
                 timezone,
+                recurrence: buildRecurrenceRule(update.recurrence),
               });
               calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
@@ -704,7 +707,10 @@ export const handleMessage = internalAction({
                 }
               }
             } else if (update.action === "update" && update.eventId) {
-              await updateCalendarEvent(accessToken, update.eventId, {
+              // Target the whole recurring series, not a single occurrence, so
+              // "change it to 7:30pm" updates every future instance too.
+              const seriesId = toSeriesEventId(update.eventId);
+              await updateCalendarEvent(accessToken, seriesId, {
                 title: update.title,
                 date: update.date,
                 startTime: update.startTime,
@@ -712,6 +718,7 @@ export const handleMessage = internalAction({
                 description: update.description,
                 location: update.location,
                 timezone,
+                recurrence: buildRecurrenceRule(update.recurrence),
               });
               calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
@@ -719,18 +726,19 @@ export const handleMessage = internalAction({
                 userId,
                 event: "calendar_event_updated",
                 phone: senderPhone,
-                details: { calendarEventId: update.eventId },
+                details: { calendarEventId: seriesId },
                 timestamp: Date.now(),
               });
             } else if (update.action === "delete" && update.eventId) {
-              await deleteCalendarEvent(accessToken, update.eventId);
+              const seriesId = toSeriesEventId(update.eventId);
+              await deleteCalendarEvent(accessToken, seriesId);
               calendarWriteSucceeded = true;
               await ctx.runMutation(internal.mutations.logAudit, {
                 careCaseId,
                 userId,
                 event: "calendar_event_deleted",
                 phone: senderPhone,
-                details: { calendarEventId: update.eventId },
+                details: { calendarEventId: seriesId },
                 timestamp: Date.now(),
               });
             } else {

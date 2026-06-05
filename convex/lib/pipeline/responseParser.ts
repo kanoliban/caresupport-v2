@@ -76,6 +76,7 @@ function normalizeCalendarUpdates(value: unknown): AgentResponse["calendarUpdate
       description: str(r.description),
       location: str(r.location),
       eventId: str(r.eventId) ?? str(r.event_id),
+      recurrence: str(r.recurrence),
     });
   }
   return updates;
