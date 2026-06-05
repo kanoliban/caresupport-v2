@@ -5,13 +5,16 @@ Status: Phase 2G preparation.
 This checklist activates the first Rob-style multiplayer loop in the safest
 order:
 
-1. Seed Rob's coordinator care case in dev.
-2. Verify the care graph state in Convex.
-3. Run controlled outreach with test numbers.
-4. Confirm replies update Convex without UI intervention.
-5. Only then replace test numbers with Rob-approved real caregiver numbers.
+1. Pick the target Convex deployment explicitly.
+2. Seed Rob's coordinator care case in the selected deployment.
+3. Verify the care graph state in Convex.
+4. Run controlled outreach with test numbers.
+5. Confirm replies update Convex without UI intervention.
+6. Only then replace test numbers with Rob-approved real caregiver numbers.
 
 Do not use real caregiver numbers until the controlled test passes.
+Do not target production until Rob's coordinator phone, Rob's Linq chat ID, and
+the approved controlled test numbers are confirmed.
 
 ## Operator Runner
 
@@ -35,6 +38,17 @@ CONVEX_DEPLOYMENT_NAME="dev:REPLACE_WITH_DEPLOYMENT"
 CONVEX_ENV_FILE=".env.local"
 ```
 
+For production, use `--prod` or `CONVEX_PROD=true` instead of
+`CONVEX_DEPLOYMENT_NAME`:
+
+```bash
+ROB_PHONE="+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE" \
+ROB_CHAT_ID="REPLACE_WITH_ROB_LINQ_CHAT_ID" \
+JIM_TEST_PHONE="+1TEST_NUMBER_1" \
+JENNIFER_TEST_PHONE="+1TEST_NUMBER_2" \
+npm run rob:activate:controlled -- --prod
+```
+
 The runner does not send Linq/iMessage traffic. It checks that the deployment is
 runnable, seeds Rob with the approved test contacts, runs readiness, runs the
 no-Linq dry run, verifies the report, resets dry-run state, and verifies
@@ -45,7 +59,7 @@ After the test-number replies arrive, verify the live run with:
 
 ```bash
 ROB_PHONE="+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE" \
-npm run rob:verify:controlled
+npm run rob:verify:controlled -- --prod
 ```
 
 The verifier requires `admin:getRobControlledLoopReport` to pass with live

@@ -9,6 +9,7 @@ interface LiveVerificationConfig {
   controlledContactKeys: ControlledContactKey[];
   deploymentName?: string;
   envFile?: string;
+  prod?: boolean;
 }
 
 interface CommandResult {
@@ -63,11 +64,19 @@ export function parseLiveVerificationConfig(
 ): LiveVerificationConfig {
   const options = parseOptions(argv);
   const robPhone = options["rob-phone"] || env.ROB_PHONE;
+  const deploymentName = options["deployment-name"] || env.CONVEX_DEPLOYMENT_NAME;
+  const prodValue = options.prod || env.CONVEX_PROD;
+  const prod = prodValue === "true" || prodValue === "1";
   if (!robPhone) {
     throw new Error("Missing required activation input: ROB_PHONE or --rob-phone");
   }
   if (!isE164Phone(robPhone)) {
     throw new Error("Rob phone must be E.164 format, for example +16515559000");
+  }
+  if (prod && deploymentName) {
+    throw new Error(
+      "Use either --prod/CONVEX_PROD or --deployment-name/CONVEX_DEPLOYMENT_NAME, not both",
+    );
   }
 
   return {
@@ -75,8 +84,9 @@ export function parseLiveVerificationConfig(
     controlledContactKeys: parseControlledContactKeys(
       options["contact-keys"] || env.CONTROLLED_CONTACT_KEYS,
     ),
-    deploymentName: options["deployment-name"] || env.CONVEX_DEPLOYMENT_NAME,
+    deploymentName,
     envFile: options["env-file"] || env.CONVEX_ENV_FILE,
+    prod: prod || undefined,
   };
 }
 

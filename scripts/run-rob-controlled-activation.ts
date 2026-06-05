@@ -13,6 +13,7 @@ interface ActivationConfig {
   contactOverrides: [ContactOverrideInput, ContactOverrideInput];
   deploymentName?: string;
   envFile?: string;
+  prod?: boolean;
 }
 
 interface CommandResult {
@@ -34,6 +35,16 @@ function stringOption(
   envName: string,
 ): string | undefined {
   return options[optionName] || env[envName];
+}
+
+function booleanOption(
+  options: Record<string, string | undefined>,
+  env: NodeJS.ProcessEnv,
+  optionName: string,
+  envName: string,
+): boolean {
+  const value = options[optionName] || env[envName];
+  return value === "true" || value === "1";
 }
 
 function parseOptions(argv: string[]): Record<string, string | undefined> {
@@ -90,6 +101,7 @@ export function parseActivationConfig(
     "CONVEX_DEPLOYMENT_NAME",
   );
   const envFile = stringOption(options, env, "env-file", "CONVEX_ENV_FILE");
+  const prod = booleanOption(options, env, "prod", "CONVEX_PROD");
 
   const missing: string[] = [];
   if (!robPhone) missing.push("ROB_PHONE or --rob-phone");
@@ -111,6 +123,11 @@ export function parseActivationConfig(
   if (!isE164Phone(jenniferPhone)) {
     throw new Error("Jennifer test phone must be E.164 format");
   }
+  if (prod && deploymentName) {
+    throw new Error(
+      "Use either --prod/CONVEX_PROD or --deployment-name/CONVEX_DEPLOYMENT_NAME, not both",
+    );
+  }
 
   return {
     robPhone,
@@ -125,6 +142,7 @@ export function parseActivationConfig(
     ],
     deploymentName,
     envFile,
+    prod: prod || undefined,
   };
 }
 
@@ -140,10 +158,13 @@ export function buildSeedPayload(config: ActivationConfig): Record<string, unkno
 export function convexRunArgs(
   functionName: string,
   payload: Record<string, unknown> | undefined,
-  config: Pick<ActivationConfig, "deploymentName" | "envFile">,
+  config: Pick<ActivationConfig, "deploymentName" | "envFile" | "prod">,
 ): string[] {
   const args = ["convex", "run", functionName];
   if (payload) args.push(JSON.stringify(payload));
+  if (config.prod) {
+    args.push("--prod");
+  }
   if (config.deploymentName) {
     args.push("--deployment-name", config.deploymentName);
   }

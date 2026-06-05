@@ -36,6 +36,7 @@ describe("run Rob controlled activation script helpers", () => {
       ],
       deploymentName: undefined,
       envFile: undefined,
+      prod: undefined,
     });
   });
 
@@ -88,6 +89,39 @@ describe("run Rob controlled activation script helpers", () => {
       "--deployment-name",
       "dev:care-test",
     ]);
+  });
+
+  it("targets production explicitly and rejects ambiguous deployment options", () => {
+    const config = parseActivationConfig([], {
+      ROB_PHONE: "+16515559000",
+      ROB_CHAT_ID: "chat-rob",
+      JIM_TEST_PHONE: "+16515559901",
+      JENNIFER_TEST_PHONE: "+16515559902",
+      CONVEX_PROD: "true",
+    });
+
+    expect(config.prod).toBe(true);
+    expect(convexRunArgs("admin:tableCounts", undefined, config)).toEqual([
+      "convex",
+      "run",
+      "admin:tableCounts",
+      "--prod",
+    ]);
+    expect(() =>
+      parseActivationConfig([
+        "--rob-phone",
+        "+16515559000",
+        "--rob-chat-id",
+        "chat-rob",
+        "--jim-phone",
+        "+16515559901",
+        "--jennifer-phone",
+        "+16515559902",
+        "--prod",
+        "--deployment-name",
+        "dev:care-test",
+      ]),
+    ).toThrow("Use either --prod");
   });
 
   it("extracts Convex JSON from plain or noisy stdout", () => {
