@@ -803,6 +803,15 @@ export const handleMessage = internalAction({
   },
 });
 
+/**
+ * True for web-test-UI conversations, whose synthetic chat ids are prefixed
+ * `test:` (see convex/testChat.ts). These must never touch the Linq API even
+ * when LINQ_API_TOKEN is set on the deployment.
+ */
+export function isTestChat(chatId: string): boolean {
+  return chatId.startsWith("test:");
+}
+
 /** True if `tz` is a valid IANA timezone the runtime can resolve. */
 export function isValidTimeZone(tz: string | undefined): tz is string {
   if (!tz) return false;
@@ -849,7 +858,9 @@ async function sendResponse(
   pacingStart = Date.now(),
   effect: MessageEffect | null = null,
 ): Promise<string[]> {
-  if (!envVars.linqApiToken || !chatId) {
+  // Test chats (web UI) never go out over Linq — the reply is returned to the
+  // caller and read reactively from the messages table instead.
+  if (!envVars.linqApiToken || !chatId || isTestChat(chatId)) {
     return [];
   }
 

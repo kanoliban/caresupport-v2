@@ -3,12 +3,24 @@ import {
   ensureExplicitUserMemoryUpdate,
   formatConversationLog,
   inferExplicitUserMemoryUpdate,
+  isTestChat,
   isUnsupportedCoordinationRequest,
   isValidTimeZone,
   parseLesson,
   shouldFireCoordinationBoundaryOverride,
   stripMarkdown,
 } from "./handler";
+
+describe("isTestChat", () => {
+  it("flags synthetic web-UI chat ids", () => {
+    expect(isTestChat("test:+15550100199")).toBe(true);
+  });
+
+  it("does not flag real Linq chat ids", () => {
+    expect(isTestChat("imsg-chat-abc123")).toBe(false);
+    expect(isTestChat("")).toBe(false);
+  });
+});
 
 describe("isValidTimeZone", () => {
   it("accepts valid IANA zones", () => {
