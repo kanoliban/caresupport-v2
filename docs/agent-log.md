@@ -8,6 +8,45 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Merged PR #66 (`feat(coordination): add Rob controlled loop report`) into
+  `main`.
+- Added `internal.admin.resetRobControlledLoopAfterDryRun`.
+- The reset handles the handoff from no-Linq proof to real test-number outreach:
+  - cancels controlled dry-run outreach attempts
+  - restores Jim/Jennifer as pending on the controlled event
+  - removes dry-run confirmation/decline state for those contacts on the event
+  - clears controlled contacts' dry-run last-reply pointers when they point at
+    dry-run messages
+  - does not delete messages/audits and does not send Linq/iMessage traffic
+- Updated `docs/rob-multiplayer-activation.md` so the operator sequence is:
+  dry-run report passes, reset, readiness returns true, then live test-number
+  outreach.
+- Updated the Phase 2G tracker with the reset command.
+
+### Validation
+- `npm test -- convex/robActivation.test.ts --reporter verbose` passed: 9 tests.
+- `npm run typecheck` passed.
+- `npm test` passed: 25 files / 295 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq messages were sent.
+- The activation path now has a clean transition from simulated Convex proof to
+  real test-number outreach.
+- Live activation remains gated on Rob's coordinator phone/chat id, two approved
+  test numbers or Linq chat ids, and the intended Convex deployment.
+
+### Concerns
+- The dry-run rows are retained for audit/history, but dry-run attempts are
+  marked `cancelled` by the reset so the real test-number run can create fresh
+  sent outreach evidence.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Added `internal.admin.getRobControlledLoopReport`.
 - The report inspects persisted Convex state for the Rob controlled loop instead
   of simulating anything:

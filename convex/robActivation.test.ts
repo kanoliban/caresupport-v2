@@ -356,6 +356,94 @@ describe("Rob multiplayer activation fixture", () => {
     ]);
   });
 
+  it("resets dry-run state so the controlled event is ready for live test-number outreach", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559008",
+      robChatId: "chat-rob-reset-after-dry-run",
+      useTestContactPhones: false,
+      contactOverrides: [
+        { key: "jim", phone: "+16515559951", linqChatId: "chat-jim-reset" },
+        {
+          key: "jennifer",
+          phone: "+16515559952",
+          linqChatId: "chat-jennifer-reset",
+        },
+      ],
+    });
+    await t.action(internal.admin.runRobControlledLoopDryRun, {
+      robPhone: "+16515559008",
+      now: 1_776_000_000_000,
+    });
+
+    const reportBeforeReset = await t.query(
+      internal.admin.getRobControlledLoopReport,
+      { robPhone: "+16515559008" },
+    );
+    const readinessBeforeReset = await t.query(
+      internal.admin.getRobMultiplayerReadiness,
+      { robPhone: "+16515559008" },
+    );
+
+    expect(reportBeforeReset.passed).toBe(true);
+    expect(readinessBeforeReset.readyForControlledOutreach).toBe(false);
+    expect(readinessBeforeReset.blockers).toEqual(
+      expect.arrayContaining([
+        "controlled_contact_not_pending:jim",
+        "controlled_contact_not_pending:jennifer",
+      ]),
+    );
+
+    const reset = await t.mutation(
+      internal.admin.resetRobControlledLoopAfterDryRun,
+      {
+        robPhone: "+16515559008",
+        now: 1_776_000_100_000,
+      },
+    );
+    const readinessAfterReset = await t.query(
+      internal.admin.getRobMultiplayerReadiness,
+      { robPhone: "+16515559008" },
+    );
+    const reportAfterReset = await t.query(
+      internal.admin.getRobControlledLoopReport,
+      { robPhone: "+16515559008" },
+    );
+    const detail = await t.query(internal.admin.getCareCaseDetail, {
+      careCaseId: fixture.careCaseId,
+    });
+    const controlledEvent = detail?.coordinationEvents.find(
+      (event) => event._id === fixture.coordinationEventId,
+    );
+    const controlledAttempts = detail?.outreachAttempts.filter((attempt) =>
+      reset.cancelledDryRunAttemptIds.includes(attempt._id)
+    );
+
+    expect(reset.reset).toBe(true);
+    expect(reset.cancelledDryRunAttemptIds).toHaveLength(2);
+    expect(reset.restoredPendingContactIds).toEqual(
+      fixture.controlledPendingContactIds,
+    );
+    expect(reset.clearedContactReplyIds).toHaveLength(2);
+    expect(readinessAfterReset.readyForControlledOutreach).toBe(true);
+    expect(readinessAfterReset.blockers).toEqual([]);
+    expect(reportAfterReset.passed).toBe(false);
+    expect(reportAfterReset.blockers).toEqual(
+      expect.arrayContaining([
+        "sent_outreach_missing:jim",
+        "sent_outreach_missing:jennifer",
+      ]),
+    );
+    expect(controlledEvent?.pendingContactIds).toEqual(
+      fixture.controlledPendingContactIds,
+    );
+    expect(controlledEvent?.confirmedContactIds ?? []).toEqual([]);
+    expect(controlledAttempts?.map((attempt) => attempt.status)).toEqual([
+      "cancelled",
+      "cancelled",
+    ]);
+  });
+
   it("blocks activation when a controlled caregiver phone created another care case", async () => {
     const t = convexTest(schema, modules);
     await t.mutation(internal.admin.seedRobMultiplayerFixture, {

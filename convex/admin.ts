@@ -353,6 +353,21 @@ interface RobControlledLoopReport {
   contacts: RobControlledLoopContactReport[];
 }
 
+interface RobControlledLoopResetResult {
+  reset: boolean;
+  reason?:
+    | "invalid_rob_phone"
+    | "rob_user_missing"
+    | "rob_care_case_missing"
+    | "controlled_event_missing"
+    | "controlled_contacts_missing";
+  careCaseId?: Id<"careCases">;
+  controlledEventId?: Id<"coordinationEvents">;
+  restoredPendingContactIds: Array<Id<"careContacts">>;
+  cancelledDryRunAttemptIds: Array<Id<"outreachAttempts">>;
+  clearedContactReplyIds: Array<Id<"careContacts">>;
+}
+
 export const listCareCases = internalQuery({
   args: {},
   handler: async (ctx) => {
@@ -1276,6 +1291,193 @@ export const getRobControlledLoopReport = internalQuery({
       contacts: contactReports,
       blockers: [...new Set(blockers)],
       warnings: [...new Set(warnings)],
+    };
+  },
+});
+
+export const resetRobControlledLoopAfterDryRun = internalMutation({
+  args: {
+    robPhone: v.string(),
+    controlledContactKeys: v.optional(v.array(controlledContactKeyValidator)),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<RobControlledLoopResetResult> => {
+    const robPhone = normalizePhone(args.robPhone);
+    if (!robPhone) {
+      return {
+        reset: false,
+        reason: "invalid_rob_phone",
+        restoredPendingContactIds: [],
+        cancelledDryRunAttemptIds: [],
+        clearedContactReplyIds: [],
+      };
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", robPhone))
+      .first();
+    if (!user) {
+      return {
+        reset: false,
+        reason: "rob_user_missing",
+        restoredPendingContactIds: [],
+        cancelledDryRunAttemptIds: [],
+        clearedContactReplyIds: [],
+      };
+    }
+
+    const careCase = await ctx.db.get(user.careCaseId);
+    if (!careCase) {
+      return {
+        reset: false,
+        reason: "rob_care_case_missing",
+        restoredPendingContactIds: [],
+        cancelledDryRunAttemptIds: [],
+        clearedContactReplyIds: [],
+      };
+    }
+
+    const [contacts, events, outreachAttempts, messages] = await Promise.all([
+      ctx.db
+        .query("careContacts")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("coordinationEvents")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("outreachAttempts")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("messages")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+    ]);
+
+    const controlledEventTitle = "Rob schedule confirmation controlled test";
+    const controlledEvent = events.find((event) => event.title === controlledEventTitle);
+    if (!controlledEvent) {
+      return {
+        reset: false,
+        reason: "controlled_event_missing",
+        careCaseId: careCase._id,
+        restoredPendingContactIds: [],
+        cancelledDryRunAttemptIds: [],
+        clearedContactReplyIds: [],
+      };
+    }
+
+    const controlledContactKeys = args.controlledContactKeys ?? ["jim", "jennifer"];
+    const controlledContacts = controlledContactKeys
+      .map((key) => {
+        const fixture = fixtureForKey(key);
+        return fixture ? contactByName(contacts, fixture.name) : undefined;
+      })
+      .filter((contact): contact is Doc<"careContacts"> => Boolean(contact));
+    if (controlledContacts.length !== controlledContactKeys.length) {
+      return {
+        reset: false,
+        reason: "controlled_contacts_missing",
+        careCaseId: careCase._id,
+        controlledEventId: controlledEvent._id,
+        restoredPendingContactIds: controlledContacts.map((contact) => contact._id),
+        cancelledDryRunAttemptIds: [],
+        clearedContactReplyIds: [],
+      };
+    }
+
+    const now = args.now ?? Date.now();
+    const controlledContactIds = controlledContacts.map((contact) => contact._id);
+    const controlledContactIdSet = new Set(controlledContactIds);
+    const dryRunAttempts = outreachAttempts.filter((attempt) =>
+      attempt.coordinationEventId === controlledEvent._id &&
+      controlledContactIdSet.has(attempt.careContactId) &&
+      (
+        attempt.purpose.startsWith("Dry-run confirmation") ||
+        attempt.linqMessageId?.startsWith("dry-run-outreach-") ||
+        attempt.messageBody.includes("CareSupport controlled dry run")
+      )
+    );
+    const cancelledDryRunAttemptIds: Array<Id<"outreachAttempts">> = [];
+    for (const attempt of dryRunAttempts) {
+      await ctx.db.patch(attempt._id, {
+        status: "cancelled",
+        nextActionAt: undefined,
+        failureReason: "dry_run_reset_before_live_test",
+        updatedAt: now,
+      });
+      cancelledDryRunAttemptIds.push(attempt._id);
+    }
+
+    const dryRunAttemptIdSet = new Set(dryRunAttempts.map((attempt) => attempt._id));
+    const dryRunMessageIds = new Set(
+      messages
+        .filter((message) =>
+          (message.outreachAttemptId && dryRunAttemptIdSet.has(message.outreachAttemptId)) ||
+          message.linqMessageId?.startsWith("dry-run-status-") ||
+          message.body.startsWith("CareSupport dry-run update:") ||
+          message.body.includes("controlled dry-run")
+        )
+        .map((message) => message._id),
+    );
+
+    const pendingWithoutControlled = (controlledEvent.pendingContactIds ?? []).filter(
+      (id) => !controlledContactIdSet.has(id),
+    );
+    const confirmedWithoutControlled = (controlledEvent.confirmedContactIds ?? []).filter(
+      (id) => !controlledContactIdSet.has(id),
+    );
+    const declinedWithoutControlled = (controlledEvent.declinedContactIds ?? []).filter(
+      (id) => !controlledContactIdSet.has(id),
+    );
+    await ctx.db.patch(controlledEvent._id, {
+      status: "waiting",
+      pendingContactIds: [...pendingWithoutControlled, ...controlledContactIds],
+      confirmedContactIds: confirmedWithoutControlled,
+      declinedContactIds: declinedWithoutControlled,
+      nextActionAt: undefined,
+      lastReplyContactId: controlledEvent.lastReplyContactId &&
+        controlledContactIdSet.has(controlledEvent.lastReplyContactId)
+        ? undefined
+        : controlledEvent.lastReplyContactId,
+      lastReplyMessageId: controlledEvent.lastReplyMessageId &&
+        dryRunMessageIds.has(controlledEvent.lastReplyMessageId)
+        ? undefined
+        : controlledEvent.lastReplyMessageId,
+      lastReplyStatus: controlledEvent.lastReplyContactId &&
+        controlledContactIdSet.has(controlledEvent.lastReplyContactId)
+        ? undefined
+        : controlledEvent.lastReplyStatus,
+      lastReplyAt: controlledEvent.lastReplyContactId &&
+        controlledContactIdSet.has(controlledEvent.lastReplyContactId)
+        ? undefined
+        : controlledEvent.lastReplyAt,
+      updatedAt: now,
+    });
+
+    const clearedContactReplyIds: Array<Id<"careContacts">> = [];
+    for (const contact of controlledContacts) {
+      if (contact.lastReplyMessageId && dryRunMessageIds.has(contact.lastReplyMessageId)) {
+        await ctx.db.patch(contact._id, {
+          lastReplyStatus: undefined,
+          lastReplyMessageId: undefined,
+          lastReplyAt: undefined,
+          updatedAt: now,
+        });
+        clearedContactReplyIds.push(contact._id);
+      }
+    }
+
+    return {
+      reset: true,
+      careCaseId: careCase._id,
+      controlledEventId: controlledEvent._id,
+      restoredPendingContactIds: controlledContactIds,
+      cancelledDryRunAttemptIds,
+      clearedContactReplyIds,
     };
   },
 });

@@ -127,6 +127,27 @@ may still include `live_reply_audit_missing:*` warnings because it does not ente
 through the Linq webhook path. Those warnings should disappear during real
 test-number outreach.
 
+Because the dry run writes simulated confirmations, reset the controlled event
+before sending real test-number messages:
+
+```bash
+npx convex run admin:resetRobControlledLoopAfterDryRun '{
+  "robPhone": "+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE"
+}'
+```
+
+Then run readiness again:
+
+```bash
+npx convex run admin:getRobMultiplayerReadiness '{
+  "robPhone": "+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE"
+}'
+```
+
+Only proceed when `readyForControlledOutreach` is back to `true`. The reset
+cancels dry-run outreach attempts and restores Jim/Jennifer as pending contacts;
+it does not send Linq/iMessage traffic.
+
 Then initiate the test through Rob's coordinator thread:
 
 ```text
