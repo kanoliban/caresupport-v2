@@ -9,6 +9,7 @@
     "reset:dev": "bash scripts/reset-convex.sh dev",
     "reset:prod": "bash scripts/reset-convex.sh prod",
     "rob:activate:controlled": "tsx scripts/run-rob-controlled-activation.ts",
+    "rob:verify:controlled": "tsx scripts/verify-rob-controlled-live.ts",
     "seed": "npx tsx scripts/seed-from-files.ts",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -496,6 +496,7 @@ Test targets:
 
 - [x] Local/Dev Convex smoke script or manual checklist
   - `npm run rob:activate:controlled`
+  - `npm run rob:verify:controlled`
   - `admin:seedRobMultiplayerFixture`
   - `admin:getRobMultiplayerReadiness`
   - `admin:runRobControlledLoopDryRun`
