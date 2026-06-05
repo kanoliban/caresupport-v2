@@ -114,6 +114,19 @@ Linq. It should return `ran: true` and `replyStatus: "confirmed"` for Jim and
 Jennifer. Use this to verify the deployed care graph before the real test-number
 outreach.
 
+After the dry run, run the post-run report:
+
+```bash
+npx convex run admin:getRobControlledLoopReport '{
+  "robPhone": "+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE"
+}'
+```
+
+Do not proceed to live test-number outreach until `passed` is `true`. A dry run
+may still include `live_reply_audit_missing:*` warnings because it does not enter
+through the Linq webhook path. Those warnings should disappear during real
+test-number outreach.
+
 Then initiate the test through Rob's coordinator thread:
 
 ```text
@@ -146,6 +159,10 @@ Controlled test passes when Convex shows:
   or deferred.
 - Audit logs include request, approval, sent, reply, and follow-up/status events
   as applicable.
+
+Use `admin:getRobControlledLoopReport` as the authoritative pass/fail summary for
+these criteria. The report must have `passed: true` before real Rob caregiver
+numbers are used.
 
 ## Real Rob Activation
 

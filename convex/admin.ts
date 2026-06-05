@@ -311,6 +311,48 @@ interface RobControlledDryRunResult {
   simulated: RobControlledDryRunItem[];
 }
 
+interface RobControlledLoopContactReport {
+  key: string;
+  name: string;
+  contactId?: Id<"careContacts">;
+  phone?: string;
+  linqChatId?: string;
+  sentOutreachAttemptIds: Array<Id<"outreachAttempts">>;
+  latestSentOutreachAttemptId?: Id<"outreachAttempts">;
+  outboundMessageId?: Id<"messages">;
+  inboundReplyMessageId?: Id<"messages">;
+  replyStatus?: string;
+  confirmedOnEvent: boolean;
+  pendingOnEvent: boolean;
+  declinedOnEvent: boolean;
+  followUpClockClearedOrDeferred: boolean;
+  extraCareCaseUserId?: Id<"users">;
+  extraCareCaseId?: Id<"careCases">;
+  audit: {
+    outreachRequested: boolean;
+    outreachApproved: boolean;
+    outreachSent: boolean;
+    liveReplyReceived: boolean;
+    statusSentToRob: boolean;
+  };
+  blockers: string[];
+  warnings: string[];
+  passed: boolean;
+}
+
+interface RobControlledLoopReport {
+  passed: boolean;
+  fixturePresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  userId?: Id<"users">;
+  careCaseId?: Id<"careCases">;
+  controlledEventId?: Id<"coordinationEvents">;
+  controlledEventStatus?: "open" | "waiting" | "resolved" | "cancelled";
+  robStatusMessageIds: Array<Id<"messages">>;
+  contacts: RobControlledLoopContactReport[];
+}
+
 export const listCareCases = internalQuery({
   args: {},
   handler: async (ctx) => {
@@ -943,6 +985,297 @@ export const runRobControlledLoopDryRun = internalAction({
       ran: true,
       readiness,
       simulated,
+    };
+  },
+});
+
+export const getRobControlledLoopReport = internalQuery({
+  args: {
+    robPhone: v.string(),
+    controlledContactKeys: v.optional(v.array(controlledContactKeyValidator)),
+  },
+  handler: async (ctx, args): Promise<RobControlledLoopReport> => {
+    const blockers: string[] = [];
+    const warnings: string[] = [];
+    const robPhone = normalizePhone(args.robPhone);
+    if (!robPhone) {
+      return {
+        passed: false,
+        fixturePresent: false,
+        blockers: ["invalid_rob_phone"],
+        warnings,
+        robStatusMessageIds: [],
+        contacts: [],
+      };
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", robPhone))
+      .first();
+    if (!user) {
+      return {
+        passed: false,
+        fixturePresent: false,
+        blockers: ["rob_user_missing"],
+        warnings,
+        robStatusMessageIds: [],
+        contacts: [],
+      };
+    }
+
+    const careCase = await ctx.db.get(user.careCaseId);
+    if (!careCase) {
+      return {
+        passed: false,
+        fixturePresent: false,
+        userId: user._id,
+        blockers: ["rob_care_case_missing"],
+        warnings,
+        robStatusMessageIds: [],
+        contacts: [],
+      };
+    }
+
+    if (user.status !== "active") blockers.push("rob_user_not_active");
+    if (careCase.status !== "active") blockers.push("rob_care_case_not_active");
+
+    const [contacts, events, outreachAttempts, messages, auditLogs] =
+      await Promise.all([
+        ctx.db
+          .query("careContacts")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("coordinationEvents")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("outreachAttempts")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("messages")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("auditLogs")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+      ]);
+
+    const controlledEventTitle = "Rob schedule confirmation controlled test";
+    const controlledEvent = events.find((event) => event.title === controlledEventTitle);
+    if (!controlledEvent) {
+      blockers.push("controlled_event_missing");
+    }
+
+    const robStatusMessages = controlledEvent
+      ? messages.filter((message) =>
+          message.coordinationEventId === controlledEvent._id &&
+          message.direction === "outbound" &&
+          message.actorType === "assistant" &&
+          !message.careContactId
+        )
+      : [];
+    const statusAuditPresent = controlledEvent
+      ? auditLogs.some((audit) =>
+          audit.event === "response_sent" &&
+          audit.details.triggerMessage === "coordination_status_follow_up" &&
+          audit.details.coordinationEventId === controlledEvent._id
+        )
+      : false;
+    if (controlledEvent && robStatusMessages.length === 0) {
+      blockers.push("rob_status_message_missing");
+    }
+    if (controlledEvent && !statusAuditPresent) {
+      blockers.push("rob_status_audit_missing");
+    }
+
+    const controlledContactKeys = args.controlledContactKeys ?? ["jim", "jennifer"];
+    const contactReports: RobControlledLoopContactReport[] = [];
+
+    for (const key of controlledContactKeys) {
+      const contactBlockers: string[] = [];
+      const contactWarnings: string[] = [];
+      const fixture = fixtureForKey(key);
+      const contact = fixture ? contactByName(contacts, fixture.name) : undefined;
+      if (!fixture) contactBlockers.push(`unknown_controlled_contact_key:${key}`);
+      if (!contact) contactBlockers.push(`controlled_contact_missing:${key}`);
+
+      let extraCareCaseUserId: Id<"users"> | undefined;
+      let extraCareCaseId: Id<"careCases"> | undefined;
+      if (contact?.phone) {
+        const usersWithContactPhone = await ctx.db
+          .query("users")
+          .withIndex("by_phone", (q) => q.eq("phone", contact.phone ?? ""))
+          .collect();
+        const extraUser = usersWithContactPhone.find(
+          (candidate) => candidate.careCaseId !== careCase._id,
+        );
+        if (extraUser) {
+          extraCareCaseUserId = extraUser._id;
+          extraCareCaseId = extraUser.careCaseId;
+          contactBlockers.push(`extra_care_case_for_controlled_contact_phone:${key}`);
+        }
+      }
+
+      const sentAttempts = contact && controlledEvent
+        ? outreachAttempts
+            .filter((attempt) =>
+              attempt.coordinationEventId === controlledEvent._id &&
+              attempt.careContactId === contact._id &&
+              attempt.status === "sent"
+            )
+            .sort((a, b) => (b.sentAt ?? b.updatedAt) - (a.sentAt ?? a.updatedAt))
+        : [];
+      const latestSentAttempt = sentAttempts[0];
+      if (contact && controlledEvent && sentAttempts.length === 0) {
+        contactBlockers.push(`sent_outreach_missing:${key}`);
+      }
+
+      const sentAttemptIds = sentAttempts.map((attempt) => attempt._id);
+      const outboundMessage = contact && controlledEvent
+        ? messages
+            .filter((message) =>
+              message.coordinationEventId === controlledEvent._id &&
+              message.careContactId === contact._id &&
+              message.direction === "outbound" &&
+              message.actorType === "assistant" &&
+              (sentAttemptIds.length === 0 ||
+                (message.outreachAttemptId &&
+                  sentAttemptIds.includes(message.outreachAttemptId)))
+            )
+            .sort((a, b) => b.timestamp - a.timestamp)[0]
+        : undefined;
+      if (contact && controlledEvent && !outboundMessage) {
+        contactBlockers.push(`outbound_message_missing:${key}`);
+      }
+
+      const inboundReply = contact && controlledEvent
+        ? messages
+            .filter((message) =>
+              message.coordinationEventId === controlledEvent._id &&
+              message.careContactId === contact._id &&
+              message.direction === "inbound" &&
+              (sentAttemptIds.length === 0 ||
+                (message.outreachAttemptId &&
+                  sentAttemptIds.includes(message.outreachAttemptId)))
+            )
+            .sort((a, b) => b.timestamp - a.timestamp)[0]
+        : undefined;
+      if (contact && controlledEvent && !inboundReply) {
+        contactBlockers.push(`inbound_reply_missing:${key}`);
+      }
+
+      const confirmedOnEvent = Boolean(
+        contact &&
+          controlledEvent?.confirmedContactIds?.some((id) => id === contact._id),
+      );
+      const pendingOnEvent = Boolean(
+        contact &&
+          controlledEvent?.pendingContactIds?.some((id) => id === contact._id),
+      );
+      const declinedOnEvent = Boolean(
+        contact &&
+          controlledEvent?.declinedContactIds?.some((id) => id === contact._id),
+      );
+      const eventReflectsReply = Boolean(
+        inboundReply &&
+          (confirmedOnEvent ||
+            declinedOnEvent ||
+            controlledEvent?.lastReplyMessageId === inboundReply._id),
+      );
+      if (inboundReply && !eventReflectsReply) {
+        contactBlockers.push(`event_reply_state_missing:${key}`);
+      }
+      if (inboundReply && pendingOnEvent && !confirmedOnEvent && !declinedOnEvent) {
+        contactWarnings.push(`reply_left_contact_pending:${key}`);
+      }
+
+      const followUpClockClearedOrDeferred = Boolean(
+        latestSentAttempt &&
+          (!latestSentAttempt.nextActionAt ||
+            (inboundReply && latestSentAttempt.nextActionAt > inboundReply.timestamp)),
+      );
+      if (inboundReply && latestSentAttempt && !followUpClockClearedOrDeferred) {
+        contactBlockers.push(`follow_up_clock_still_due:${key}`);
+      }
+
+      const auditFor = (event: Doc<"auditLogs">["event"]): boolean =>
+        Boolean(
+          contact &&
+            controlledEvent &&
+            auditLogs.some((audit) =>
+              audit.event === event &&
+              audit.details.coordinationEventId === controlledEvent._id &&
+              audit.details.careContactId === contact._id &&
+              (sentAttemptIds.length === 0 ||
+                !audit.details.outreachAttemptId ||
+                sentAttemptIds.includes(audit.details.outreachAttemptId as Id<"outreachAttempts">))
+            ),
+        );
+      const audit = {
+        outreachRequested: auditFor("outreach_requested"),
+        outreachApproved: auditFor("outreach_approved"),
+        outreachSent: auditFor("outreach_sent"),
+        liveReplyReceived: auditFor("care_contact_reply_received"),
+        statusSentToRob: statusAuditPresent,
+      };
+      if (latestSentAttempt && !audit.outreachRequested) {
+        contactBlockers.push(`outreach_requested_audit_missing:${key}`);
+      }
+      if (latestSentAttempt && !audit.outreachApproved) {
+        contactBlockers.push(`outreach_approved_audit_missing:${key}`);
+      }
+      if (latestSentAttempt && !audit.outreachSent) {
+        contactBlockers.push(`outreach_sent_audit_missing:${key}`);
+      }
+      if (inboundReply && !audit.liveReplyReceived) {
+        contactWarnings.push(`live_reply_audit_missing:${key}`);
+      }
+
+      const report = {
+        key,
+        name: fixture?.name ?? key,
+        contactId: contact?._id,
+        phone: contact?.phone,
+        linqChatId: contact?.linqChatId,
+        sentOutreachAttemptIds: sentAttemptIds,
+        latestSentOutreachAttemptId: latestSentAttempt?._id,
+        outboundMessageId: outboundMessage?._id,
+        inboundReplyMessageId: inboundReply?._id,
+        replyStatus: contact?.lastReplyStatus,
+        confirmedOnEvent,
+        pendingOnEvent,
+        declinedOnEvent,
+        followUpClockClearedOrDeferred,
+        extraCareCaseUserId,
+        extraCareCaseId,
+        audit,
+        blockers: [...new Set(contactBlockers)],
+        warnings: [...new Set(contactWarnings)],
+        passed: contactBlockers.length === 0,
+      };
+      contactReports.push(report);
+    }
+
+    for (const contactReport of contactReports) {
+      blockers.push(...contactReport.blockers);
+      warnings.push(...contactReport.warnings);
+    }
+
+    return {
+      passed: blockers.length === 0,
+      fixturePresent: Boolean(user && careCase && controlledEvent),
+      userId: user._id,
+      careCaseId: careCase._id,
+      controlledEventId: controlledEvent?._id,
+      controlledEventStatus: controlledEvent?.status,
+      robStatusMessageIds: robStatusMessages.map((message) => message._id),
+      contacts: contactReports,
+      blockers: [...new Set(blockers)],
+      warnings: [...new Set(warnings)],
     };
   },
 });
