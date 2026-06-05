@@ -5,6 +5,40 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-06-05 — Codex
+
+### What I did
+- Created branch `liban/rob-activation-readiness` from merged `main`.
+- Added `internal.admin.getRobMultiplayerReadiness`.
+- The readiness check verifies:
+  - Rob user/care case exists and is active
+  - Rob has a chat id for coordinator updates
+  - all Rob fixture contacts exist
+  - all Rob fixture schedule rows exist
+  - the controlled Jim/Jennifer event exists and is open/waiting
+  - controlled contacts are active, textable, consented, pending on the event,
+    and not using generated placeholder fixture phones
+- Updated `docs/rob-multiplayer-activation.md` with the readiness command and
+  the rule that `readyForControlledOutreach` must be true before sending.
+- Added test coverage proving generated fixture phones block controlled outreach
+  until explicit test numbers are installed.
+
+### Validation
+- `npm test -- convex/robActivation.test.ts --reporter verbose` passed.
+- `npm run typecheck` passed.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq messages were sent.
+- The remaining live activation inputs are Rob's coordinator phone/chat id and
+  two approved test numbers/chats for the controlled Jim/Jennifer run.
+
+### Concerns
+- This does not complete live activation; it prevents unsafe activation from
+  proceeding with placeholder fixture numbers.
+
+---
+
 ## 2026-06-04 — Codex
 
 ### What I did

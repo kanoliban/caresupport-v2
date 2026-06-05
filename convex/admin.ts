@@ -237,6 +237,19 @@ function contactByName(
   return contacts.find((contact) => contact.name.toLowerCase() === name.toLowerCase());
 }
 
+function fixtureForKey(key: string): (typeof ROB_CONTACTS)[number] | undefined {
+  return ROB_CONTACTS.find((contact) => contact.key === key);
+}
+
+function fixtureIndexForKey(key: string): number {
+  return ROB_CONTACTS.findIndex((contact) => contact.key === key);
+}
+
+function isGeneratedFixturePhone(key: string, phone: string | undefined): boolean {
+  const index = fixtureIndexForKey(key);
+  return index >= 0 && phone === testPhoneForIndex(index);
+}
+
 export const listCareCases = internalQuery({
   args: {},
   handler: async (ctx) => {
@@ -525,6 +538,177 @@ export const seedRobMultiplayerFixture = internalMutation({
       controlledPendingContactNames: ROB_CONTACTS
         .filter((contact) => contact.key === "jim" || contact.key === "jennifer")
         .map((contact) => contact.name),
+    };
+  },
+});
+
+export const getRobMultiplayerReadiness = internalQuery({
+  args: {
+    robPhone: v.string(),
+    controlledContactKeys: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const blockers: string[] = [];
+    const warnings: string[] = [];
+    const robPhone = normalizePhone(args.robPhone);
+    if (!robPhone) {
+      return {
+        readyForControlledOutreach: false,
+        fixturePresent: false,
+        blockers: ["invalid_rob_phone"],
+        warnings,
+      };
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", robPhone))
+      .first();
+    if (!user) {
+      return {
+        readyForControlledOutreach: false,
+        fixturePresent: false,
+        blockers: ["rob_user_missing"],
+        warnings,
+      };
+    }
+
+    const careCase = await ctx.db.get(user.careCaseId);
+    if (!careCase) {
+      return {
+        readyForControlledOutreach: false,
+        fixturePresent: false,
+        userId: user._id,
+        blockers: ["rob_care_case_missing"],
+        warnings,
+      };
+    }
+
+    if (user.status !== "active") blockers.push("rob_user_not_active");
+    if (!user.chatId) blockers.push("rob_chat_id_missing");
+    if (careCase.status !== "active") blockers.push("rob_care_case_not_active");
+    if (careCase.careRecipientName !== "Rob Wudlick") {
+      warnings.push("care_recipient_name_not_rob_wudlick");
+    }
+
+    const [
+      contacts,
+      scheduleItems,
+      events,
+      outreachAttempts,
+    ] = await Promise.all([
+      ctx.db
+        .query("careContacts")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("scheduleItems")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("coordinationEvents")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("outreachAttempts")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+    ]);
+
+    const missingContactKeys: string[] = [];
+    for (const fixture of ROB_CONTACTS) {
+      if (!contactByName(contacts, fixture.name)) {
+        missingContactKeys.push(fixture.key);
+      }
+    }
+    if (missingContactKeys.length > 0) {
+      blockers.push(`missing_contacts:${missingContactKeys.join(",")}`);
+    }
+
+    const missingScheduleTitles = ROB_SCHEDULE_ITEMS
+      .map((item) => item.title)
+      .filter((title) => !scheduleItems.some((item) => item.title === title));
+    if (missingScheduleTitles.length > 0) {
+      blockers.push(`missing_schedule_items:${missingScheduleTitles.join("|")}`);
+    }
+
+    const controlledEventTitle = "Rob schedule confirmation controlled test";
+    const controlledEvent = events.find((event) => event.title === controlledEventTitle);
+    if (!controlledEvent) {
+      blockers.push("controlled_event_missing");
+    } else if (
+      controlledEvent.status !== "open" &&
+      controlledEvent.status !== "waiting"
+    ) {
+      blockers.push(`controlled_event_not_open:${controlledEvent.status}`);
+    }
+
+    const controlledContactKeys = args.controlledContactKeys ?? ["jim", "jennifer"];
+    const controlledContacts = controlledContactKeys.map((key) => {
+      const fixture = fixtureForKey(key);
+      const contact = fixture ? contactByName(contacts, fixture.name) : undefined;
+      const inPendingEvent = Boolean(
+        contact &&
+          controlledEvent?.pendingContactIds?.some((id) => id === contact._id),
+      );
+      const generatedFixturePhone = isGeneratedFixturePhone(key, contact?.phone);
+      if (!fixture) blockers.push(`unknown_controlled_contact_key:${key}`);
+      if (!contact) blockers.push(`controlled_contact_missing:${key}`);
+      if (contact && !contact.active) blockers.push(`controlled_contact_inactive:${key}`);
+      if (contact && !contact.phone) blockers.push(`controlled_contact_phone_missing:${key}`);
+      if (contact && !contact.canReceiveTexts) {
+        blockers.push(`controlled_contact_texting_disabled:${key}`);
+      }
+      if (contact && contact.consentToContact === false) {
+        blockers.push(`controlled_contact_consent_denied:${key}`);
+      }
+      if (contact && generatedFixturePhone) {
+        blockers.push(`controlled_contact_uses_generated_fixture_phone:${key}`);
+      }
+      if (contact && controlledEvent && !inPendingEvent) {
+        blockers.push(`controlled_contact_not_pending:${key}`);
+      }
+
+      return {
+        key,
+        name: fixture?.name ?? key,
+        contactId: contact?._id,
+        phonePresent: Boolean(contact?.phone),
+        canReceiveTexts: contact?.canReceiveTexts ?? false,
+        consentToContact: contact?.consentToContact,
+        active: contact?.active ?? false,
+        linqChatIdPresent: Boolean(contact?.linqChatId),
+        generatedFixturePhone,
+        inPendingEvent,
+      };
+    });
+
+    const sentControlledAttempts = outreachAttempts.filter((attempt) =>
+      controlledContacts.some((contact) => contact.contactId === attempt.careContactId) &&
+      attempt.status === "sent"
+    );
+    if (sentControlledAttempts.length > 0) {
+      warnings.push("controlled_outreach_already_sent");
+    }
+
+    return {
+      readyForControlledOutreach: blockers.length === 0,
+      fixturePresent: blockers.every((blocker) =>
+        !blocker.startsWith("missing_") &&
+        !blocker.endsWith("_missing"),
+      ),
+      userId: user._id,
+      careCaseId: careCase._id,
+      robChatIdPresent: Boolean(user.chatId),
+      contactCount: contacts.length,
+      expectedContactCount: ROB_CONTACTS.length,
+      scheduleItemCount: scheduleItems.length,
+      expectedScheduleItemCount: ROB_SCHEDULE_ITEMS.length,
+      controlledEventId: controlledEvent?._id,
+      controlledEventStatus: controlledEvent?.status,
+      controlledContacts,
+      blockers: [...new Set(blockers)],
+      warnings: [...new Set(warnings)],
     };
   },
 });

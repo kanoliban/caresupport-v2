@@ -70,6 +70,78 @@ describe("Rob multiplayer activation fixture", () => {
     });
   });
 
+  it("reports readiness blockers until explicit controlled test numbers are installed", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559002",
+      robChatId: "chat-rob-readiness",
+      useTestContactPhones: true,
+    });
+
+    const placeholderReadiness = await t.query(
+      internal.admin.getRobMultiplayerReadiness,
+      { robPhone: "+16515559002" },
+    );
+
+    expect(placeholderReadiness.fixturePresent).toBe(true);
+    expect(placeholderReadiness.readyForControlledOutreach).toBe(false);
+    expect(placeholderReadiness.blockers).toEqual(
+      expect.arrayContaining([
+        "controlled_contact_uses_generated_fixture_phone:jim",
+        "controlled_contact_uses_generated_fixture_phone:jennifer",
+      ]),
+    );
+
+    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559002",
+      robChatId: "chat-rob-readiness",
+      useTestContactPhones: false,
+      contactOverrides: [
+        { key: "jim", phone: "+16515559901", linqChatId: "chat-jim-test" },
+        {
+          key: "jennifer",
+          phone: "+16515559902",
+          linqChatId: "chat-jennifer-test",
+        },
+      ],
+    });
+
+    const ready = await t.query(internal.admin.getRobMultiplayerReadiness, {
+      robPhone: "+16515559002",
+    });
+
+    expect(ready.fixturePresent).toBe(true);
+    expect(ready.readyForControlledOutreach).toBe(true);
+    expect(ready.blockers).toEqual([]);
+    expect(ready.robChatIdPresent).toBe(true);
+    expect(ready.contactCount).toBe(15);
+    expect(ready.scheduleItemCount).toBe(5);
+    expect(
+      (ready.controlledContacts ?? []).map((contact) => ({
+        key: contact.key,
+        phonePresent: contact.phonePresent,
+        canReceiveTexts: contact.canReceiveTexts,
+        inPendingEvent: contact.inPendingEvent,
+        generatedFixturePhone: contact.generatedFixturePhone,
+      })),
+    ).toEqual([
+      {
+        key: "jim",
+        phonePresent: true,
+        canReceiveTexts: true,
+        inPendingEvent: true,
+        generatedFixturePhone: false,
+      },
+      {
+        key: "jennifer",
+        phonePresent: true,
+        canReceiveTexts: true,
+        inPendingEvent: true,
+        generatedFixturePhone: false,
+      },
+    ]);
+  });
+
   it("runs the seeded controlled event through approval, outreach, and caregiver reply state", async () => {
     const t = convexTest(schema, modules);
     const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {

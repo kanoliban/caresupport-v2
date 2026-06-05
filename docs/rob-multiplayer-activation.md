@@ -28,6 +28,18 @@ npx convex run admin:seedRobMultiplayerFixture '{
 The fixture is idempotent. Running it again updates the same Rob care case when
 `robPhone` already exists.
 
+After seeding, run the readiness check:
+
+```bash
+npx convex run admin:getRobMultiplayerReadiness '{
+  "robPhone": "+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE"
+}'
+```
+
+The first seed with `useTestContactPhones: true` should show the fixture exists
+but is **not** ready for controlled Linq outreach, because Jim/Jennifer still use
+generated placeholder fixture numbers. That is intentional.
+
 ## Seeded State
 
 The fixture creates:
@@ -74,6 +86,17 @@ npx convex run admin:seedRobMultiplayerFixture '{
   ]
 }'
 ```
+
+Then run readiness again:
+
+```bash
+npx convex run admin:getRobMultiplayerReadiness '{
+  "robPhone": "+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE"
+}'
+```
+
+Do not proceed until `readyForControlledOutreach` is `true` and `blockers` is an
+empty array.
 
 Then initiate the test through Rob's coordinator thread:
 
