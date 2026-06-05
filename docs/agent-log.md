@@ -8,6 +8,38 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Verified the production Convex deployment responds to read-only function calls
+  after the dashboard showed it running.
+- Confirmed production has the required Linq/model environment variables present
+  without printing secret values.
+- Added explicit production targeting to the Rob controlled activation runner and
+  live verifier through `--prod` / `CONVEX_PROD=true`.
+- Added guards so `--prod` cannot be combined with `--deployment-name`, avoiding
+  ambiguous activation targets.
+- Updated the Rob multiplayer activation checklist with production-specific
+  commands and the production activation gate.
+
+### Validation
+- `npx convex run admin:tableCounts --prod` returned production table counts.
+- Read-only env presence checks passed for Linq and model keys without printing
+  secret values.
+- Targeted script tests passed: `scripts/run-rob-controlled-activation.test.ts`
+  and `scripts/verify-rob-controlled-live.test.ts` passed 17 tests.
+- `npm run typecheck` passed.
+- `npm test` passed: 27 files / 313 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- Production is reachable and configured enough for read-only checks.
+- Rob multiplayer is not live-activated yet. The next production-mutating step
+  still requires explicit operator approval plus Rob phone/chat ID and the
+  approved controlled Jim/Jennifer test numbers.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Added `scripts/verify-rob-controlled-live.ts`.
 - Added `npm run rob:verify:controlled`.
 - The verifier checks `admin:getRobControlledLoopReport` after live

@@ -34,6 +34,7 @@ describe("verify Rob controlled live activation", () => {
       controlledContactKeys: ["jim", "jennifer"],
       deploymentName: "dev:care-test",
       envFile: undefined,
+      prod: undefined,
     });
 
     expect(parseLiveVerificationConfig([
@@ -48,7 +49,31 @@ describe("verify Rob controlled live activation", () => {
       controlledContactKeys: ["jim"],
       deploymentName: undefined,
       envFile: ".env.local",
+      prod: undefined,
     });
+  });
+
+  it("targets production explicitly and rejects ambiguous deployment options", () => {
+    expect(parseLiveVerificationConfig([], {
+      ROB_PHONE: "+16515559000",
+      CONVEX_PROD: "1",
+    })).toEqual({
+      robPhone: "+16515559000",
+      controlledContactKeys: ["jim", "jennifer"],
+      deploymentName: undefined,
+      envFile: undefined,
+      prod: true,
+    });
+
+    expect(() =>
+      parseLiveVerificationConfig([
+        "--rob-phone",
+        "+16515559000",
+        "--prod",
+        "--deployment-name",
+        "dev:care-test",
+      ]),
+    ).toThrow("Use either --prod");
   });
 
   it("rejects missing, invalid, or unsupported inputs", () => {
