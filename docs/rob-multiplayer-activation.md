@@ -41,6 +41,17 @@ no-Linq dry run, verifies the report, resets dry-run state, and verifies
 readiness again. After it passes, continue with the live test-number outreach
 from Rob's coordinator thread.
 
+After the test-number replies arrive, verify the live run with:
+
+```bash
+ROB_PHONE="+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE" \
+npm run rob:verify:controlled
+```
+
+The verifier requires `admin:getRobControlledLoopReport` to pass with live
+reply-audit evidence for Jim/Jennifer and a fresh Rob status message after the
+latest controlled caregiver reply.
+
 ## Seed Dev Fixture
 
 Use a dev Convex deployment, not production.
@@ -194,6 +205,15 @@ Expected behavior:
 - Rob receives a concise status update.
 - If the caregiver does not reply, the follow-up scanner sends one lightweight
   reminder after the due time.
+
+After both test contacts reply, run:
+
+```bash
+ROB_PHONE="+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE" \
+npm run rob:verify:controlled
+```
+
+Do not move to real Rob caregiver numbers until this verifier succeeds.
 
 ## Pass Criteria
 

@@ -8,6 +8,42 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Added `scripts/verify-rob-controlled-live.ts`.
+- Added `npm run rob:verify:controlled`.
+- The verifier checks `admin:getRobControlledLoopReport` after live
+  test-number replies and fails unless:
+  - the aggregate report passed
+  - fresh Rob status message evidence exists
+  - Jim/Jennifer have sent outreach, outbound message, inbound reply, and
+    cleared/deferred follow-up evidence
+  - request, approval, sent, live reply, and Rob status audit evidence exists
+  - no `live_reply_audit_missing:*` warnings remain
+- Updated the Rob activation checklist and Phase 2G tracker with the post-live
+  verifier command.
+
+### Validation
+- `npm test -- scripts/verify-rob-controlled-live.test.ts --reporter verbose`
+  passed: 8 tests.
+- `npm run typecheck` passed.
+- `npm test` passed: 27 files / 311 tests.
+- Smoke-ran `npm run rob:verify:controlled` with test-shaped Rob phone input;
+  it stopped at the paused-deployment guard and made no live claims.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq/iMessage traffic was sent.
+- The activation path now has both a pre-live runner and a post-live verifier.
+
+### Concerns
+- The configured Convex deployment is still paused.
+- Live activation still needs Rob's coordinator phone/chat id and two approved
+  test numbers or Linq chat ids for Jim/Jennifer.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Added `scripts/run-rob-controlled-activation.ts`.
 - Added `npm run rob:activate:controlled`.
 - The runner validates required operator inputs before touching Convex:
