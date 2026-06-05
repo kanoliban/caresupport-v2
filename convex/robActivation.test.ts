@@ -142,6 +142,86 @@ describe("Rob multiplayer activation fixture", () => {
     ]);
   });
 
+  it("refuses dry-run execution until readiness clears placeholder test numbers", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559003",
+      robChatId: "chat-rob-dry-run-blocked",
+      useTestContactPhones: true,
+    });
+
+    const result = await t.action(internal.admin.runRobControlledLoopDryRun, {
+      robPhone: "+16515559003",
+      contactKeys: ["jim"],
+      now: 1_776_000_000_000,
+    });
+    const detail = await t.query(
+      internal.admin.getRobMultiplayerReadiness,
+      { robPhone: "+16515559003" },
+    );
+
+    expect(result).toMatchObject({
+      ran: false,
+      reason: "not_ready",
+    });
+    expect(result.readiness.blockers).toContain(
+      "controlled_contact_uses_generated_fixture_phone:jim",
+    );
+    expect(detail.readyForControlledOutreach).toBe(false);
+  });
+
+  it("runs a no-Linq controlled dry run through outreach, reply, and Rob status rows", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559004",
+      robChatId: "chat-rob-dry-run",
+      useTestContactPhones: false,
+      contactOverrides: [
+        { key: "jim", phone: "+16515559911", linqChatId: "chat-jim-dry-run" },
+        {
+          key: "jennifer",
+          phone: "+16515559912",
+          linqChatId: "chat-jennifer-dry-run",
+        },
+      ],
+    });
+
+    const result = await t.action(internal.admin.runRobControlledLoopDryRun, {
+      robPhone: "+16515559004",
+      now: 1_776_000_000_000,
+    });
+    const detail = await t.query(internal.admin.getCareCaseDetail, {
+      careCaseId: fixture.careCaseId,
+    });
+    const messages = await t.query(api.messages.listByCareCase, {
+      careCaseId: fixture.careCaseId,
+    });
+
+    expect(result.ran).toBe(true);
+    expect(result.simulated).toHaveLength(2);
+    expect(result.simulated.map((item) => item.replyStatus)).toEqual([
+      "confirmed",
+      "confirmed",
+    ]);
+    expect(detail?.outreachAttempts.filter((attempt) => attempt.status === "sent"))
+      .toHaveLength(2);
+    const controlledEvent = detail?.coordinationEvents.find((event) =>
+      event.title === "Rob schedule confirmation controlled test"
+    );
+    expect(controlledEvent?.confirmedContactIds).toHaveLength(2);
+    expect(
+      messages.filter((message) =>
+        message.body.startsWith("CareSupport dry-run update:")
+      ),
+    ).toHaveLength(2);
+    expect(
+      messages.filter((message) =>
+        message.direction === "inbound" &&
+        message.body.includes("controlled dry-run schedule is correct")
+      ),
+    ).toHaveLength(2);
+  });
+
   it("runs the seeded controlled event through approval, outreach, and caregiver reply state", async () => {
     const t = convexTest(schema, modules);
     const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {

@@ -495,6 +495,9 @@ Acceptance criteria:
 Test targets:
 
 - [x] Local/Dev Convex smoke script or manual checklist
+  - `admin:seedRobMultiplayerFixture`
+  - `admin:getRobMultiplayerReadiness`
+  - `admin:runRobControlledLoopDryRun`
 - [ ] Linq test-number verification
 - [ ] Agent-log entry with exact data state left behind
 

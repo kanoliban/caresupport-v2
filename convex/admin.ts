@@ -1,4 +1,5 @@
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { migrateScheduleRow } from "./lib/scheduleBackfill";
@@ -10,6 +11,11 @@ const robContactOverrideValidator = v.object({
   linqChatId: v.optional(v.string()),
   canReceiveTexts: v.optional(v.boolean()),
 });
+
+const controlledContactKeyValidator = v.union(
+  v.literal("jim"),
+  v.literal("jennifer"),
+);
 
 const ROB_CONTACTS = [
   {
@@ -248,6 +254,61 @@ function fixtureIndexForKey(key: string): number {
 function isGeneratedFixturePhone(key: string, phone: string | undefined): boolean {
   const index = fixtureIndexForKey(key);
   return index >= 0 && phone === testPhoneForIndex(index);
+}
+
+interface ControlledContactReadiness {
+  key: string;
+  name: string;
+  contactId?: Id<"careContacts">;
+  phonePresent: boolean;
+  canReceiveTexts: boolean;
+  consentToContact?: boolean;
+  active: boolean;
+  linqChatIdPresent: boolean;
+  generatedFixturePhone: boolean;
+  inPendingEvent: boolean;
+}
+
+interface RobMultiplayerReadiness {
+  readyForControlledOutreach: boolean;
+  fixturePresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  userId?: Id<"users">;
+  careCaseId?: Id<"careCases">;
+  robChatIdPresent?: boolean;
+  contactCount?: number;
+  expectedContactCount?: number;
+  scheduleItemCount?: number;
+  expectedScheduleItemCount?: number;
+  controlledEventId?: Id<"coordinationEvents">;
+  controlledEventStatus?: "open" | "waiting" | "resolved" | "cancelled";
+  controlledContacts?: ControlledContactReadiness[];
+}
+
+interface AdminCareCaseDetail {
+  careCase: Doc<"careCases">;
+  user: Doc<"users"> | null;
+  recentMessages: Array<Doc<"messages">>;
+  memoryEntries: Array<Doc<"memoryEntries">>;
+  careContacts: Array<Doc<"careContacts">>;
+  coordinationEvents: Array<Doc<"coordinationEvents">>;
+  outreachAttempts: Array<Doc<"outreachAttempts">>;
+}
+
+interface RobControlledDryRunItem {
+  key: string;
+  contactName: string;
+  outreachAttemptId?: Id<"outreachAttempts">;
+  replyStatus?: string;
+  statusMessageId?: Id<"messages">;
+}
+
+interface RobControlledDryRunResult {
+  ran: boolean;
+  reason?: "not_ready" | "care_case_detail_missing";
+  readiness: RobMultiplayerReadiness;
+  simulated: RobControlledDryRunItem[];
 }
 
 export const listCareCases = internalQuery({
@@ -547,7 +608,7 @@ export const getRobMultiplayerReadiness = internalQuery({
     robPhone: v.string(),
     controlledContactKeys: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RobMultiplayerReadiness> => {
     const blockers: string[] = [];
     const warnings: string[] = [];
     const robPhone = normalizePhone(args.robPhone);
@@ -709,6 +770,179 @@ export const getRobMultiplayerReadiness = internalQuery({
       controlledContacts,
       blockers: [...new Set(blockers)],
       warnings: [...new Set(warnings)],
+    };
+  },
+});
+
+export const runRobControlledLoopDryRun = internalAction({
+  args: {
+    robPhone: v.string(),
+    contactKeys: v.optional(v.array(controlledContactKeyValidator)),
+    replyBody: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<RobControlledDryRunResult> => {
+    const readiness = await ctx.runQuery(
+      internal.admin.getRobMultiplayerReadiness,
+      {
+        robPhone: args.robPhone,
+        controlledContactKeys: args.contactKeys,
+      },
+    ) as RobMultiplayerReadiness;
+
+    if (!readiness.readyForControlledOutreach || !readiness.careCaseId) {
+      return {
+        ran: false,
+        reason: "not_ready",
+        readiness,
+        simulated: [],
+      };
+    }
+
+    const detail = await ctx.runQuery(internal.admin.getCareCaseDetail, {
+      careCaseId: readiness.careCaseId,
+    }) as AdminCareCaseDetail | null;
+    if (!detail?.user) {
+      return {
+        ran: false,
+        reason: "care_case_detail_missing",
+        readiness,
+        simulated: [],
+      };
+    }
+
+    const now = args.now ?? Date.now();
+    const contactKeys = args.contactKeys ?? ["jim", "jennifer"];
+    const eventTitle = "Rob schedule confirmation controlled test";
+    const simulated: RobControlledDryRunItem[] = [];
+
+    for (const key of contactKeys) {
+      const fixture = fixtureForKey(key);
+      const contact = fixture
+        ? detail.careContacts.find((candidate) => candidate.name === fixture.name)
+        : undefined;
+      if (!fixture || !contact) {
+        simulated.push({ key, contactName: key, replyStatus: "contact_missing" });
+        continue;
+      }
+
+      const created = await ctx.runMutation(
+        internal.outreachAttempts.createPendingFromModel,
+        {
+          careCaseId: readiness.careCaseId,
+          requestedByUserId: detail.user._id,
+          request: {
+            contactName: contact.name,
+            purpose: `Dry-run confirmation for ${eventTitle}`,
+            message: [
+              `Hi ${contact.name}, this is a CareSupport controlled dry run for Rob.`,
+              "Can you confirm your schedule availability?",
+            ].join(" "),
+            coordinationEventTitle: eventTitle,
+          },
+          approvalPrompt: `Dry run: approve outreach to ${contact.name}?`,
+        },
+      );
+      if (created.action !== "created" && created.action !== "updated") {
+        simulated.push({
+          key,
+          contactName: contact.name,
+          replyStatus: `outreach_${created.action}`,
+        });
+        continue;
+      }
+
+      const approved = await ctx.runMutation(
+        internal.outreachAttempts.resolveApprovalFromMessage,
+        {
+          careCaseId: readiness.careCaseId,
+          approvedByUserId: detail.user._id,
+          messageBody: `Yes, ask ${contact.name}`,
+        },
+      );
+      if (approved.action !== "approved" || !approved.id) {
+        simulated.push({
+          key,
+          contactName: contact.name,
+          replyStatus: `approval_${approved.action}`,
+        });
+        continue;
+      }
+
+      const linqChatId = contact.linqChatId || `dry-run-${key}-${now}`;
+      await ctx.runMutation(internal.outreachAttempts.markSent, {
+        outreachAttemptId: approved.id,
+        linqChatId,
+        linqMessageId: `dry-run-outreach-${key}-${now}`,
+      });
+
+      const resolved = await ctx.runMutation(internal.contactReplies.resolveInbound, {
+        senderPhone: contact.phone ?? "",
+        chatId: linqChatId,
+      });
+      if (!resolved?.coordinationEventId) {
+        simulated.push({
+          key,
+          contactName: contact.name,
+          outreachAttemptId: approved.id,
+          replyStatus: "reply_resolution_failed",
+        });
+        continue;
+      }
+
+      const replyBody =
+        args.replyBody ?? `Yes, this controlled dry-run schedule is correct for ${contact.name}.`;
+      const sourceMessageId = await ctx.runMutation(internal.mutations.logMessage, {
+        careCaseId: readiness.careCaseId,
+        userId: detail.user._id,
+        senderPhone: contact.phone,
+        actorType: "user",
+        direction: "inbound",
+        displayName: contact.name,
+        body: replyBody,
+        timestamp: now,
+        careContactId: resolved.careContactId,
+        coordinationEventId: resolved.coordinationEventId,
+        outreachAttemptId: resolved.outreachAttemptId,
+      });
+
+      const replyState = await ctx.runMutation(
+        internal.contactReplies.applyInboundReplyToEvent,
+        {
+          careCaseId: readiness.careCaseId,
+          careContactId: resolved.careContactId,
+          coordinationEventId: resolved.coordinationEventId,
+          outreachAttemptId: resolved.outreachAttemptId,
+          messageBody: replyBody,
+          sourceMessageId,
+        },
+      );
+
+      const statusResult = await ctx.runMutation(
+        internal.outreachAttempts.markCoordinationStatusSent,
+        {
+          coordinationEventId: resolved.coordinationEventId,
+          userId: detail.user._id,
+          messageBody:
+            `CareSupport dry-run update: ${contact.name} replied ${replyState.status} for ${eventTitle}.`,
+          linqMessageId: `dry-run-status-${key}-${now}`,
+          now,
+        },
+      );
+
+      simulated.push({
+        key,
+        contactName: contact.name,
+        outreachAttemptId: approved.id,
+        replyStatus: replyState.status,
+        statusMessageId: statusResult.messageId,
+      });
+    }
+
+    return {
+      ran: true,
+      readiness,
+      simulated,
     };
   },
 });
