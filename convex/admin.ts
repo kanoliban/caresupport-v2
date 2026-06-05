@@ -1093,22 +1093,10 @@ export const getRobControlledLoopReport = internalQuery({
           !message.careContactId
         )
       : [];
-    const statusAuditPresent = controlledEvent
-      ? auditLogs.some((audit) =>
-          audit.event === "response_sent" &&
-          audit.details.triggerMessage === "coordination_status_follow_up" &&
-          audit.details.coordinationEventId === controlledEvent._id
-        )
-      : false;
-    if (controlledEvent && robStatusMessages.length === 0) {
-      blockers.push("rob_status_message_missing");
-    }
-    if (controlledEvent && !statusAuditPresent) {
-      blockers.push("rob_status_audit_missing");
-    }
 
     const controlledContactKeys = args.controlledContactKeys ?? ["jim", "jennifer"];
     const contactReports: RobControlledLoopContactReport[] = [];
+    let latestInboundReplyAt: number | undefined;
 
     for (const key of controlledContactKeys) {
       const contactBlockers: string[] = [];
@@ -1150,16 +1138,15 @@ export const getRobControlledLoopReport = internalQuery({
       }
 
       const sentAttemptIds = sentAttempts.map((attempt) => attempt._id);
-      const outboundMessage = contact && controlledEvent
+      const outboundMessage = contact && controlledEvent && sentAttemptIds.length > 0
         ? messages
             .filter((message) =>
               message.coordinationEventId === controlledEvent._id &&
               message.careContactId === contact._id &&
               message.direction === "outbound" &&
               message.actorType === "assistant" &&
-              (sentAttemptIds.length === 0 ||
-                (message.outreachAttemptId &&
-                  sentAttemptIds.includes(message.outreachAttemptId)))
+              message.outreachAttemptId &&
+              sentAttemptIds.includes(message.outreachAttemptId)
             )
             .sort((a, b) => b.timestamp - a.timestamp)[0]
         : undefined;
@@ -1167,20 +1154,22 @@ export const getRobControlledLoopReport = internalQuery({
         contactBlockers.push(`outbound_message_missing:${key}`);
       }
 
-      const inboundReply = contact && controlledEvent
+      const inboundReply = contact && controlledEvent && sentAttemptIds.length > 0
         ? messages
             .filter((message) =>
               message.coordinationEventId === controlledEvent._id &&
               message.careContactId === contact._id &&
               message.direction === "inbound" &&
-              (sentAttemptIds.length === 0 ||
-                (message.outreachAttemptId &&
-                  sentAttemptIds.includes(message.outreachAttemptId)))
+              message.outreachAttemptId &&
+              sentAttemptIds.includes(message.outreachAttemptId)
             )
             .sort((a, b) => b.timestamp - a.timestamp)[0]
         : undefined;
       if (contact && controlledEvent && !inboundReply) {
         contactBlockers.push(`inbound_reply_missing:${key}`);
+      }
+      if (inboundReply) {
+        latestInboundReplyAt = Math.max(latestInboundReplyAt ?? 0, inboundReply.timestamp);
       }
 
       const confirmedOnEvent = Boolean(
@@ -1235,7 +1224,7 @@ export const getRobControlledLoopReport = internalQuery({
         outreachApproved: auditFor("outreach_approved"),
         outreachSent: auditFor("outreach_sent"),
         liveReplyReceived: auditFor("care_contact_reply_received"),
-        statusSentToRob: statusAuditPresent,
+        statusSentToRob: false,
       };
       if (latestSentAttempt && !audit.outreachRequested) {
         contactBlockers.push(`outreach_requested_audit_missing:${key}`);
@@ -1275,6 +1264,39 @@ export const getRobControlledLoopReport = internalQuery({
       contactReports.push(report);
     }
 
+    const freshRobStatusMessages = robStatusMessages.filter((message) =>
+      latestInboundReplyAt === undefined || message.timestamp >= latestInboundReplyAt
+    );
+    const freshStatusAuditPresent = controlledEvent
+      ? auditLogs.some((audit) =>
+          audit.event === "response_sent" &&
+          audit.details.triggerMessage === "coordination_status_follow_up" &&
+          audit.details.coordinationEventId === controlledEvent._id &&
+          (latestInboundReplyAt === undefined || audit.timestamp >= latestInboundReplyAt)
+        )
+      : false;
+    if (controlledEvent && freshRobStatusMessages.length === 0) {
+      blockers.push(
+        robStatusMessages.length === 0
+          ? "rob_status_message_missing"
+          : "rob_status_message_stale",
+      );
+    }
+    if (controlledEvent && !freshStatusAuditPresent) {
+      blockers.push(
+        auditLogs.some((audit) =>
+          audit.event === "response_sent" &&
+          audit.details.triggerMessage === "coordination_status_follow_up" &&
+          audit.details.coordinationEventId === controlledEvent._id
+        )
+          ? "rob_status_audit_stale"
+          : "rob_status_audit_missing",
+      );
+    }
+    for (const contactReport of contactReports) {
+      contactReport.audit.statusSentToRob = freshStatusAuditPresent;
+    }
+
     for (const contactReport of contactReports) {
       blockers.push(...contactReport.blockers);
       warnings.push(...contactReport.warnings);
@@ -1287,7 +1309,7 @@ export const getRobControlledLoopReport = internalQuery({
       careCaseId: careCase._id,
       controlledEventId: controlledEvent?._id,
       controlledEventStatus: controlledEvent?.status,
-      robStatusMessageIds: robStatusMessages.map((message) => message._id),
+      robStatusMessageIds: freshRobStatusMessages.map((message) => message._id),
       contacts: contactReports,
       blockers: [...new Set(blockers)],
       warnings: [...new Set(warnings)],

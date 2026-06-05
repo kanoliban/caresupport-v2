@@ -444,6 +444,117 @@ describe("Rob multiplayer activation fixture", () => {
     ]);
   });
 
+  it("requires Rob status evidence after the latest controlled reply", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559009",
+      robChatId: "chat-rob-fresh-status",
+      useTestContactPhones: false,
+      contactOverrides: [
+        { key: "jim", phone: "+16515559961", linqChatId: "chat-jim-fresh" },
+      ],
+    });
+    await t.action(internal.admin.runRobControlledLoopDryRun, {
+      robPhone: "+16515559009",
+      contactKeys: ["jim"],
+      now: 1_776_000_000_000,
+    });
+    await t.mutation(internal.admin.resetRobControlledLoopAfterDryRun, {
+      robPhone: "+16515559009",
+      controlledContactKeys: ["jim"],
+      now: 1_776_000_100_000,
+    });
+
+    await t.mutation(internal.outreachAttempts.createPendingFromModel, {
+      careCaseId: fixture.careCaseId,
+      requestedByUserId: fixture.userId,
+      request: {
+        contactName: "Jim Nelson",
+        purpose: "Confirm Rob's weekday coverage after reset",
+        message:
+          "Hi Jim, this is CareSupport helping Rob coordinate care. Can you confirm whether Monday-Friday 9am-5pm is still your usual schedule?",
+        coordinationEventTitle: "Rob schedule confirmation controlled test",
+      },
+    });
+    const approved = await t.mutation(
+      internal.outreachAttempts.resolveApprovalFromMessage,
+      {
+        careCaseId: fixture.careCaseId,
+        approvedByUserId: fixture.userId,
+        messageBody: "Yes, ask Jim",
+      },
+    );
+    if (approved.action !== "approved" || !approved.id) {
+      throw new Error("Expected approved outreach after reset");
+    }
+    await t.mutation(internal.outreachAttempts.markSent, {
+      outreachAttemptId: approved.id,
+      linqChatId: "chat-jim-live-after-reset",
+      linqMessageId: "msg-jim-live-after-reset",
+    });
+    const resolved = await t.mutation(internal.contactReplies.resolveInbound, {
+      senderPhone: "+16515559961",
+      chatId: "chat-jim-live-after-reset",
+    });
+    if (!resolved?.coordinationEventId) {
+      throw new Error("Expected Jim reply to resolve after reset");
+    }
+    const replyAt = 1_776_000_300_000;
+    const sourceMessageId = await t.mutation(internal.mutations.logMessage, {
+      careCaseId: fixture.careCaseId,
+      userId: fixture.userId,
+      senderPhone: "+16515559961",
+      actorType: "user",
+      direction: "inbound",
+      displayName: "Jim Nelson",
+      body: "Yes, Monday through Friday 9 to 5 is still right.",
+      timestamp: replyAt,
+      careContactId: resolved.careContactId,
+      coordinationEventId: resolved.coordinationEventId,
+      outreachAttemptId: resolved.outreachAttemptId,
+    });
+    await t.mutation(internal.contactReplies.applyInboundReplyToEvent, {
+      careCaseId: fixture.careCaseId,
+      careContactId: resolved.careContactId,
+      coordinationEventId: resolved.coordinationEventId,
+      outreachAttemptId: resolved.outreachAttemptId,
+      messageBody: "Yes, Monday through Friday 9 to 5 is still right.",
+      sourceMessageId,
+    });
+
+    const staleReport = await t.query(internal.admin.getRobControlledLoopReport, {
+      robPhone: "+16515559009",
+      controlledContactKeys: ["jim"],
+    });
+
+    expect(staleReport.passed).toBe(false);
+    expect(staleReport.blockers).toEqual(
+      expect.arrayContaining([
+        "rob_status_message_stale",
+        "rob_status_audit_stale",
+      ]),
+    );
+    expect(staleReport.robStatusMessageIds).toEqual([]);
+
+    await t.mutation(internal.outreachAttempts.markCoordinationStatusSent, {
+      coordinationEventId: resolved.coordinationEventId,
+      userId: fixture.userId,
+      messageBody: "CareSupport update: Jim confirmed Monday through Friday 9 to 5.",
+      linqMessageId: "msg-rob-fresh-status-after-live-reply",
+      now: replyAt + 1_000,
+    });
+
+    const freshReport = await t.query(internal.admin.getRobControlledLoopReport, {
+      robPhone: "+16515559009",
+      controlledContactKeys: ["jim"],
+    });
+
+    expect(freshReport.passed).toBe(true);
+    expect(freshReport.blockers).toEqual([]);
+    expect(freshReport.robStatusMessageIds).toHaveLength(1);
+    expect(freshReport.contacts[0].audit.statusSentToRob).toBe(true);
+  });
+
   it("blocks activation when a controlled caregiver phone created another care case", async () => {
     const t = convexTest(schema, modules);
     await t.mutation(internal.admin.seedRobMultiplayerFixture, {

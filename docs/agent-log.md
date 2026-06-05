@@ -8,6 +8,39 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Hardened `internal.admin.getRobControlledLoopReport` so live pass evidence
+  cannot be satisfied by stale dry-run state.
+- The report now:
+  - ignores old dry-run messages when no current sent outreach attempt exists
+  - requires Rob status messages/audits to be at or after the latest controlled
+    caregiver reply when replies exist
+  - returns only fresh Rob status message ids in the report
+- Added regression coverage for the sequence:
+  dry-run, reset, live-style caregiver reply, stale status blocked, fresh Rob
+  status update accepted.
+- Updated the activation checklist to document the fresh-status pass criterion.
+
+### Validation
+- `npm test -- convex/robActivation.test.ts --reporter verbose` passed: 10 tests.
+- `npm run typecheck` passed.
+- `npm test` passed: 25 files / 296 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq messages were sent.
+- The controlled-loop report is safer for the real test-number run because a
+  stale dry-run Rob update can no longer make a live run appear successful.
+
+### Concerns
+- Live activation still needs the external test-number inputs and the intended
+  Convex deployment before actual iMessage/Linq outreach can be verified.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Merged PR #66 (`feat(coordination): add Rob controlled loop report`) into
   `main`.
 - Added `internal.admin.resetRobControlledLoopAfterDryRun`.
