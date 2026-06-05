@@ -8,6 +8,46 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Added `scripts/run-rob-controlled-activation.ts`.
+- Added `npm run rob:activate:controlled`.
+- The runner validates required operator inputs before touching Convex:
+  - `ROB_PHONE`
+  - `ROB_CHAT_ID`
+  - `JIM_TEST_PHONE`
+  - `JENNIFER_TEST_PHONE`
+  - optional Jim/Jennifer Linq chat ids
+- The runner executes only the safe pre-live sequence:
+  deployment check, seed, readiness, no-Linq dry run, report, reset, readiness.
+- It does not send Linq/iMessage traffic or execute approved outreach.
+- Updated `docs/rob-multiplayer-activation.md` and Phase 2G tracker with the
+  runner command.
+
+### Validation
+- `npm test -- scripts/run-rob-controlled-activation.test.ts --reporter verbose`
+  passed: 7 tests.
+- `npm run typecheck` passed.
+- `npm test` passed: 26 files / 303 tests.
+- Smoke-ran `npm run rob:activate:controlled` with test-shaped inputs against
+  the configured deployment; it stopped at the paused-deployment guard before
+  any seeding or dry-run mutation.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq/iMessage traffic was sent.
+- Once the configured Convex deployment is resumed and real Rob/test-number
+  inputs are available, the operator can run the preflight as one command rather
+  than manually copying the sequence.
+
+### Concerns
+- The same external blocker remains: the configured Convex deployment is paused.
+- Live activation still needs Rob's coordinator phone/chat id and two approved
+  test numbers or Linq chat ids for Jim/Jennifer.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Confirmed PR #68 merged into `main`.
 - Checked local deployment configuration without printing secret values.
 - Verified Convex environment variable presence for:

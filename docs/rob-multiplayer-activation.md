@@ -13,6 +13,34 @@ order:
 
 Do not use real caregiver numbers until the controlled test passes.
 
+## Operator Runner
+
+After the target Convex deployment is resumed, the safe preflight sequence can be
+run with:
+
+```bash
+ROB_PHONE="+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE" \
+ROB_CHAT_ID="REPLACE_WITH_ROB_LINQ_CHAT_ID" \
+JIM_TEST_PHONE="+1TEST_NUMBER_1" \
+JENNIFER_TEST_PHONE="+1TEST_NUMBER_2" \
+npm run rob:activate:controlled
+```
+
+Optional:
+
+```bash
+JIM_TEST_LINQ_CHAT_ID="TEST_CHAT_1"
+JENNIFER_TEST_LINQ_CHAT_ID="TEST_CHAT_2"
+CONVEX_DEPLOYMENT_NAME="dev:REPLACE_WITH_DEPLOYMENT"
+CONVEX_ENV_FILE=".env.local"
+```
+
+The runner does not send Linq/iMessage traffic. It checks that the deployment is
+runnable, seeds Rob with the approved test contacts, runs readiness, runs the
+no-Linq dry run, verifies the report, resets dry-run state, and verifies
+readiness again. After it passes, continue with the live test-number outreach
+from Rob's coordinator thread.
+
 ## Seed Dev Fixture
 
 Use a dev Convex deployment, not production.
