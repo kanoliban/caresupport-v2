@@ -104,6 +104,26 @@ export async function fetchEventsForRange(
   return data.items ?? [];
 }
 
+export async function getCalendarEvent(
+  accessToken: string,
+  eventId: string,
+): Promise<CalendarEvent | null> {
+  const response = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  // 404/410 → the event no longer exists (deleted).
+  if (response.status === 404 || response.status === 410) return null;
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Calendar get failed (${response.status}): ${err}`);
+  }
+  const event = (await response.json()) as CalendarEvent & { status?: string };
+  // A cancelled event is effectively deleted from the user's perspective.
+  if (event.status === "cancelled") return null;
+  return event;
+}
+
 export async function createCalendarEvent(
   accessToken: string,
   event: {

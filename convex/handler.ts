@@ -44,6 +44,7 @@ import {
   deleteCalendarEvent,
   formatEventsForPrompt,
 } from "./lib/providers/googleCalendar";
+import { computeReminderFireAt } from "./lib/reminderTiming";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
@@ -631,6 +632,28 @@ export const handleMessage = internalAction({
                 details: { calendarEventId: created.id },
                 timestamp: Date.now(),
               });
+              // Schedule a "heads up" reminder ahead of the event start.
+              const startIso = created.start?.dateTime;
+              if (startIso) {
+                const startMs = Date.parse(startIso);
+                if (!Number.isNaN(startMs)) {
+                  const fireAt = computeReminderFireAt(startMs, Date.now(), isTestEnv);
+                  if (fireAt !== null) {
+                    await ctx.scheduler.runAt(
+                      fireAt,
+                      internal.calendarReminders.sendCalendarReminder,
+                      {
+                        careCaseId,
+                        userId,
+                        chatId,
+                        eventId: created.id,
+                        expectedStartMs: startMs,
+                        title: update.title,
+                      },
+                    );
+                  }
+                }
+              }
             } else if (update.action === "update" && update.eventId) {
               await updateCalendarEvent(accessToken, update.eventId, {
                 title: update.title,
@@ -839,7 +862,7 @@ async function logInbound(
   });
 }
 
-async function getValidGoogleToken(
+export async function getValidGoogleToken(
   ctx: ActionCtx,
   userId: Id<"users">,
   _timezone: string,
