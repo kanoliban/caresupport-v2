@@ -456,6 +456,7 @@ export const handleMessage = internalAction({
           careCaseId,
           careContactId: careContactReply.careContactId,
           coordinationEventId: careContactReply.coordinationEventId,
+          outreachAttemptId: careContactReply.outreachAttemptId,
           messageBody,
           sourceMessageId: inboundMessageId,
         },

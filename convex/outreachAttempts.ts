@@ -32,6 +32,32 @@ interface PendingAttemptWithContact {
   contact: Doc<"careContacts">;
 }
 
+const DEFAULT_OUTREACH_FOLLOW_UP_DELAY_MS = 6 * 60 * 60 * 1000;
+
+export interface DueOutreachFollowUp {
+  kind: "caregiver_reminder";
+  outreachAttemptId: Id<"outreachAttempts">;
+  careCaseId: Id<"careCases">;
+  userId: Id<"users">;
+  careContactId: Id<"careContacts">;
+  coordinationEventId: Id<"coordinationEvents">;
+  contactName: string;
+  contactPhone?: string;
+  chatId?: string;
+  messageBody: string;
+  dueAt: number;
+}
+
+export interface DueCoordinationStatusUpdate {
+  kind: "coordinator_status";
+  careCaseId: Id<"careCases">;
+  userId: Id<"users">;
+  coordinationEventId: Id<"coordinationEvents">;
+  userChatId?: string;
+  messageBody: string;
+  dueAt: number;
+}
+
 export function isOutreachApprovalMessage(message: string): boolean {
   const normalized = message.trim().toLowerCase();
   if (!normalized) return false;
@@ -61,6 +87,76 @@ function blockReasonForContact(contact: Doc<"careContacts">): string | null {
   if (!contact.canReceiveTexts) return "texting_disabled";
   if (contact.consentToContact === false) return "contact_consent_denied";
   return null;
+}
+
+function normalizeLimit(limit: number | undefined): number {
+  if (!Number.isFinite(limit ?? 0)) return 25;
+  return Math.min(Math.max(Math.trunc(limit ?? 25), 1), 100);
+}
+
+function careRecipientLabel(
+  careCase: Doc<"careCases"> | null,
+  user: Doc<"users"> | null,
+): string {
+  return careCase?.careRecipientName?.trim() || user?.name?.trim() || "them";
+}
+
+function caregiverReminderBody(args: {
+  careRecipientName: string;
+  eventTitle: string;
+}): string {
+  return [
+    `Quick follow-up from CareSupport for ${args.careRecipientName}:`,
+    `just checking whether you saw my earlier message about ${args.eventTitle}.`,
+    "When you can, reply yes, no, or what timing works for you.",
+  ].join(" ");
+}
+
+function contactNames(
+  contactsById: Map<Id<"careContacts">, Doc<"careContacts">>,
+  ids: Array<Id<"careContacts">> | undefined,
+): string[] {
+  return (ids ?? [])
+    .map((id) => contactsById.get(id)?.name)
+    .filter((name): name is string => Boolean(name));
+}
+
+function coordinationStatusBody(args: {
+  eventTitle: string;
+  confirmedNames: string[];
+  pendingNames: string[];
+  declinedNames: string[];
+}): string {
+  const parts = [`CareSupport update: I am still tracking ${args.eventTitle}.`];
+  if (args.confirmedNames.length) {
+    parts.push(`Confirmed: ${args.confirmedNames.join(", ")}.`);
+  }
+  if (args.pendingNames.length) {
+    parts.push(`Still waiting on: ${args.pendingNames.join(", ")}.`);
+  }
+  if (args.declinedNames.length) {
+    parts.push(`Declined/unavailable: ${args.declinedNames.join(", ")}.`);
+  }
+  parts.push(
+    "I have not contacted anyone else. If you want me to ask another backup, tell me who to text.",
+  );
+  return parts.join(" ");
+}
+
+function hasReplyAfterSent(
+  attempt: Doc<"outreachAttempts">,
+  contact: Doc<"careContacts">,
+  event: Doc<"coordinationEvents">,
+): boolean {
+  const sentAt = attempt.sentAt ?? attempt.updatedAt;
+  if (contact.lastReplyAt !== undefined && contact.lastReplyAt >= sentAt) {
+    return true;
+  }
+  return Boolean(
+    event.lastReplyContactId === contact._id &&
+      event.lastReplyAt !== undefined &&
+      event.lastReplyAt >= sentAt,
+  );
 }
 
 async function findCareContactByName(
@@ -259,6 +355,128 @@ export const getApprovedForExecution = internalQuery({
     }
 
     return { attempt, contact, coordinationEvent, requestedByUser };
+  },
+});
+
+export const listDueOutreachFollowUps = internalQuery({
+  args: {
+    now: v.number(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<DueOutreachFollowUp[]> => {
+    const limit = normalizeLimit(args.limit);
+    const attempts = await ctx.db.query("outreachAttempts").collect();
+    const dueAttempts = attempts
+      .filter((attempt) =>
+        attempt.status === "sent" &&
+        attempt.nextActionAt !== undefined &&
+        attempt.nextActionAt <= args.now,
+      )
+      .sort((a, b) => (a.nextActionAt ?? 0) - (b.nextActionAt ?? 0))
+      .slice(0, limit);
+
+    const results: DueOutreachFollowUp[] = [];
+    for (const attempt of dueAttempts) {
+      const [contact, event, user, careCase] = await Promise.all([
+        ctx.db.get(attempt.careContactId),
+        ctx.db.get(attempt.coordinationEventId),
+        ctx.db.get(attempt.requestedByUserId),
+        ctx.db.get(attempt.careCaseId),
+      ]);
+      if (
+        !contact ||
+        !event ||
+        !user ||
+        !careCase ||
+        contact.careCaseId !== attempt.careCaseId ||
+        event.careCaseId !== attempt.careCaseId ||
+        user.careCaseId !== attempt.careCaseId ||
+        (event.status !== "open" && event.status !== "waiting") ||
+        hasReplyAfterSent(attempt, contact, event)
+      ) {
+        continue;
+      }
+
+      const careRecipientName = careRecipientLabel(careCase, user);
+      results.push({
+        kind: "caregiver_reminder",
+        outreachAttemptId: attempt._id,
+        careCaseId: attempt.careCaseId,
+        userId: user._id,
+        careContactId: contact._id,
+        coordinationEventId: event._id,
+        contactName: contact.name,
+        contactPhone: contact.phone,
+        chatId: attempt.linqChatId ?? contact.linqChatId,
+        messageBody: caregiverReminderBody({
+          careRecipientName,
+          eventTitle: event.title,
+        }),
+        dueAt: attempt.nextActionAt ?? attempt.updatedAt,
+      });
+    }
+
+    return results;
+  },
+});
+
+export const listDueCoordinationStatusUpdates = internalQuery({
+  args: {
+    now: v.number(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<DueCoordinationStatusUpdate[]> => {
+    const limit = normalizeLimit(args.limit);
+    const events = await ctx.db.query("coordinationEvents").collect();
+    const dueEvents = events
+      .filter((event) =>
+        (event.status === "open" || event.status === "waiting") &&
+        event.nextActionAt !== undefined &&
+        event.nextActionAt <= args.now,
+      )
+      .sort((a, b) => (a.nextActionAt ?? 0) - (b.nextActionAt ?? 0))
+      .slice(0, limit);
+
+    const results: DueCoordinationStatusUpdate[] = [];
+    for (const event of dueEvents) {
+      const user = event.createdByUserId
+        ? await ctx.db.get(event.createdByUserId)
+        : await ctx.db
+            .query("users")
+            .withIndex("by_care_case", (q) => q.eq("careCaseId", event.careCaseId))
+            .first();
+      if (!user || user.careCaseId !== event.careCaseId) continue;
+
+      const contactIds = [
+        ...(event.confirmedContactIds ?? []),
+        ...(event.pendingContactIds ?? []),
+        ...(event.declinedContactIds ?? []),
+      ];
+      const contactsById = new Map<Id<"careContacts">, Doc<"careContacts">>();
+      for (const contactId of contactIds) {
+        const contact = await ctx.db.get(contactId);
+        if (contact?.careCaseId === event.careCaseId) {
+          contactsById.set(contact._id, contact);
+        }
+      }
+
+      results.push({
+        kind: "coordinator_status",
+        careCaseId: event.careCaseId,
+        userId: user._id,
+        coordinationEventId: event._id,
+        userChatId: user.chatId,
+        messageBody: coordinationStatusBody({
+          eventTitle: event.title,
+          confirmedNames: contactNames(contactsById, event.confirmedContactIds),
+          pendingNames: contactNames(contactsById, event.pendingContactIds),
+          declinedNames: contactNames(contactsById, event.declinedContactIds),
+        }),
+        dueAt: event.nextActionAt ?? event.updatedAt,
+      });
+    }
+
+    return results;
   },
 });
 
@@ -467,6 +685,7 @@ export const markSent = internalMutation({
       status: "sent",
       linqChatId: args.linqChatId,
       linqMessageId: args.linqMessageId,
+      nextActionAt: now + DEFAULT_OUTREACH_FOLLOW_UP_DELAY_MS,
       sentAt: now,
       updatedAt: now,
     });
@@ -505,6 +724,202 @@ export const markSent = internalMutation({
     });
 
     return { action: "sent", id: attempt._id, messageId };
+  },
+});
+
+export const markOutreachFollowUpSent = internalMutation({
+  args: {
+    outreachAttemptId: v.id("outreachAttempts"),
+    messageBody: v.string(),
+    linqMessageId: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const attempt = await ctx.db.get(args.outreachAttemptId);
+    if (!attempt || attempt.status !== "sent") {
+      throw new Error("Sent outreach attempt not found for follow-up");
+    }
+
+    const [contact, event] = await Promise.all([
+      ctx.db.get(attempt.careContactId),
+      ctx.db.get(attempt.coordinationEventId),
+    ]);
+    if (
+      !contact ||
+      !event ||
+      contact.careCaseId !== attempt.careCaseId ||
+      event.careCaseId !== attempt.careCaseId
+    ) {
+      throw new Error("Follow-up target not found for care case");
+    }
+
+    const now = args.now ?? Date.now();
+    const messageId = await ctx.db.insert("messages", {
+      careCaseId: attempt.careCaseId,
+      userId: attempt.requestedByUserId,
+      senderPhone: contact.phone,
+      actorType: "assistant",
+      direction: "outbound",
+      displayName: contact.name,
+      body: args.messageBody,
+      timestamp: now,
+      linqMessageId: args.linqMessageId,
+      deliveryStatus: args.linqMessageId ? "sent" : undefined,
+      careContactId: contact._id,
+      coordinationEventId: event._id,
+      outreachAttemptId: attempt._id,
+    });
+
+    await ctx.db.patch(attempt._id, {
+      nextActionAt: undefined,
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("auditLogs", {
+      careCaseId: attempt.careCaseId,
+      userId: attempt.requestedByUserId,
+      event: "response_sent",
+      phone: contact.phone,
+      details: {
+        triggerMessage: "outreach_follow_up",
+        responseLength: args.messageBody.length,
+        leakageCheckPassed: true,
+        outreachAttemptId: attempt._id,
+        coordinationEventId: event._id,
+        careContactId: contact._id,
+        linqMessageId: args.linqMessageId,
+      },
+      timestamp: now,
+    });
+
+    return { action: "sent", id: attempt._id, messageId };
+  },
+});
+
+export const markOutreachFollowUpSkipped = internalMutation({
+  args: {
+    outreachAttemptId: v.id("outreachAttempts"),
+    reason: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const attempt = await ctx.db.get(args.outreachAttemptId);
+    if (!attempt) {
+      throw new Error("Outreach attempt not found for follow-up skip");
+    }
+
+    const now = args.now ?? Date.now();
+    await ctx.db.patch(attempt._id, {
+      nextActionAt: undefined,
+      failureReason: `follow_up_skipped:${args.reason}`,
+      updatedAt: now,
+    });
+    await ctx.db.insert("auditLogs", {
+      careCaseId: attempt.careCaseId,
+      userId: attempt.requestedByUserId,
+      event: "response_blocked",
+      details: {
+        triggerMessage: "outreach_follow_up",
+        outreachAttemptId: attempt._id,
+        coordinationEventId: attempt.coordinationEventId,
+        careContactId: attempt.careContactId,
+        status: attempt.status,
+        reason: args.reason,
+      },
+      timestamp: now,
+    });
+
+    return { action: "skipped", id: attempt._id, reason: args.reason };
+  },
+});
+
+export const markCoordinationStatusSent = internalMutation({
+  args: {
+    coordinationEventId: v.id("coordinationEvents"),
+    userId: v.id("users"),
+    messageBody: v.string(),
+    linqMessageId: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const [event, user] = await Promise.all([
+      ctx.db.get(args.coordinationEventId),
+      ctx.db.get(args.userId),
+    ]);
+    if (!event || !user || user.careCaseId !== event.careCaseId) {
+      throw new Error("Coordination status target not found");
+    }
+
+    const now = args.now ?? Date.now();
+    const messageId = await ctx.db.insert("messages", {
+      careCaseId: event.careCaseId,
+      userId: user._id,
+      senderPhone: user.phone,
+      actorType: "assistant",
+      direction: "outbound",
+      displayName: user.name,
+      body: args.messageBody,
+      timestamp: now,
+      linqMessageId: args.linqMessageId,
+      deliveryStatus: args.linqMessageId ? "sent" : undefined,
+      coordinationEventId: event._id,
+    });
+
+    await ctx.db.patch(event._id, {
+      nextActionAt: undefined,
+      updatedAt: now,
+    });
+    await ctx.db.insert("auditLogs", {
+      careCaseId: event.careCaseId,
+      userId: user._id,
+      event: "response_sent",
+      phone: user.phone,
+      details: {
+        triggerMessage: "coordination_status_follow_up",
+        responseLength: args.messageBody.length,
+        leakageCheckPassed: true,
+        coordinationEventId: event._id,
+        linqMessageId: args.linqMessageId,
+      },
+      timestamp: now,
+    });
+
+    return { action: "sent", id: event._id, messageId };
+  },
+});
+
+export const markCoordinationStatusSkipped = internalMutation({
+  args: {
+    coordinationEventId: v.id("coordinationEvents"),
+    userId: v.id("users"),
+    reason: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.coordinationEventId);
+    if (!event) {
+      throw new Error("Coordination event not found for follow-up skip");
+    }
+
+    const now = args.now ?? Date.now();
+    await ctx.db.patch(event._id, {
+      nextActionAt: undefined,
+      updatedAt: now,
+    });
+    await ctx.db.insert("auditLogs", {
+      careCaseId: event.careCaseId,
+      userId: args.userId,
+      event: "response_blocked",
+      details: {
+        triggerMessage: "coordination_status_follow_up",
+        coordinationEventId: event._id,
+        status: event.status,
+        reason: args.reason,
+      },
+      timestamp: now,
+    });
+
+    return { action: "skipped", id: event._id, reason: args.reason };
   },
 });
 

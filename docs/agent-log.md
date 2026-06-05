@@ -5,6 +5,44 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-06-04 — Codex
+
+### What I did
+- Merged PR #61 into `main`, making structured care retrieval the baseline.
+- Created branch `liban/follow-up-scanner` for Phase 2F.
+- Added the coordination follow-up scanner:
+  - sent outreach now gets a first `nextActionAt` follow-up clock
+  - due sent outreach can produce one caregiver reminder
+  - caregiver replies clear the reminder clock or defer it when the reply asks
+    CareSupport to check later
+  - due coordination events can produce a concise status update back to the
+    primary coordinator
+  - follow-up sends/skips are logged as messages and audit rows
+- Wired `internal.reminders.dispatchCoordinationFollowUps` into Convex cron every
+  15 minutes.
+- Added `convex/followUps.test.ts` to validate due discovery, one-shot reminders,
+  reply clearing/deferral, coordinator status updates, and Linq dispatch.
+- Marked Phase 2F complete in `tasks/coordination-phase-2.md`.
+
+### Validation
+- `npm test -- convex/followUps.test.ts --reporter verbose` passed.
+- `npm run typecheck` passed.
+- `npm test -- convex/followUps.test.ts convex/outreachAttempts.test.ts convex/contactReplies.test.ts convex/coordinationLoop.test.ts convex/handler.test.ts --reporter verbose` passed.
+
+### State I'm leaving
+- The multiplayer loop can now continue after initial outreach instead of
+  stopping at "I asked them."
+- The scanner does not contact fallback caregivers automatically; it tells Rob
+  what remains open and asks who to text next.
+- If `LINQ_API_TOKEN` is missing, due follow-ups are not cleared.
+
+### Concerns
+- This is still engine-level activation. Phase 2G must seed/create Rob's real
+  care case, contacts, and a controlled live-test checklist before using real
+  caregiver numbers.
+
+---
+
 ## 2026-06-03 — Codex
 
 ### What I did
