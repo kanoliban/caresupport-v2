@@ -8,6 +8,46 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Added `internal.admin.getRobControlledLoopReport`.
+- The report inspects persisted Convex state for the Rob controlled loop instead
+  of simulating anything:
+  - Rob user/care case status
+  - controlled coordination event
+  - sent outreach attempts
+  - source-linked outbound caregiver messages
+  - source-linked inbound caregiver replies
+  - event reply state
+  - cleared/deferred follow-up clocks
+  - Rob status message/audit evidence
+  - accidental extra care cases for controlled caregiver phone numbers
+- Updated `docs/rob-multiplayer-activation.md` to require the report before live
+  test-number outreach or real Rob caregiver numbers.
+- Updated the Phase 2G tracker with the report command.
+
+### Validation
+- `npm test -- convex/robActivation.test.ts --reporter verbose` passed: 8 tests.
+- `npm run typecheck` passed.
+- `npm test` passed: 25 files / 294 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq messages were sent.
+- The code can now answer whether the controlled Rob multiplayer loop has enough
+  persisted evidence to proceed.
+- Live activation is still gated on Rob's coordinator phone/chat id, two approved
+  test numbers or Linq chat ids, and the intended Convex deployment.
+
+### Concerns
+- A no-Linq dry run can pass with `live_reply_audit_missing:*` warnings because
+  webhook-only reply audits require real Linq/iMessage inbound traffic. Those
+  warnings should disappear in the real test-number run.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Added `internal.admin.runRobControlledLoopDryRun`.
 - The dry run refuses to execute unless `getRobMultiplayerReadiness` is clear.
 - When ready, the dry run exercises the seeded Rob fixture through:

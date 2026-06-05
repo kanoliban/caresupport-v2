@@ -222,6 +222,192 @@ describe("Rob multiplayer activation fixture", () => {
     ).toHaveLength(2);
   });
 
+  it("reports activation blockers before the controlled loop has evidence", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559005",
+      robChatId: "chat-rob-report-before-run",
+      useTestContactPhones: false,
+      contactOverrides: [
+        { key: "jim", phone: "+16515559921", linqChatId: "chat-jim-report" },
+        {
+          key: "jennifer",
+          phone: "+16515559922",
+          linqChatId: "chat-jennifer-report",
+        },
+      ],
+    });
+
+    const report = await t.query(internal.admin.getRobControlledLoopReport, {
+      robPhone: "+16515559005",
+    });
+
+    expect(report.fixturePresent).toBe(true);
+    expect(report.passed).toBe(false);
+    expect(report.blockers).toEqual(
+      expect.arrayContaining([
+        "rob_status_message_missing",
+        "rob_status_audit_missing",
+        "sent_outreach_missing:jim",
+        "outbound_message_missing:jim",
+        "inbound_reply_missing:jim",
+        "sent_outreach_missing:jennifer",
+        "outbound_message_missing:jennifer",
+        "inbound_reply_missing:jennifer",
+      ]),
+    );
+    expect(report.contacts.map((contact) => ({
+      key: contact.key,
+      passed: contact.passed,
+      sentOutreachAttemptIds: contact.sentOutreachAttemptIds,
+      inboundReplyMessageId: contact.inboundReplyMessageId,
+    }))).toEqual([
+      {
+        key: "jim",
+        passed: false,
+        sentOutreachAttemptIds: [],
+        inboundReplyMessageId: undefined,
+      },
+      {
+        key: "jennifer",
+        passed: false,
+        sentOutreachAttemptIds: [],
+        inboundReplyMessageId: undefined,
+      },
+    ]);
+  });
+
+  it("reports the no-Linq controlled dry run as passing with source-linked evidence", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559006",
+      robChatId: "chat-rob-report-pass",
+      useTestContactPhones: false,
+      contactOverrides: [
+        { key: "jim", phone: "+16515559931", linqChatId: "chat-jim-report-pass" },
+        {
+          key: "jennifer",
+          phone: "+16515559932",
+          linqChatId: "chat-jennifer-report-pass",
+        },
+      ],
+    });
+
+    await t.action(internal.admin.runRobControlledLoopDryRun, {
+      robPhone: "+16515559006",
+      now: 1_776_000_000_000,
+    });
+
+    const report = await t.query(internal.admin.getRobControlledLoopReport, {
+      robPhone: "+16515559006",
+    });
+
+    expect(report.passed).toBe(true);
+    expect(report.blockers).toEqual([]);
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([
+        "live_reply_audit_missing:jim",
+        "live_reply_audit_missing:jennifer",
+      ]),
+    );
+    expect(report.robStatusMessageIds).toHaveLength(2);
+    expect(report.contacts.map((contact) => ({
+      key: contact.key,
+      passed: contact.passed,
+      confirmedOnEvent: contact.confirmedOnEvent,
+      pendingOnEvent: contact.pendingOnEvent,
+      followUpClockClearedOrDeferred: contact.followUpClockClearedOrDeferred,
+      audit: contact.audit,
+      hasOutboundMessage: Boolean(contact.outboundMessageId),
+      hasInboundReply: Boolean(contact.inboundReplyMessageId),
+    }))).toEqual([
+      {
+        key: "jim",
+        passed: true,
+        confirmedOnEvent: true,
+        pendingOnEvent: false,
+        followUpClockClearedOrDeferred: true,
+        audit: {
+          outreachRequested: true,
+          outreachApproved: true,
+          outreachSent: true,
+          liveReplyReceived: false,
+          statusSentToRob: true,
+        },
+        hasOutboundMessage: true,
+        hasInboundReply: true,
+      },
+      {
+        key: "jennifer",
+        passed: true,
+        confirmedOnEvent: true,
+        pendingOnEvent: false,
+        followUpClockClearedOrDeferred: true,
+        audit: {
+          outreachRequested: true,
+          outreachApproved: true,
+          outreachSent: true,
+          liveReplyReceived: false,
+          statusSentToRob: true,
+        },
+        hasOutboundMessage: true,
+        hasInboundReply: true,
+      },
+    ]);
+  });
+
+  it("blocks activation when a controlled caregiver phone created another care case", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+      robPhone: "+16515559007",
+      robChatId: "chat-rob-report-extra-case",
+      useTestContactPhones: false,
+      contactOverrides: [
+        { key: "jim", phone: "+16515559941", linqChatId: "chat-jim-extra-case" },
+        {
+          key: "jennifer",
+          phone: "+16515559942",
+          linqChatId: "chat-jennifer-extra-case",
+        },
+      ],
+    });
+    await t.action(internal.admin.runRobControlledLoopDryRun, {
+      robPhone: "+16515559007",
+      now: 1_776_000_000_000,
+    });
+
+    await t.run(async (ctx) => {
+      const careCaseId = await ctx.db.insert("careCases", {
+        title: "Accidental Jim primary case",
+        status: "active",
+        timezone: "America/Chicago",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      await ctx.db.insert("users", {
+        phone: "+16515559941",
+        name: "Jim Nelson",
+        careCaseId,
+        status: "active",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const report = await t.query(internal.admin.getRobControlledLoopReport, {
+      robPhone: "+16515559007",
+    });
+    const jim = report.contacts.find((contact) => contact.key === "jim");
+
+    expect(report.passed).toBe(false);
+    expect(report.blockers).toContain(
+      "extra_care_case_for_controlled_contact_phone:jim",
+    );
+    expect(jim?.passed).toBe(false);
+    expect(jim?.extraCareCaseId).toBeDefined();
+    expect(jim?.extraCareCaseUserId).toBeDefined();
+  });
+
   it("runs the seeded controlled event through approval, outreach, and caregiver reply state", async () => {
     const t = convexTest(schema, modules);
     const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
