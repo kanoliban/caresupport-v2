@@ -499,6 +499,7 @@ Test targets:
   - `admin:getRobMultiplayerReadiness`
   - `admin:runRobControlledLoopDryRun`
   - `admin:getRobControlledLoopReport`
+  - `admin:resetRobControlledLoopAfterDryRun`
 - [ ] Linq test-number verification
 - [ ] Agent-log entry with exact data state left behind
 
