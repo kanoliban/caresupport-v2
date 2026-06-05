@@ -54,6 +54,8 @@ export interface SystemBlocksInput {
   currentDayOfWeek: string;
   currentTimeUtc: string;
   timezone: string;
+  /** False until the timezone is established from the user; gates the ask-once prompt. */
+  timezoneConfirmed?: boolean;
   calendarContext?: string;
   isTestEnv?: boolean;
 }

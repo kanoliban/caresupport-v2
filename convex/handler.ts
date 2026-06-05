@@ -233,6 +233,9 @@ export const handleMessage = internalAction({
     service: v.string(),
     sourceMessageId: v.optional(v.string()),
     replyToMessageId: v.optional(v.string()),
+    // IANA timezone (e.g. "America/New_York") detected client-side. Optional —
+    // the iMessage/Linq path doesn't supply it; the web test UI does.
+    timezone: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<HandlerResult> => {
     const startedAt = Date.now();
@@ -289,7 +292,7 @@ export const handleMessage = internalAction({
     }
 
     const envVarsEarly = env();
-    if (chatId && envVarsEarly.linqApiToken) {
+    if (chatId && !isTestChat(chatId) && envVarsEarly.linqApiToken) {
       try {
         await markAsRead(chatId, envVarsEarly.linqApiToken);
         await startTyping(chatId, envVarsEarly.linqApiToken);
@@ -386,7 +389,23 @@ export const handleMessage = internalAction({
       timeZone: "UTC",
     });
     const currentTimeUtc = nowDate.toISOString().slice(11, 16);
-    const timezone = compiledContext.careCase.timezone || "UTC";
+
+    // Prefer a client-detected timezone (web UI) over the stored one, and
+    // persist it so calendar/schedule/reminders use the real zone going forward.
+    const storedTimezone = compiledContext.careCase.timezone || "UTC";
+    const detectedTimezone = isValidTimeZone(args.timezone) ? args.timezone : undefined;
+    const timezone = detectedTimezone ?? storedTimezone;
+    if (detectedTimezone && detectedTimezone !== storedTimezone) {
+      await ctx.runMutation(internal.mutations.updateCareCaseProfile, {
+        careCaseId,
+        timezone: detectedTimezone,
+        timezoneConfirmed: true,
+      });
+    }
+    // A client-detected zone means we already know it — no need to ask later.
+    const timezoneConfirmed =
+      compiledContext.careCase.timezoneConfirmed === true ||
+      detectedTimezone !== undefined;
 
     const calendarContext = await loadCalendarContext(ctx, userId, timezone, nowDate);
 
@@ -417,6 +436,7 @@ export const handleMessage = internalAction({
       currentDayOfWeek,
       currentTimeUtc,
       timezone,
+      timezoneConfirmed,
       calendarContext: calendarContext ?? undefined,
       isTestEnv: process.env.APP_ENV === "test",
     });
@@ -490,6 +510,11 @@ export const handleMessage = internalAction({
         relationshipToRecipient:
           parsed.careCaseProfileUpdate.relationship_to_recipient || undefined,
         timezone: parsed.careCaseProfileUpdate.timezone || undefined,
+        // Any timezone the model resolves (e.g. from the user's stated city)
+        // counts as confirmed, so we stop asking on future scheduling.
+        timezoneConfirmed: parsed.careCaseProfileUpdate.timezone
+          ? true
+          : undefined,
         status: parsed.careCaseProfileUpdate.status || undefined,
       });
     }
@@ -777,6 +802,17 @@ export const handleMessage = internalAction({
     };
   },
 });
+
+/** True if `tz` is a valid IANA timezone the runtime can resolve. */
+export function isValidTimeZone(tz: string | undefined): tz is string {
+  if (!tz) return false;
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function env(): { linqApiToken: string; linqPhoneNumber: string } {
   return {

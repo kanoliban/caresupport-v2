@@ -14,3 +14,4 @@ runtime/scripts/linq_config.json
 __pycache__/
 convex/_generated/
 .convex/
+web/convex-config.js

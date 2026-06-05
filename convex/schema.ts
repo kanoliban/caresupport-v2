@@ -149,6 +149,10 @@ export default defineSchema({
     title: v.string(),
     status: entityStatus,
     timezone: v.string(),
+    // True once the timezone has been established from the user (their stated
+    // location, or a client-detected zone) rather than the creation default.
+    // While false, the agent asks for location on the first scheduling attempt.
+    timezoneConfirmed: v.optional(v.boolean()),
     careRecipientName: v.optional(v.string()),
     relationshipToRecipient: v.optional(v.string()),
     createdAt: v.number(),

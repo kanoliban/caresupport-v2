@@ -123,6 +123,29 @@ describe("buildSystemBlocks", () => {
     expect(blocks[1].text).toContain("Care recipient timezone: UTC.");
   });
 
+  it("asks for location on first scheduling when timezone is unconfirmed", () => {
+    // #given the timezone has not been confirmed by the user
+    const input = makeInput({ timezoneConfirmed: false });
+
+    // #when system blocks are built
+    const blocks = buildSystemBlocks(input);
+
+    // #then the TIME block instructs asking which city/area they're in
+    expect(blocks[1].text).toContain("which city or area they're in");
+    expect(blocks[1].text).toContain("Ask this only once");
+  });
+
+  it("omits the location prompt once the timezone is confirmed", () => {
+    // #given a confirmed timezone
+    const input = makeInput({ timezoneConfirmed: true });
+
+    // #when system blocks are built
+    const blocks = buildSystemBlocks(input);
+
+    // #then the TIME block does not ask for location
+    expect(blocks[1].text).not.toContain("which city or area they're in");
+  });
+
   it("instructs the model not to store relative date words", () => {
     // #given a default input
     // #when the response format is rendered into a block

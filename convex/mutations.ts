@@ -237,6 +237,7 @@ export const updateCareCaseProfile = internalMutation({
     careRecipientName: v.optional(v.string()),
     relationshipToRecipient: v.optional(v.string()),
     timezone: v.optional(v.string()),
+    timezoneConfirmed: v.optional(v.boolean()),
     status: v.optional(entityStatusValidator),
   },
   handler: async (ctx, args) => {

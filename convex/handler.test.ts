@@ -4,10 +4,25 @@ import {
   formatConversationLog,
   inferExplicitUserMemoryUpdate,
   isUnsupportedCoordinationRequest,
+  isValidTimeZone,
   parseLesson,
   shouldFireCoordinationBoundaryOverride,
   stripMarkdown,
 } from "./handler";
+
+describe("isValidTimeZone", () => {
+  it("accepts valid IANA zones", () => {
+    expect(isValidTimeZone("America/New_York")).toBe(true);
+    expect(isValidTimeZone("Europe/London")).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+  });
+
+  it("rejects garbage and empty values", () => {
+    expect(isValidTimeZone("Not/AZone")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
+    expect(isValidTimeZone(undefined)).toBe(false);
+  });
+});
 
 describe("parseLesson", () => {
   it("extracts a behavioral prefix", () => {

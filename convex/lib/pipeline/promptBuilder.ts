@@ -134,15 +134,21 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     });
   }
 
+  const timeLines = [
+    "── TIME ──",
+    `Today is ${input.currentDateIso} (${input.currentDayOfWeek}).`,
+    `Current time: ${input.currentTimeUtc} UTC.`,
+    `Care recipient timezone: ${input.timezone || "UTC"}.`,
+    "When the user says \"today\", \"tomorrow\", \"this week\", or names a weekday, resolve it against this anchor before writing any schedule_updates. Never store relative words as a date.",
+  ];
+  if (!input.timezoneConfirmed) {
+    timeLines.push(
+      "The timezone above is an unconfirmed default, not something the user told you. The FIRST time the user wants to schedule, add an appointment, or put anything on the calendar, do NOT create the event yet — first ask which city or area they're in (one short question). When they answer, set care_case_profile_update.timezone to the matching IANA timezone (e.g. Denver → America/Denver) and then carry out their scheduling request in that timezone. Ask this only once; never ask again after a timezone is set. For non-scheduling messages, do not bring up location.",
+    );
+  }
   blocks.push({
     type: "text",
-    text: [
-      "── TIME ──",
-      `Today is ${input.currentDateIso} (${input.currentDayOfWeek}).`,
-      `Current time: ${input.currentTimeUtc} UTC.`,
-      `Care recipient timezone: ${input.timezone || "UTC"}.`,
-      "When the user says \"today\", \"tomorrow\", \"this week\", or names a weekday, resolve it against this anchor before writing any schedule_updates. Never store relative words as a date.",
-    ].join("\n"),
+    text: timeLines.join("\n"),
     cacheBreakpoint: false,
   });
 
