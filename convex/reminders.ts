@@ -12,7 +12,11 @@ import {
   recurrenceMatchesToday,
 } from "./lib/digestComposer";
 import type { DigestItem } from "./lib/digestComposer";
-import { sendMessageSequence, splitIntoBubbles } from "./lib/linqClient";
+import {
+  sendMessage,
+  sendMessageSequence,
+  splitIntoBubbles,
+} from "./lib/linqClient";
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
@@ -124,6 +128,15 @@ interface DispatchReport {
   errors: number;
 }
 
+interface CoordinationFollowUpReport {
+  outreachAttempted: number;
+  outreachSent: number;
+  coordinatorAttempted: number;
+  coordinatorSent: number;
+  skipped: number;
+  errors: number;
+}
+
 export const dispatchDailyDigests = internalAction({
   args: {},
   handler: async (ctx): Promise<DispatchReport> => {
@@ -158,6 +171,118 @@ export const dispatchDailyDigests = internalAction({
     return report;
   },
 });
+
+export const dispatchCoordinationFollowUps = internalAction({
+  args: {
+    now: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<CoordinationFollowUpReport> => {
+    const now = args.now ?? Date.now();
+    const limit = args.limit ?? 25;
+    const [outreachFollowUps, coordinatorUpdates] = await Promise.all([
+      ctx.runQuery(internal.outreachAttempts.listDueOutreachFollowUps, {
+        now,
+        limit,
+      }),
+      ctx.runQuery(internal.outreachAttempts.listDueCoordinationStatusUpdates, {
+        now,
+        limit,
+      }),
+    ]);
+    const report: CoordinationFollowUpReport = {
+      outreachAttempted: outreachFollowUps.length,
+      outreachSent: 0,
+      coordinatorAttempted: coordinatorUpdates.length,
+      coordinatorSent: 0,
+      skipped: 0,
+      errors: 0,
+    };
+
+    const linqApiToken = process.env.LINQ_API_TOKEN;
+    if (!linqApiToken) {
+      report.errors += outreachFollowUps.length + coordinatorUpdates.length;
+      return report;
+    }
+
+    for (const item of outreachFollowUps) {
+      if (!item.chatId) {
+        await ctx.runMutation(internal.outreachAttempts.markOutreachFollowUpSkipped, {
+          outreachAttemptId: item.outreachAttemptId,
+          reason: "no_chat_id",
+          now,
+        });
+        report.skipped += 1;
+        continue;
+      }
+
+      const result = await sendMessage(item.chatId, item.messageBody, linqApiToken);
+      if (!result.success) {
+        await ctx.runMutation(internal.outreachAttempts.markOutreachFollowUpSkipped, {
+          outreachAttemptId: item.outreachAttemptId,
+          reason: stringifyUnknown(result.error ?? "linq_send_failed"),
+          now,
+        });
+        report.skipped += 1;
+        continue;
+      }
+
+      await ctx.runMutation(internal.outreachAttempts.markOutreachFollowUpSent, {
+        outreachAttemptId: item.outreachAttemptId,
+        messageBody: item.messageBody,
+        linqMessageId: result.messageId,
+        now,
+      });
+      report.outreachSent += 1;
+    }
+
+    for (const item of coordinatorUpdates) {
+      if (!item.userChatId) {
+        await ctx.runMutation(internal.outreachAttempts.markCoordinationStatusSkipped, {
+          coordinationEventId: item.coordinationEventId,
+          userId: item.userId,
+          reason: "no_chat_id",
+          now,
+        });
+        report.skipped += 1;
+        continue;
+      }
+
+      const result = await sendMessage(item.userChatId, item.messageBody, linqApiToken);
+      if (!result.success) {
+        await ctx.runMutation(internal.outreachAttempts.markCoordinationStatusSkipped, {
+          coordinationEventId: item.coordinationEventId,
+          userId: item.userId,
+          reason: stringifyUnknown(result.error ?? "linq_send_failed"),
+          now,
+        });
+        report.skipped += 1;
+        continue;
+      }
+
+      await ctx.runMutation(internal.outreachAttempts.markCoordinationStatusSent, {
+        coordinationEventId: item.coordinationEventId,
+        userId: item.userId,
+        messageBody: item.messageBody,
+        linqMessageId: result.messageId,
+        now,
+      });
+      report.coordinatorSent += 1;
+    }
+
+    return report;
+  },
+});
+
+function stringifyUnknown(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "unknown_error";
+  }
+}
 
 async function logDigestOutbound(
   ctx: ActionCtx,

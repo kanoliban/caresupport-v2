@@ -58,7 +58,7 @@ become critical path.
 - [x] 2D — Caregiver reply mapping
 - [x] 2E0 — Convex memory/retrieval architecture policy
 - [ ] 2E — Agent/context engine hardening
-- [ ] 2F — Follow-up cron / next action scanner
+- [x] 2F — Follow-up cron / next action scanner
 - [ ] 2G — Rob-style live test setup
 - [ ] 2H — Web/iOS companion views (postponed)
 
@@ -448,27 +448,27 @@ Purpose: make open outreach loops continue without Rob repeatedly asking.
 
 Implementation tasks:
 
-- [ ] Add a cron/internal action that scans due `outreachAttempts.nextActionAt`
+- [x] Add a cron/internal action that scans due `outreachAttempts.nextActionAt`
       and/or `coordinationEvents.nextActionAt`.
-- [ ] For first version, default to lightweight status/follow-up:
+- [x] For first version, default to lightweight status/follow-up:
   - remind a caregiver once
   - ask Rob before moving to next fallback unless prior permission covers it
   - mark failed/delayed attempts clearly
-- [ ] Avoid noisy repeat reminders.
-- [ ] Log follow-up decisions and sent messages.
+- [x] Avoid noisy repeat reminders.
+- [x] Log follow-up decisions and sent messages.
 
 Acceptance criteria:
 
-- [ ] Due follow-ups are found deterministically.
-- [ ] No follow-up is sent without valid permission.
-- [ ] Rob receives status only when it changes what he needs to know or decide.
-- [ ] Completed/resolved events are ignored by the scanner.
+- [x] Due follow-ups are found deterministically.
+- [x] No follow-up is sent without valid permission.
+- [x] Rob receives status only when it changes what he needs to know or decide.
+- [x] Completed/resolved events are ignored by the scanner.
 
 Test targets:
 
-- [ ] New cron/follow-up tests with `convex-test`
-- [ ] Existing `convex/admin.test.ts` patterns for digest-like queries
-- [ ] Existing reminder/digest tests as reference, not duplicated blindly
+- [x] New cron/follow-up tests with `convex-test`
+- [x] Existing `convex/admin.test.ts` patterns for digest-like queries
+- [x] Existing reminder/digest tests as reference, not duplicated blindly
 
 ## 2G — Rob-Style Live Test Setup
 

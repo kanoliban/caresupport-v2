@@ -302,6 +302,7 @@ export const applyInboundReplyToEvent = internalMutation({
     careCaseId: v.id("careCases"),
     careContactId: v.id("careContacts"),
     coordinationEventId: v.optional(v.id("coordinationEvents")),
+    outreachAttemptId: v.optional(v.id("outreachAttempts")),
     messageBody: v.string(),
     sourceMessageId: v.optional(v.id("messages")),
   },
@@ -315,16 +316,31 @@ export const applyInboundReplyToEvent = internalMutation({
       updatedAt: now,
     };
 
-    const [contact, event] = await Promise.all([
+    const [contact, event, outreachAttempt] = await Promise.all([
       ctx.db.get(args.careContactId),
       args.coordinationEventId ? ctx.db.get(args.coordinationEventId) : null,
+      args.outreachAttemptId ? ctx.db.get(args.outreachAttemptId) : null,
     ]);
     if (
       !contact ||
       contact.careCaseId !== args.careCaseId ||
-      (event && event.careCaseId !== args.careCaseId)
+      (event && event.careCaseId !== args.careCaseId) ||
+      (outreachAttempt && outreachAttempt.careCaseId !== args.careCaseId)
     ) {
       return { status };
+    }
+
+    if (
+      outreachAttempt &&
+      outreachAttempt.careContactId === contact._id &&
+      outreachAttempt.status === "sent"
+    ) {
+      await ctx.db.patch(outreachAttempt._id, {
+        nextActionAt: status === "deferred"
+          ? inferDeferredNextActionAt(args.messageBody, now)
+          : undefined,
+        updatedAt: now,
+      });
     }
 
     if (status === "partial" || status === "deferred") {

@@ -18,4 +18,11 @@ crons.daily(
   internal.reminders.dispatchDailyDigests,
 );
 
+crons.interval(
+  "coordination-follow-up-scanner",
+  { minutes: 15 },
+  internal.reminders.dispatchCoordinationFollowUps,
+  {},
+);
+
 export default crons;
