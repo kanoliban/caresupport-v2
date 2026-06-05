@@ -8,6 +8,39 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Added `internal.admin.runRobControlledLoopDryRun`.
+- The dry run refuses to execute unless `getRobMultiplayerReadiness` is clear.
+- When ready, the dry run exercises the seeded Rob fixture through:
+  - pending outreach creation
+  - exact approval
+  - sent outreach state with dry-run Linq ids
+  - inbound caregiver reply logging
+  - reply mapping into contact/event/outreach state
+  - Rob status message/audit row creation
+- Updated `docs/rob-multiplayer-activation.md` with the no-Linq dry-run command.
+- Updated Phase 2G test targets with the three operational commands.
+
+### Validation
+- `npm test -- convex/robActivation.test.ts --reporter verbose` passed.
+- `npm run typecheck` passed.
+- `npm test -- convex/followUps.test.ts convex/outreachAttempts.test.ts convex/contactReplies.test.ts --reporter verbose` passed.
+- `npm test` passed: 25 files / 291 tests.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq messages were sent.
+- This adds one more safe operational step before real test-number outreach.
+
+### Concerns
+- The dry run writes rows into the target Convex deployment. It should only be
+  run against dev/test deployments unless the team intentionally wants those
+  dry-run audit/message rows in the selected deployment.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Created branch `liban/rob-activation-readiness` from merged `main`.
 - Added `internal.admin.getRobMultiplayerReadiness`.
 - The readiness check verifies:

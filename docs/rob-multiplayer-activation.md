@@ -98,6 +98,22 @@ npx convex run admin:getRobMultiplayerReadiness '{
 Do not proceed until `readyForControlledOutreach` is `true` and `blockers` is an
 empty array.
 
+## No-Linq Dry Run
+
+Before sending real Linq/iMessage traffic, run the no-Linq dry run against the
+same seeded fixture:
+
+```bash
+npx convex run admin:runRobControlledLoopDryRun '{
+  "robPhone": "+1REPLACE_WITH_ROB_TEST_OR_APPROVED_PHONE"
+}'
+```
+
+This writes controlled outreach/reply/status rows into Convex without calling
+Linq. It should return `ran: true` and `replyStatus: "confirmed"` for Jim and
+Jennifer. Use this to verify the deployed care graph before the real test-number
+outreach.
+
 Then initiate the test through Rob's coordinator thread:
 
 ```text
