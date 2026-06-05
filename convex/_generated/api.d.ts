@@ -21,6 +21,7 @@ import type * as http from "../http.js";
 import type * as lib_anthropicClient from "../lib/anthropicClient.js";
 import type * as lib_dateValidation from "../lib/dateValidation.js";
 import type * as lib_digestComposer from "../lib/digestComposer.js";
+import type * as lib_knowledge_retrieveCareContext from "../lib/knowledge/retrieveCareContext.js";
 import type * as lib_linqClient from "../lib/linqClient.js";
 import type * as lib_memory from "../lib/memory.js";
 import type * as lib_pipeline_careRouter from "../lib/pipeline/careRouter.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   "lib/anthropicClient": typeof lib_anthropicClient;
   "lib/dateValidation": typeof lib_dateValidation;
   "lib/digestComposer": typeof lib_digestComposer;
+  "lib/knowledge/retrieveCareContext": typeof lib_knowledge_retrieveCareContext;
   "lib/linqClient": typeof lib_linqClient;
   "lib/memory": typeof lib_memory;
   "lib/pipeline/careRouter": typeof lib_pipeline_careRouter;

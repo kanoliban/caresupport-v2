@@ -8,6 +8,39 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- Confirmed PR #68 merged into `main`.
+- Checked local deployment configuration without printing secret values.
+- Verified Convex environment variable presence for:
+  - `LINQ_API_TOKEN`
+  - `LINQ_PHONE_NUMBER`
+  - `ANTHROPIC_API_KEY`
+- Ran `npx convex dev --once --run admin:tableCounts` to see whether the
+  configured dev deployment could execute the activation checks.
+- Convex generated API types were refreshed by the one-time dev command.
+
+### Validation
+- `npx convex env get ... >/dev/null` confirmed required env vars are present.
+- `npx convex dev --once --run admin:tableCounts` deployed/prepared functions
+  but failed to run the query because the deployment is paused.
+
+### State I'm leaving
+- No live Convex data was seeded.
+- No Linq/iMessage traffic was sent.
+- The configured Convex deployment must be resumed in the dashboard before
+  `admin:tableCounts`, Rob seeding, readiness, dry-run, report, reset, or live
+  test-number outreach can run.
+
+### Concerns
+- Live Rob activation is now blocked by external runtime state and live inputs:
+  resume the Convex deployment, confirm the intended deployment, then provide
+  Rob's coordinator phone/chat id and two approved test numbers or Linq chat ids
+  for Jim/Jennifer.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Hardened `internal.admin.getRobControlledLoopReport` so live pass evidence
   cannot be satisfied by stale dry-run state.
 - The report now:
