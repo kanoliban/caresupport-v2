@@ -406,6 +406,10 @@ function formatRuntimeErrorSummary(summary: RuntimeErrorSummary): string {
   return `${summary.name}: ${summary.message}${suffix}`;
 }
 
+export function runtimeFailureFallback(displayName: string): string {
+  return `Sorry ${displayName}, I'm having a system issue on my side right now. I have your message, but I can't respond properly yet.`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -768,8 +772,7 @@ export const handleMessage = internalAction({
         error: errorSummary,
       });
 
-      const fallback =
-        `Sorry ${replyDisplayName}, I wasn't able to process that. Can you send it again?`;
+      const fallback = runtimeFailureFallback(replyDisplayName);
       await ctx.runMutation(internal.mutations.logAudit, {
         careCaseId,
         userId,

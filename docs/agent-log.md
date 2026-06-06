@@ -7,6 +7,36 @@ Read the last 2-3 entries before starting work.
 
 ## 2026-06-06 — Codex
 
+### Anthropic runtime outage diagnosis
+- Investigated the recurring iMessage fallback:
+  "Sorry Liban, I wasn't able to process that. Can you send it again?"
+- Production transcript showed one inbound and one fallback response, so this was
+  not the duplicate Linq webhook issue.
+- Production audit logs showed the current failure reason:
+  Anthropic API rejects model calls because the account credit balance is too
+  low.
+
+### Action taken
+- Patched the runtime failure fallback so users are no longer told to resend
+  when the failure is on CareSupport's/model-provider side.
+- New fallback says CareSupport is having a system issue and confirms the
+  message was received.
+- Deployed the fallback patch to production.
+
+### Validation
+- `npm test -- convex/handler.test.ts` passed.
+- `npm run typecheck` passed.
+- `npx convex deploy --yes` completed against production.
+
+### Follow-up
+- Restore Anthropic billing/credits or replace the production model key with a
+  funded key. Until then, model-backed responses will continue to fail, but with
+  the corrected user-facing fallback.
+
+---
+
+## 2026-06-06 — Codex
+
 ### Linq duplicate responder diagnosis
 - Investigated the live "two instances" behavior reported from the iMessage
   thread.

@@ -8,6 +8,7 @@ import {
   inferExplicitUserMemoryUpdate,
   isUnsupportedCoordinationRequest,
   parseLesson,
+  runtimeFailureFallback,
   shouldFireCoordinationBoundaryOverride,
   stripAssistantSpeakerPrefix,
   stripMarkdown,
@@ -324,6 +325,16 @@ describe("summarizeRuntimeError", () => {
       status: 529,
       type: "overloaded_error",
     });
+  });
+});
+
+describe("runtimeFailureFallback", () => {
+  it("does not ask the user to resend when the runtime is down", () => {
+    const result = runtimeFailureFallback("Liban");
+
+    expect(result).toContain("system issue on my side");
+    expect(result).toContain("I have your message");
+    expect(result).not.toContain("send it again");
   });
 });
 
