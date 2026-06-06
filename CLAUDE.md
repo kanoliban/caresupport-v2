@@ -5,9 +5,10 @@ This file orients Claude and other coding agents working in this repo.
 CareSupport is a multiplayer family care agent: a text-native operational
 coordination runtime for one care situation and the people around it.
 
-The current implementation is still a solo-thread wedge. That means one trusted
-person texts CareSupport first, builds memory, and starts the care record. Do
-not confuse that wedge with the long-term product identity.
+The current implementation starts from one trusted coordinator thread. That
+thread builds memory, starts the care record, and can now expand into
+permissioned one-to-one outreach with care contacts. Do not confuse the first
+thread with the long-term product identity.
 
 ## North Star
 
@@ -33,6 +34,7 @@ The active Convex schema is intentionally small:
 - `memoryEntries`
 - `careContacts`
 - `coordinationEvents`
+- `outreachAttempts`
 - `auditLogs`
 
 The current prompt/runtime can:
@@ -41,15 +43,18 @@ The current prompt/runtime can:
 - remember user and care-case facts
 - persist medication and schedule records
 - load active care contacts and open coordination events into prompt context
+- create care contacts and coordination events from model output
+- persist pending outreach attempts
+- detect exact primary-coordinator approval
+- send approved one-to-one outreach through Linq
+- map care contact replies back to the correct care case, contact, event, and
+  outreach attempt
 - record self-corrections
 - keep an audit trail
 
 The current prompt/runtime cannot yet:
 
-- contact other people
-- invite a care team
 - operate group chats as a multiplayer runtime
-- create care contacts or coordination events from model output
 - execute external tools
 - sync calendars or email
 - autonomously resolve coverage gaps
@@ -58,8 +63,9 @@ Those limitations are implementation status, not product philosophy.
 
 ## Direction Of Travel
 
-The first multiplayer substrate now exists in schema as `careContacts` and
-`coordinationEvents`. It is not yet wired into model output or outreach.
+The first multiplayer loop now exists as care-case-scoped contact, event,
+outreach, reply-mapping, and audit state. `docs/multiplayer-runtime-architecture.md`
+is the canonical architecture reference.
 
 Future multiplayer/runtime concepts are expected to include:
 
@@ -76,9 +82,9 @@ Likely code organization:
 - `convex/lib/knowledge/`
 
 Add these only when a concrete product loop needs them. The first serious loop
-should be coverage-gap coordination: detect the gap, identify possible coverage,
-ask permission, perform outreach, track replies, escalate when needed, and close
-the loop with minimal user interaction.
+is coverage-gap coordination: detect the gap, identify possible coverage, ask
+permission, perform outreach, track replies, escalate when needed, and close the
+loop with minimal user interaction.
 
 ## Safety Rules
 

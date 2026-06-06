@@ -334,8 +334,11 @@ Implementation tasks:
 - [x] Add transcript-style tests for the full agent loop:
   coordinator need -> contact creation -> approval -> outbound -> caregiver
   reply -> context update -> coordinator status.
-- [ ] Keep the model general enough to learn non-scheduling coordination uses
+- [x] Keep the model general enough to learn non-scheduling coordination uses
       without conditioning the agent to only handle Rob's schedule.
+- [x] Document the care-case-scoped multiplayer tie-back architecture so future
+      runtime agents do not treat care contacts as primary users or Rob-specific
+      fixture state.
 
 Acceptance criteria:
 

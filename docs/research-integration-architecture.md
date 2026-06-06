@@ -18,19 +18,20 @@ Conversation is the interface. Tools are how the work gets done.
 
 ## Current Runtime Status
 
-The active runtime can persist `careContacts` and `coordinationEvents` as scoped
-care-case substrate and load active contacts plus open coordination events into
-prompt context.
+Implementation update: this research document began before the Phase 2
+permissioned outreach work. The current runtime can now create `careContacts`
+and `coordinationEvents` from model output, persist `outreachAttempts`, send
+approved one-to-one outreach through Linq, and map care contact replies back to
+the same care graph.
 
-It cannot yet create those records from model output, execute external tool
-actions, contact third parties, sync calendars/email, or manage reusable tool
-permissions.
+It still cannot execute external calendar/email actions, sync calendars/email,
+or manage reusable tool permissions.
 
 Research should not directly expand assistant claims. If research shows users
-want CareSupport to text caregivers or update calendars, the repo still needs
-schema support, permission checks, action lifecycle records, provider execution,
-failure handling, tests, and audit logs before the assistant may claim the work
-was done.
+want CareSupport to update calendars, the repo still needs schema support,
+permission checks, action lifecycle records, provider execution, failure
+handling, tests, and audit logs before the assistant may claim the external tool
+work was done.
 
 ## What Products Like Poke-Style Assistants Generally Need
 

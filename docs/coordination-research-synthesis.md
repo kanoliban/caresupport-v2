@@ -2,6 +2,12 @@
 
 Date: 2026-05-30
 
+Status: historical research snapshot. This document describes the repo before
+Phase 2A-2G implemented the permissioned one-to-many loop. For current runtime
+truth, use `docs/multiplayer-runtime-architecture.md`,
+`docs/caresupport-model-constitution.md`, and
+`docs/private-beta-coordination-activation.md`.
+
 ## Thesis Anchor
 
 CareSupport is a text-native family care coordination agent. It starts in one
@@ -79,10 +85,10 @@ with 17 test files / 234 tests passing.
   memory, shortcuts, and future coordination takeovers
   (`web/app/app/_components/companion-app.tsx`).
 
-### Intentionally Blocked
+### Intentionally Blocked At Time Of Research
 
-- The live prompt says CareSupport cannot contact other people or add teammates
-  yet (`convex/lib/promptContent.ts:12`, `convex/lib/promptContent.ts:62`).
+- At the time, the live prompt blocked third-party outreach and team-member
+  addition (`convex/lib/promptContent.ts:12`, `convex/lib/promptContent.ts:62`).
 - The prompt builder repeats that boundary in the actual JSON contract
   (`convex/lib/pipeline/promptBuilder.ts:3`).
 - The handler has a mechanical boundary override for add/invite/text/call/contact
@@ -92,7 +98,7 @@ with 17 test files / 234 tests passing.
 This is good safety history. Phase 2 should replace this blanket block with a
 permissioned path, not simply delete it.
 
-### Missing For One-To-Many Reactivation
+### Missing For One-To-Many Reactivation At Time Of Research
 
 - Inbound replies from caregivers are not mapped to `careContacts`. Unknown
   phones currently create new `users` and new `careCases` (`convex/handler.ts:226`).
@@ -150,9 +156,9 @@ The capability ladder:
 7. Escalate.
 8. Close the loop.
 
-Current runtime reaches levels 1-3 and a limited same-thread reminder path.
-The next build should add levels 4-6 for a narrow messaging loop before Google
-Calendar or broader integrations become critical path.
+Implementation update: the current code now reaches levels 4-6 for a narrow
+permissioned Linq messaging loop. Google Calendar and broader integrations
+remain outside the current runtime.
 
 ## Preserve / Reactivate / Remove
 

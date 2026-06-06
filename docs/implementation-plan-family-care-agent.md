@@ -396,11 +396,15 @@ openLoops: defineTable({
 
 ## Current State
 
-The active runtime does not yet implement family/network entities, access tiers, outreach, approvals, or group chats.
+Implementation update: the active runtime now implements care-case-scoped
+contacts, coordination events, outreach approval, approved Linq one-to-one
+outreach, reply mapping, and audit state. It still does not implement old v1
+family/network entities, access tiers, caregiver app accounts, or group chats.
 
 ## Needed Change
 
-Do not build full multiplayer immediately, but implement the solo beta so it naturally expands into multiplayer.
+Do not rebuild full v1 multiplayer. Keep expanding the current care-case core
+only through product loops that reduce coordination burden.
 
 ## Expansion Path
 

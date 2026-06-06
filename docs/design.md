@@ -62,12 +62,14 @@ should make sense for at least one of them.
 
 The active implementation is still intentionally narrow:
 
-- one texting user
+- one primary coordinator beginning in one trusted text thread
 - one care case
-- one persistent thread
 - memory extraction and correction
 - medications and schedule items
-- active care contacts and open coordination events loaded into prompt context
+- care contacts and coordination events created from conversation
+- pending, approved, sent, failed, and audited outreach attempts
+- approved one-to-one outreach through Linq
+- care contact replies mapped back to the same care case/contact/event/attempt
 - audit logging
 - Linq iMessage/SMS transport
 - Claude structured-response loop
@@ -82,20 +84,19 @@ Current tables:
 - `memoryEntries`
 - `careContacts`
 - `coordinationEvents`
+- `outreachAttempts`
 - `auditLogs`
 
 This deterministic core should remain stable while the product direction is
 being clarified. Do not rebuild the old v1 family schema just to make the docs
-sound multiplayer again. The contact/event tables are substrate only: the model
-does not yet create them from conversation, and no outreach is executed.
+sound multiplayer again. The multiplayer runtime now extends the current
+care-case core through `careContacts`, `coordinationEvents`, and
+`outreachAttempts`.
 
 ## Current Product Boundary
 
 In the active runtime, CareSupport does not yet:
 
-- contact other people
-- add or invite care-team members
-- create care contacts or coordination events from model output
 - execute external tools
 - sync Google Calendar or Gmail
 - run group chats as the main coordination surface
@@ -105,10 +106,15 @@ These are current implementation boundaries, not product non-goals.
 
 The assistant should be honest about them:
 
-> I cannot text Angela for you yet. I can draft the message and keep track of the coverage gap here.
+> I can ask Angela about Wednesday evening coverage. Before I message her, do you want me to send this?
 
 The assistant should not imply that multiplayer coordination is outside
 CareSupport's purpose.
+
+Care contact replies are not new app-user onboarding by default. They are tied
+back to the coordinator's care graph by Linq chat id first, then by phone only
+when the phone is uniquely tied to a sent outreach attempt. See
+`docs/multiplayer-runtime-architecture.md`.
 
 ## Long-Term Runtime Direction
 
@@ -212,11 +218,14 @@ Do not overbuild.
 
 The right order is:
 
-1. Keep the current solo-thread runtime reliable.
-2. Make docs and prompts honest that this is the wedge, not the identity.
-3. Add contact and coordination primitives only when needed by a concrete loop.
-4. Add tools behind permissions and audit records.
-5. Expand from one trusted thread into one-to-many coordination.
+1. Keep the first trusted thread reliable.
+2. Keep docs and prompts honest that the first thread is the wedge, not the
+   identity.
+3. Use care-case-scoped contact, event, outreach, reply, and audit state for the
+   first one-to-many loop.
+4. Add external tools behind permissions and audit records.
+5. Expand toward richer family/team coordination only after the narrow loop is
+   reliable.
 
 This preserves the working Convex runtime while making the product direction
 clear.

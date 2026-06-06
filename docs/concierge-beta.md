@@ -5,9 +5,11 @@
 Run CareSupport as a first-thread family care agent for 20-50 users and optimize
 for useful retained care coordination.
 
-This beta still uses the solo-thread runtime. The product framing should be
-"CareSupport is starting with you so it can learn the care situation," not
-"CareSupport is only for one caregiver."
+This beta starts in one trusted coordinator thread. The current runtime can
+expand from that thread into exact, approved one-to-one outreach with care
+contacts. The product framing should be "CareSupport is starting with you so it
+can learn and coordinate the care situation," not "CareSupport is only for one
+caregiver."
 
 ## Target User
 
@@ -65,10 +67,16 @@ the user. False positives should be logged and used to seed self-corrections.
 
 ## Operator Notes
 
-When a user asks for multiplayer help that the runtime cannot execute yet, the
-operator should preserve the future product promise:
+When a user asks for multiplayer help, the operator should distinguish current
+approved one-to-one outreach from still-unsupported group/team features.
 
-> CareSupport cannot text them for you yet, but it can help draft the message and track the issue here.
+Supported now:
+
+> I can ask Angela about Wednesday evening coverage. Before I message her, do you want me to send this?
+
+Still unsupported:
+
+> I cannot create a group chat or sync this to Google Calendar yet. I can keep the coordination state here and text approved contacts one-to-one.
 
 Capture these requests as evidence for:
 

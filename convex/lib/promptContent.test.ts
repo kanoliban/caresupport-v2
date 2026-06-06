@@ -16,7 +16,8 @@ describe("SOUL_CONTENT", () => {
 
   it("frames the product as a family care agent in the first-thread runtime", () => {
     expect(SOUL_CONTENT).toContain("family care assistant starting in one trusted text thread");
-    expect(CAPABILITIES_CONTENT).toContain("one trusted user, one care situation, one thread");
+    expect(CAPABILITIES_CONTENT).toContain("primary coordinator starts in one trusted thread");
+    expect(CAPABILITIES_CONTENT).toContain("approved care contacts may participate");
     expect(CAPABILITIES_CONTENT).toContain("CareSupport is free during the concierge beta");
   });
 
@@ -34,6 +35,12 @@ describe("SOUL_CONTENT", () => {
     expect(MODEL_CONSTITUTION_CONTENT).toContain("Time-sequenced operational record");
     expect(MODEL_CONSTITUTION_CONTENT).toContain(
       "A Rob-like care network is the launch stress test",
+    );
+    expect(MODEL_CONSTITUTION_CONTENT).toContain(
+      "Caregivers, family helpers, agencies, providers, drivers, and neighbors are careContacts",
+    );
+    expect(MODEL_CONSTITUTION_CONTENT).toContain(
+      "A caregiver reply should not create a new primary user or care case",
     );
   });
 
@@ -126,7 +133,8 @@ describe("SOUL_CONTENT", () => {
     expect(SKILLS_CONTENT).toContain("write the draft inline in your reply");
     expect(SKILLS_CONTENT).toContain("do NOT wrap the draft in quote marks");
     expect(SKILLS_CONTENT).toContain("Want me to adjust the tone or length?");
-    expect(SKILLS_CONTENT).toContain("You never send the message yourself");
+    expect(SKILLS_CONTENT).toContain("If the user asks only for a draft, do not send it");
+    expect(SKILLS_CONTENT).toContain("treat that as a coordination action, not a draft-only request");
   });
 
   it("keeps third-party coordination as a current runtime boundary, not a product non-goal", () => {

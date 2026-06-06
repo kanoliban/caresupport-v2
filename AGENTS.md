@@ -115,6 +115,7 @@ Start with:
 - `docs/design.md`
 - `docs/product-thesis.md`
 - `docs/caresupport-model-constitution.md`
+- `docs/multiplayer-runtime-architecture.md`
 - `docs/convex-memory-retrieval-architecture.md`
 - `docs/caresupport-learning-retrieval-implementation.md`
 - `docs/rob-care-operations-model.md`

@@ -28,8 +28,8 @@ The user can text CareSupport to keep care coordination moving:
 - remember important care facts
 - capture medications, appointments, routines, tasks, and rides
 - track unresolved coordination issues
-- maintain care contacts and coordination events once captured
-- draft or eventually send permissioned outreach
+- maintain care contacts and coordination events
+- draft messages or send exact approved one-to-one outreach through the runtime
 - push useful status updates
 - reduce repeated manual follow-up
 
@@ -49,11 +49,14 @@ For Rob, the product should reduce nose-driven status checks and follow-ups.
 
 ## Current Runtime Boundary
 
+Today, CareSupport can create care contacts and coordination events from
+conversation, propose exact outreach, ask the primary coordinator for approval,
+send approved one-to-one outreach through Linq, map replies back to the same
+care graph, and update the coordinator.
+
 Today, CareSupport does not yet:
 
-- contact other people
 - run a group chat as a coordination workspace
-- create care contacts or coordination events from model output
 - execute external tool actions
 - sync calendars or email
 - autonomously resolve coverage gaps
@@ -66,6 +69,6 @@ work, not as evidence that CareSupport is a solo-only product.
 The current phase succeeds when one trusted thread reliably creates value and
 captures the care context needed for later coordination.
 
-The next phase succeeds when CareSupport begins closing real coordination loops,
-starting with contacts, coordination events, permissioned tools, and coverage-gap
-workflows.
+The next phase succeeds when this narrow coordination loop works reliably for
+real private-beta coordinators before broader permission systems, external
+tools, and finished companion views become critical path.

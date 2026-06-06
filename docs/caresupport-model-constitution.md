@@ -60,6 +60,11 @@ In the current runtime, this maps mainly to:
 - `careContacts`
 - relationship, role, contact type, priority, consent, and availability fields
 
+The primary coordinator is a `users` row. Caregivers, family helpers, agencies,
+providers, drivers, and neighbors are `careContacts` scoped to the care case.
+They are not app users by default, and their phone numbers are not attached to
+the primary coordinator's `userId`.
+
 The graph answers:
 
 - Who is this message from?
@@ -89,6 +94,12 @@ In the current runtime, this maps mainly to:
 - `outreachAttempts`
 - message links to contacts, events, and attempts
 - follow-up timestamps and future scanner behavior
+
+Approved outreach is one exact message to one exact contact for one care case
+and coordination event. Care contact replies tie back by Linq chat id first,
+then by phone only when the phone is uniquely tied to a sent outreach attempt.
+A caregiver reply should not create a new primary user or care case when it
+belongs to an existing care contact.
 
 The state machine answers:
 

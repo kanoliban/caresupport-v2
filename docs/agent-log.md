@@ -1847,6 +1847,68 @@ Read the last 2-3 entries before starting work.
   - `convex/lib/pipeline/promptBuilder.test.ts`
   - `convex/handler.test.ts`
 - `npm run typecheck` passed.
+
+---
+
+## 2026-06-06 — Codex
+
+### What I did
+- Added `docs/multiplayer-runtime-architecture.md` as the canonical explanation
+  of the care-case-scoped one-to-many runtime:
+  - primary coordinator = `users`
+  - care situation = `careCases`
+  - caregivers/helpers/agencies/providers = `careContacts`
+  - coordination work = `coordinationEvents`
+  - approved third-party messages = `outreachAttempts`
+  - replies tie back by `linqChatId` first, then phone only when uniquely tied
+    to a sent outreach attempt
+- Updated live prompt doctrine in `convex/lib/promptContent.ts` so the model
+  understands care contacts are not app users by default and draft-only messages
+  are different from approved runtime outreach.
+- Updated prompt tests to assert the new multiplayer identity model and
+  draft-vs-outreach distinction.
+- Reconciled stale runtime docs that still said CareSupport could not contact
+  others or create contacts/events from model output:
+  - `CLAUDE.md`
+  - `README.md`
+  - `docs/design.md`
+  - `docs/DECISIONS.md`
+  - `docs/ROADMAP.md`
+  - `docs/concierge-beta.md`
+  - `docs/product-specs/sms-care-coordination.md`
+  - `docs/integrations-and-tool-bearing-agent.md`
+  - `docs/research-integration-architecture.md`
+  - `docs/implementation-plan-family-care-agent.md`
+  - `docs/private-beta-coordination-activation.md`
+  - `docs/caresupport-model-constitution.md`
+  - `tasks/coordination-phase-2.md`
+- Marked `docs/coordination-research-synthesis.md` as a historical pre-Phase-2
+  snapshot and pointed current agents to the new architecture doc.
+
+### Validation
+- `npm test -- convex/lib/promptContent.test.ts` passed: 19 tests.
+- Targeted coordination tests passed: 6 files / 43 tests.
+- `npm run typecheck` passed.
+- Full suite passed: 28 files / 316 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- Local main now documents that the current code contract supports the narrow
+  permissioned one-to-many loop.
+- Convex production is running, but the latest generic activation functions are
+  not deployed there yet; a read-only `npx convex run
+  admin:getCoordinationReadiness ... --prod` returned function-not-found before
+  this work.
+- No production deploy, no commit, and no production data mutation happened in
+  this session.
+
+### Next slice
+- Review this diff with Liban.
+- If approved, commit and push.
+- Then deploy the latest Convex functions to production and rerun the generic
+  read-only preflight.
+- After production functions are current, activate multiplayer through normal
+  coordinator onboarding, not seeding.
 - Full suite passed: 19 files / 263 tests.
 - `git diff --check` passed.
 - Full suite passed: 19 files / 262 tests.

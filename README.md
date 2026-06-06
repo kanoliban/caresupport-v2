@@ -20,15 +20,17 @@ still leaves Rob as the dispatcher, it has not solved the central problem.
 
 ## Current Runtime
 
-The deployed Convex runtime is intentionally narrower than the full product
-direction. Today it supports:
+The Convex runtime is intentionally narrower than the full product direction.
+The current code contract supports:
 
-- one texting user
+- one primary coordinator beginning in one trusted text thread
 - one care case
-- one persistent text thread
 - durable messages, memory, medications, schedule items, and audit logs
-- scoped care contacts and coordination events as prompt-readable substrate
+- scoped care contacts and coordination events
 - Claude-generated structured updates parsed into typed Convex records
+- pending, approved, sent, failed, and audited outreach attempts
+- Linq-backed approved one-to-one outreach to care contacts
+- care contact reply mapping back to the same care case/contact/event/attempt
 - Linq-backed iMessage/SMS ingress and egress
 
 Current active tables:
@@ -41,13 +43,17 @@ Current active tables:
 - `memoryEntries`
 - `careContacts`
 - `coordinationEvents`
+- `outreachAttempts`
 - `auditLogs`
 
-This solo-thread runtime is the onboarding wedge and first memory-building
-surface. It should stay simple until the core loop is reliable, but it should no
-longer be described as the final product category. `careContacts` and
-`coordinationEvents` exist as inert coordination substrate; the assistant does
-not yet create them from conversation or perform outreach.
+The first trusted thread is the onboarding wedge and first memory-building
+surface. It should stay simple, but it is no longer a solo-only runtime.
+Caregivers, family helpers, agencies, and providers participate as
+care-case-scoped `careContacts`, not app users by default. Permissioned outreach
+is tied back through `outreachAttempts`, Linq chat/message ids, and message
+links to `careContactId` and `coordinationEventId`.
+
+See `docs/multiplayer-runtime-architecture.md` for the current tie-back model.
 
 ## Product Direction
 

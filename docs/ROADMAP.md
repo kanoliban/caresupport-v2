@@ -1,19 +1,21 @@
 # Product Roadmap
 
-Last updated: 2026-05-19
+Last updated: 2026-06-06
 
 ## Current State
 
 CareSupport is a family care agent currently implemented through a solo-thread
-wedge.
+wedge that can expand into permissioned one-to-one outreach.
 
 The active product path is:
 
-- one trusted user
+- one primary coordinator
 - one care case
-- one persistent text thread
-- memory, medications, schedule items, and audit logs
-- no outbound outreach or external tool execution yet
+- one trusted coordinator text thread
+- memory, medications, schedule items, care contacts, coordination events,
+  outreach attempts, messages, and audit logs
+- approved one-to-one outreach through Linq
+- care contact replies mapped back to the same care graph
 
 The product direction is:
 
@@ -34,8 +36,8 @@ Make the repo internally consistent so future work does not inherit the stale
   agent
 - solo-thread behavior is framed as the wedge and active implementation mode
 - docs name future runtime primitives without overbuilding code
-- runtime limits remain honest: no outreach/tools until permissions and audits
-  exist
+- runtime limits remain honest: approved Linq outreach exists; external tools,
+  group chats, and broad permission systems do not
 
 ## Phase 1 - Core First-Thread Loop
 
@@ -62,26 +64,25 @@ useful quickly.
 
 ## Phase 2 - Contact And Coordination Substrate
 
-Prepare for multiplayer without yet automating outreach.
+Prepare and activate the first narrow multiplayer loop.
 
-Initial substrate exists as of the runtime alignment pass: `careContacts` and
-`coordinationEvents` are in schema, scoped by care case, covered by tests, and
-loaded into prompt context when present. Remaining Phase 2 work is model-write
-path, summaries, and product-loop hardening.
+`careContacts`, `coordinationEvents`, and `outreachAttempts` are in schema,
+scoped by care case, covered by tests, and used by the prompt/runtime loop.
 
 ### Required outcomes
 
 - care-contact model is designed around a care case
 - coordination-event model is designed around open operational work
-- prompt language can identify coverage gaps and handoffs without claiming it
-  contacted anyone
-- status summaries can describe what is known, missing, and still open
-- tests prevent false claims of completed outreach or tool work
+- outreach attempts require exact approval before send
+- care contact replies map back to the same care graph
+- status summaries describe what is known, missing, and still open
+- tests prevent false claims of completed outreach or external tool work
 
 Started primitives:
 
 - `careContacts`
 - `coordinationEvents`
+- `outreachAttempts`
 
 Still candidate:
 
@@ -95,7 +96,6 @@ Add tool-bearing behavior behind explicit permission and audit state.
 
 - internal reminders
 - Google Calendar read/write
-- Linq-backed outbound outreach to approved contacts
 - operational status summaries for open coordination events
 
 ### Required outcomes
@@ -115,9 +115,10 @@ Build the first true multiplayer loop.
 1. User reports a cancellation or uncovered shift.
 2. CareSupport identifies the affected time window.
 3. CareSupport uses known contacts and fallback order.
-4. CareSupport asks permission to start outreach.
-5. CareSupport contacts approved people or agencies.
-6. CareSupport tracks pending, declined, partial, and confirmed replies.
+4. CareSupport asks permission to start exact one-to-one outreach.
+5. CareSupport contacts approved people or agencies through Linq.
+6. CareSupport tracks pending, declined, partial, and confirmed replies inside
+   the same care graph.
 7. CareSupport escalates when needed.
 8. CareSupport pushes short status updates.
 9. CareSupport records the resolution.

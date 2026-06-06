@@ -2,6 +2,57 @@
 
 This file records durable product decisions for the active CareSupport product.
 
+## 2026-06-06 - Activate Permissioned One-To-Many Runtime As Current Code Contract
+
+### Decision
+
+The active CareSupport code contract now includes a permissioned one-to-many
+text coordination loop inside the current Convex care-case core.
+
+This does not revive the old v1 `families` / `members` / access-tier
+architecture. The active model remains:
+
+- primary coordinator as `users`
+- care situation as `careCases`
+- caregivers, family helpers, providers, agencies, and others as
+  `careContacts`
+- open work as `coordinationEvents`
+- approved third-party text work as `outreachAttempts`
+- operational record as `messages` and `auditLogs`
+
+### What this means
+
+CareSupport can create care contacts and coordination events from conversation,
+propose exact outreach, ask the primary coordinator for approval, send approved
+one-to-one outreach through Linq, resolve care contact replies back into the
+same care graph, update coordination state, and audit the exchange.
+
+Care contact phone numbers are scoped through `careContacts.careCaseId`; they
+are not attached to the primary coordinator's `userId` and do not become app
+users by default.
+
+Reply mapping is conservative:
+
+1. match sent outreach by Linq chat id
+2. match contact by Linq chat id
+3. match phone only when uniquely tied to a sent outreach attempt
+4. otherwise fall back to unknown-user onboarding
+
+### Boundaries
+
+CareSupport still does not run group chats, create caregiver app accounts,
+manage broad caregiver permissions, sync Google Calendar or Gmail, or perform
+autonomous outreach without exact approval.
+
+### Operational consequence
+
+Production activation does not require seeding. Any private-beta coordinator can
+activate the loop by onboarding normally, adding at least one care contact and
+coordination need, approving exact outreach, and having the contact reply.
+
+The canonical architecture reference is
+`docs/multiplayer-runtime-architecture.md`.
+
 ## 2026-05-19 - Reframe CareSupport As A Multiplayer Family Care Runtime
 
 ### Decision
@@ -60,9 +111,10 @@ The first multiplayer substrate now exists:
 
 - `careContacts`
 - `coordinationEvents`
+- `outreachAttempts`
 
-Those tables are prompt-readable but not yet model-writable and do not execute
-outreach.
+Implementation status superseded on 2026-06-06: those tables are now part of a
+permissioned outreach and reply-mapping loop.
 
 Future tool-bearing work should extend from this foundation with deliberate
 primitives such as:
@@ -85,8 +137,9 @@ Docs, prompts, and future architecture should distinguish:
 - **wedge:** solo relationship that teaches CareSupport the care situation
 - **direction:** permissioned one-to-many coordination and tool action
 
-The runtime should remain solo-safe until permissioned outreach, provider
-adapters, action logging, and tests exist.
+Implementation status superseded on 2026-06-06: permissioned outreach, action
+logging, and tests now exist for the narrow Linq one-to-one loop. Provider
+adapters and broad permission systems remain future work.
 
 ### Supersedes
 
@@ -148,8 +201,9 @@ Secondary metrics:
 
 ### Operational consequence
 
-The runtime should remain solo-safe until permissioned outreach, tool actions,
-and multiplayer tests exist.
+Implementation status superseded on 2026-06-06: permissioned outreach and
+multiplayer tests exist for the narrow Linq one-to-one loop. Broader tool
+actions remain future work.
 
 ### Revisit trigger
 

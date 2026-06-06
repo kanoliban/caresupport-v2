@@ -7,6 +7,8 @@ runtime. It does not seed a Rob-specific fixture. A private-beta coordinator can
 use any approved phone number once normal onboarding has created their active
 care case.
 
+Architecture reference: `docs/multiplayer-runtime-architecture.md`.
+
 Activation order:
 
 1. Complete normal coordinator onboarding through CareSupport.
@@ -20,6 +22,8 @@ Activation order:
 
 Do not use real caregiver numbers until controlled test-number outreach passes.
 Do not seed production to create a subset user for activation.
+Deploy the latest Convex functions before running production preflight; a
+running production deployment can still be behind the current code contract.
 
 ## Operator Preflight
 
@@ -101,6 +105,7 @@ The verifier uses `admin:getCoordinationLoopReport` and requires:
 - outbound message evidence
 - inbound reply evidence
 - event reply-state evidence
+- no extra primary care case for the controlled contact phone
 - cleared or deferred follow-up clock
 - fresh coordinator status message after the latest controlled reply
 - request, approval, sent, live reply, and status audit evidence
