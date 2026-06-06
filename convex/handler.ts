@@ -457,6 +457,9 @@ export const handleMessage = internalAction({
         model: routeResult.model,
         apiKey,
       });
+      if (/calendar_updates/.test(aiResult.text)) {
+        console.log("[calendar] RAW model text:", aiResult.text.slice(0, 900));
+      }
       parsed = extractJson(aiResult.text);
     } catch (error: unknown) {
       const errorMessage =
