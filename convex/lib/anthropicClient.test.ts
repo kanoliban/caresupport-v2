@@ -12,37 +12,6 @@ const MESSAGES: Array<{ role: "user" | "assistant"; content: string }> = [
 
 const API_KEY = "test-api-key";
 
-function countOptionalParameters(schema: unknown): number {
-  if (!schema || typeof schema !== "object") return 0;
-  const record = schema as Record<string, unknown>;
-  const properties =
-    record.properties && typeof record.properties === "object"
-      ? record.properties as Record<string, unknown>
-      : {};
-  const required = new Set(
-    Array.isArray(record.required)
-      ? record.required.filter((entry): entry is string => typeof entry === "string")
-      : [],
-  );
-
-  const optionalHere = Object.keys(properties).filter((key) => !required.has(key)).length;
-  const nestedProperties = Object.values(properties).reduce<number>(
-    (sum, propertySchema) => sum + countOptionalParameters(propertySchema),
-    0,
-  );
-  const items = countOptionalParameters(record.items);
-  const variants = ["anyOf", "oneOf", "allOf"].reduce<number>((sum, key) => {
-    const value = record[key];
-    if (!Array.isArray(value)) return sum;
-    return sum + value.reduce<number>(
-      (variantSum, variant) => variantSum + countOptionalParameters(variant),
-      0,
-    );
-  }, 0);
-
-  return optionalHere + nestedProperties + items + variants;
-}
-
 function makeSuccessResponse(overrides?: {
   text?: string;
   thinking?: string;
@@ -189,36 +158,25 @@ describe("callAnthropic", () => {
     );
   });
 
-  it("omits thinking for Haiku, includes structured output schema", async () => {
+  it("omits thinking and provider structured output for Haiku", async () => {
     // #given — default model is Haiku
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
         expect(body.thinking).toBeUndefined();
-        const oc = body.output_config as Record<string, unknown>;
-        expect(oc.effort).toBeUndefined();
-        expect(oc.format).toHaveProperty("type", "json_schema");
-        const format = oc.format as {
-          schema?: { properties?: Record<string, unknown> };
-        };
-        expect(format.schema?.properties).toHaveProperty("care_contact_updates");
-        expect(format.schema?.properties).toHaveProperty("coordination_event_updates");
-        expect(format.schema?.properties).toHaveProperty("outreach_requests");
-        expect(countOptionalParameters(format.schema)).toBeLessThanOrEqual(24);
+        expect(body.output_config).toBeUndefined();
         return Promise.resolve(makeSuccessResponse());
       },
     );
   });
 
-  it("sends effort and schema (no thinking) for Sonnet", async () => {
+  it("omits provider structured output for Sonnet", async () => {
     // #given
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
         expect(body.thinking).toBeUndefined();
-        const oc = body.output_config as Record<string, unknown>;
-        expect(oc.effort).toBe("medium");
-        expect(oc.format).toHaveProperty("type", "json_schema");
+        expect(body.output_config).toBeUndefined();
         return Promise.resolve(
           makeSuccessResponse({ model: "claude-sonnet-4-6" }),
         );
@@ -227,15 +185,13 @@ describe("callAnthropic", () => {
     );
   });
 
-  it("sends high effort and schema (no thinking) for Opus", async () => {
+  it("omits provider structured output for Opus", async () => {
     // #given
     await callWithMock(
       (...args: unknown[]) => {
         const body = args[0] as Record<string, unknown>;
         expect(body.thinking).toBeUndefined();
-        const oc = body.output_config as Record<string, unknown>;
-        expect(oc.effort).toBe("high");
-        expect(oc.format).toHaveProperty("type", "json_schema");
+        expect(body.output_config).toBeUndefined();
         return Promise.resolve(
           makeSuccessResponse({ model: "claude-opus-4-6" }),
         );

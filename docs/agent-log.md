@@ -1909,6 +1909,36 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-06 — Codex
 
 ### What I did
+- Checked production logs after the previous schema reduction and found a second
+  Anthropic request rejection.
+- Confirmed Anthropic rejected freeform nested objects because
+  `additionalProperties: true` is unsupported in provider structured-output
+  schemas.
+- Removed `output_config` from live Anthropic requests entirely.
+- Kept CareSupport's response contract in the system prompt and continued to
+  rely on the existing parser/normalizers/Convex validators for structured care
+  updates.
+- Updated Anthropic client tests to assert no provider structured-output schema
+  is sent for Haiku, Sonnet, or Opus.
+- Deployed the no-provider-schema fix to production deployment
+  `keen-raccoon-606`.
+
+### Validation
+- `npm test -- convex/lib/anthropicClient.test.ts convex/lib/pipeline/responseParser.test.ts convex/lib/pipeline/promptBuilder.test.ts` passed.
+- `npm run typecheck` passed.
+- `npm test` passed: 28 files, 319 tests.
+
+### State I'm leaving
+- The two observed provider-side schema rejection causes have both been removed
+  from the production request path.
+- A fresh live inbound text is needed to verify Anthropic now reaches generation
+  and returns a normal CareSupport response.
+
+---
+
+## 2026-06-06 — Codex
+
+### What I did
 - Added `docs/multiplayer-runtime-architecture.md` as the canonical explanation
   of the care-case-scoped one-to-many runtime:
   - primary coordinator = `users`

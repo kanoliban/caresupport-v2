@@ -1,8 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type {
-  JSONOutputFormat,
   MessageParam,
-  OutputConfig,
   TextBlockParam,
   ThinkingConfigParam,
 } from "@anthropic-ai/sdk/resources/messages/messages";
@@ -10,63 +8,6 @@ import type { SystemBlock } from "./pipeline/types";
 
 const MAX_TOKENS = 16_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
-
-const FREEFORM_OBJECT_SCHEMA = {
-  type: "object",
-  additionalProperties: true,
-} as const;
-
-const FREEFORM_OBJECT_OR_NULL_SCHEMA = {
-  anyOf: [
-    FREEFORM_OBJECT_SCHEMA,
-    { type: "null" },
-  ],
-} as const;
-
-const FREEFORM_OBJECT_ARRAY_SCHEMA = {
-  type: "array",
-  items: FREEFORM_OBJECT_SCHEMA,
-} as const;
-
-const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
-  type: "json_schema",
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: [
-      "sms_response",
-      "internal_notes",
-      "user_profile_update",
-      "care_case_profile_update",
-      "user_memory_updates",
-      "care_case_memory_updates",
-      "self_corrections",
-      "reactions",
-      "effect",
-      "medication_updates",
-      "schedule_updates",
-      "care_contact_updates",
-      "coordination_event_updates",
-      "outreach_requests",
-    ],
-    properties: {
-      sms_response: { type: "string" },
-      internal_notes: { type: "string" },
-      user_profile_update: FREEFORM_OBJECT_OR_NULL_SCHEMA,
-      care_case_profile_update: FREEFORM_OBJECT_OR_NULL_SCHEMA,
-      user_memory_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
-      care_case_memory_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
-      self_corrections: { type: "array", items: { type: "string" } },
-      reactions: FREEFORM_OBJECT_ARRAY_SCHEMA,
-      effect: FREEFORM_OBJECT_OR_NULL_SCHEMA,
-      medication_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
-      schedule_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
-      care_contact_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
-      coordination_event_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
-      outreach_requests: FREEFORM_OBJECT_ARRAY_SCHEMA,
-    },
-  },
-};
 
 const MODEL_FALLBACK_CHAIN = [
   "claude-haiku-4-5",
@@ -100,14 +41,7 @@ function buildSystemParam(blocks: SystemBlock[]): TextBlockParam[] {
 }
 
 function thinkingConfig(_model: string): ThinkingConfigParam | undefined {
-  // structured JSON output (json_schema) and adaptive thinking are mutually exclusive
   return undefined;
-}
-
-function effortLevel(model: string): "medium" | "high" | undefined {
-  if (model.includes("haiku")) return undefined;
-  if (model.includes("opus")) return "high";
-  return "medium";
 }
 
 async function tryModel(
@@ -121,18 +55,12 @@ async function tryModel(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const thinkingParam = thinkingConfig(model);
-  const effort = effortLevel(model);
-  const outputConfig: OutputConfig = {
-    ...(effort && { effort }),
-    format: AGENT_RESPONSE_FORMAT,
-  };
   try {
     const stream = client.messages.stream(
       {
         model,
         max_tokens: MAX_TOKENS,
         ...(thinkingParam && { thinking: thinkingParam }),
-        output_config: outputConfig,
         system,
         messages,
       },
