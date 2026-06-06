@@ -85,8 +85,8 @@ to be queried. It should help the user think, decide, communicate, and follow
 through.
 
 CareSupport is not a scheduling-only agent. Scheduling and coverage are the
-launch proof, especially for Rob, but the product is broader family care
-coordination.
+launch stress test, especially in Rob-like care networks, but the product is
+broader family care coordination.
 
 ## The Principal Field
 

@@ -17,7 +17,7 @@ const controlledContactKeyValidator = v.union(
   v.literal("jennifer"),
 );
 
-const ROB_CONTACTS = [
+const ROB_SCENARIO_CONTACTS = [
   {
     key: "luann",
     name: "Luann Wudlick",
@@ -172,7 +172,7 @@ const ROB_CONTACTS = [
   },
 ] as const;
 
-const ROB_SCHEDULE_ITEMS = [
+const ROB_SCENARIO_SCHEDULE_ITEMS = [
   {
     title: "Jim Nelson coverage",
     time: "09:00",
@@ -243,12 +243,12 @@ function contactByName(
   return contacts.find((contact) => contact.name.toLowerCase() === name.toLowerCase());
 }
 
-function fixtureForKey(key: string): (typeof ROB_CONTACTS)[number] | undefined {
-  return ROB_CONTACTS.find((contact) => contact.key === key);
+function fixtureForKey(key: string): (typeof ROB_SCENARIO_CONTACTS)[number] | undefined {
+  return ROB_SCENARIO_CONTACTS.find((contact) => contact.key === key);
 }
 
 function fixtureIndexForKey(key: string): number {
-  return ROB_CONTACTS.findIndex((contact) => contact.key === key);
+  return ROB_SCENARIO_CONTACTS.findIndex((contact) => contact.key === key);
 }
 
 function isGeneratedFixturePhone(key: string, phone: string | undefined): boolean {
@@ -269,7 +269,7 @@ interface ControlledContactReadiness {
   inPendingEvent: boolean;
 }
 
-interface RobMultiplayerReadiness {
+interface RobScenarioReadiness {
   readyForControlledOutreach: boolean;
   fixturePresent: boolean;
   blockers: string[];
@@ -296,7 +296,7 @@ interface AdminCareCaseDetail {
   outreachAttempts: Array<Doc<"outreachAttempts">>;
 }
 
-interface RobControlledDryRunItem {
+interface RobScenarioDryRunItem {
   key: string;
   contactName: string;
   outreachAttemptId?: Id<"outreachAttempts">;
@@ -304,14 +304,14 @@ interface RobControlledDryRunItem {
   statusMessageId?: Id<"messages">;
 }
 
-interface RobControlledDryRunResult {
+interface RobScenarioDryRunResult {
   ran: boolean;
   reason?: "not_ready" | "care_case_detail_missing";
-  readiness: RobMultiplayerReadiness;
-  simulated: RobControlledDryRunItem[];
+  readiness: RobScenarioReadiness;
+  simulated: RobScenarioDryRunItem[];
 }
 
-interface RobControlledLoopContactReport {
+interface RobScenarioLoopContactReport {
   key: string;
   name: string;
   contactId?: Id<"careContacts">;
@@ -340,7 +340,7 @@ interface RobControlledLoopContactReport {
   passed: boolean;
 }
 
-interface RobControlledLoopReport {
+interface RobScenarioLoopReport {
   passed: boolean;
   fixturePresent: boolean;
   blockers: string[];
@@ -350,10 +350,10 @@ interface RobControlledLoopReport {
   controlledEventId?: Id<"coordinationEvents">;
   controlledEventStatus?: "open" | "waiting" | "resolved" | "cancelled";
   robStatusMessageIds: Array<Id<"messages">>;
-  contacts: RobControlledLoopContactReport[];
+  contacts: RobScenarioLoopContactReport[];
 }
 
-interface RobControlledLoopResetResult {
+interface RobScenarioLoopResetResult {
   reset: boolean;
   reason?:
     | "invalid_rob_phone"
@@ -366,6 +366,100 @@ interface RobControlledLoopResetResult {
   restoredPendingContactIds: Array<Id<"careContacts">>;
   cancelledDryRunAttemptIds: Array<Id<"outreachAttempts">>;
   clearedContactReplyIds: Array<Id<"careContacts">>;
+}
+
+interface CoordinationContactReadiness {
+  name: string;
+  contactId?: Id<"careContacts">;
+  phonePresent: boolean;
+  canReceiveTexts: boolean;
+  consentToContact?: boolean;
+  active: boolean;
+  linqChatIdPresent: boolean;
+  inPendingEvent: boolean;
+}
+
+interface CoordinationReadiness {
+  readyForControlledOutreach: boolean;
+  existingCoordinatorPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  userId?: Id<"users">;
+  careCaseId?: Id<"careCases">;
+  coordinatorChatIdPresent?: boolean;
+  contactCount?: number;
+  openEventCount?: number;
+  controlledEventId?: Id<"coordinationEvents">;
+  controlledEventTitle?: string;
+  controlledEventStatus?: "open" | "waiting" | "resolved" | "cancelled";
+  controlledContacts?: CoordinationContactReadiness[];
+}
+
+interface CoordinationLoopContactReport {
+  key: string;
+  name: string;
+  contactId?: Id<"careContacts">;
+  phone?: string;
+  linqChatId?: string;
+  sentOutreachAttemptIds: Array<Id<"outreachAttempts">>;
+  latestSentOutreachAttemptId?: Id<"outreachAttempts">;
+  outboundMessageId?: Id<"messages">;
+  inboundReplyMessageId?: Id<"messages">;
+  replyStatus?: string;
+  confirmedOnEvent: boolean;
+  pendingOnEvent: boolean;
+  declinedOnEvent: boolean;
+  followUpClockClearedOrDeferred: boolean;
+  extraCareCaseUserId?: Id<"users">;
+  extraCareCaseId?: Id<"careCases">;
+  audit: {
+    outreachRequested: boolean;
+    outreachApproved: boolean;
+    outreachSent: boolean;
+    liveReplyReceived: boolean;
+    statusSentToCoordinator: boolean;
+  };
+  blockers: string[];
+  warnings: string[];
+  passed: boolean;
+}
+
+interface CoordinationLoopReport {
+  passed: boolean;
+  existingCoordinatorPresent: boolean;
+  blockers: string[];
+  warnings: string[];
+  userId?: Id<"users">;
+  careCaseId?: Id<"careCases">;
+  controlledEventId?: Id<"coordinationEvents">;
+  controlledEventTitle?: string;
+  controlledEventStatus?: "open" | "waiting" | "resolved" | "cancelled";
+  coordinatorStatusMessageIds: Array<Id<"messages">>;
+  contacts: CoordinationLoopContactReport[];
+}
+
+function isActiveCoordinationEvent(event: Doc<"coordinationEvents">): boolean {
+  return event.status === "open" || event.status === "waiting";
+}
+
+function contactIdsForEvent(event: Doc<"coordinationEvents">): Array<Id<"careContacts">> {
+  return [
+    ...(event.pendingContactIds ?? []),
+    ...(event.confirmedContactIds ?? []),
+    ...(event.declinedContactIds ?? []),
+  ];
+}
+
+function uniqueIds<T extends string>(ids: T[]): T[] {
+  return [...new Set(ids)];
+}
+
+function eventIncludesContacts(
+  event: Doc<"coordinationEvents">,
+  contactIds: Array<Id<"careContacts">>,
+): boolean {
+  const eventContactIds = new Set(contactIdsForEvent(event));
+  return contactIds.every((id) => eventContactIds.has(id));
 }
 
 export const listCareCases = internalQuery({
@@ -453,7 +547,524 @@ export const getCareCaseDetail = internalQuery({
   },
 });
 
-export const seedRobMultiplayerFixture = internalMutation({
+export const getCoordinationReadiness = internalQuery({
+  args: {
+    coordinatorPhone: v.string(),
+    coordinatorChatId: v.optional(v.string()),
+    controlledContactNames: v.optional(v.array(v.string())),
+    coordinationEventTitle: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<CoordinationReadiness> => {
+    const blockers: string[] = [];
+    const warnings: string[] = [];
+    const coordinatorPhone = normalizePhone(args.coordinatorPhone);
+    if (!coordinatorPhone) {
+      return {
+        readyForControlledOutreach: false,
+        existingCoordinatorPresent: false,
+        blockers: ["invalid_coordinator_phone"],
+        warnings,
+      };
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", coordinatorPhone))
+      .first();
+    if (!user) {
+      return {
+        readyForControlledOutreach: false,
+        existingCoordinatorPresent: false,
+        blockers: ["coordinator_user_missing"],
+        warnings,
+      };
+    }
+
+    const careCase = await ctx.db.get(user.careCaseId);
+    if (!careCase) {
+      return {
+        readyForControlledOutreach: false,
+        existingCoordinatorPresent: true,
+        userId: user._id,
+        blockers: ["coordinator_care_case_missing"],
+        warnings,
+      };
+    }
+
+    if (user.status !== "active") blockers.push("coordinator_user_not_active");
+    if (!user.chatId) blockers.push("coordinator_chat_id_missing");
+    if (args.coordinatorChatId && user.chatId !== args.coordinatorChatId) {
+      blockers.push("coordinator_chat_id_mismatch");
+    }
+    if (careCase.status !== "active") blockers.push("coordinator_care_case_not_active");
+
+    const [contacts, events, outreachAttempts] = await Promise.all([
+      ctx.db
+        .query("careContacts")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("coordinationEvents")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+      ctx.db
+        .query("outreachAttempts")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+        .collect(),
+    ]);
+
+    const requestedContactNames = args.controlledContactNames ?? [];
+    const requestedContacts = requestedContactNames.map((name) => {
+      const contact = contactByName(contacts, name);
+      if (!contact) blockers.push(`controlled_contact_missing:${name}`);
+      return contact;
+    }).filter((contact): contact is Doc<"careContacts"> => Boolean(contact));
+    const requestedContactIds = requestedContacts.map((contact) => contact._id);
+
+    const openEvents = events.filter(isActiveCoordinationEvent);
+    let controlledEvent = args.coordinationEventTitle
+      ? events.find((event) => event.title === args.coordinationEventTitle)
+      : undefined;
+    if (!controlledEvent && requestedContactIds.length > 0) {
+      controlledEvent = openEvents.find((event) =>
+        eventIncludesContacts(event, requestedContactIds)
+      );
+    }
+    if (!controlledEvent) {
+      controlledEvent = openEvents.find((event) =>
+        (event.pendingContactIds ?? []).length > 0
+      );
+    }
+    if (!controlledEvent) {
+      blockers.push("coordination_event_missing");
+    } else if (!isActiveCoordinationEvent(controlledEvent)) {
+      blockers.push(`coordination_event_not_open:${controlledEvent.status}`);
+    }
+
+    const controlledContacts = requestedContacts.length > 0
+      ? requestedContacts
+      : contacts.filter((contact) =>
+          controlledEvent?.pendingContactIds?.some((id) => id === contact._id)
+        );
+    if (controlledEvent && controlledContacts.length === 0) {
+      blockers.push("controlled_contacts_missing");
+    }
+
+    const controlledContactReadiness = controlledContacts.map((contact) => {
+      const inPendingEvent = Boolean(
+        controlledEvent?.pendingContactIds?.some((id) => id === contact._id),
+      );
+      if (!contact.active) blockers.push(`controlled_contact_inactive:${contact.name}`);
+      if (!contact.phone) blockers.push(`controlled_contact_phone_missing:${contact.name}`);
+      if (!contact.canReceiveTexts) {
+        blockers.push(`controlled_contact_texting_disabled:${contact.name}`);
+      }
+      if (contact.consentToContact === false) {
+        blockers.push(`controlled_contact_consent_denied:${contact.name}`);
+      }
+      if (controlledEvent && !inPendingEvent) {
+        blockers.push(`controlled_contact_not_pending:${contact.name}`);
+      }
+
+      return {
+        name: contact.name,
+        contactId: contact._id,
+        phonePresent: Boolean(contact.phone),
+        canReceiveTexts: contact.canReceiveTexts ?? false,
+        consentToContact: contact.consentToContact,
+        active: contact.active,
+        linqChatIdPresent: Boolean(contact.linqChatId),
+        inPendingEvent,
+      };
+    });
+
+    const controlledContactIds = new Set(
+      controlledContacts.map((contact) => contact._id),
+    );
+    const sentControlledAttempts = controlledEvent
+      ? outreachAttempts.filter((attempt) =>
+          attempt.coordinationEventId === controlledEvent._id &&
+          controlledContactIds.has(attempt.careContactId) &&
+          attempt.status === "sent"
+        )
+      : [];
+    if (sentControlledAttempts.length > 0) {
+      warnings.push("controlled_outreach_already_sent");
+    }
+
+    return {
+      readyForControlledOutreach: blockers.length === 0,
+      existingCoordinatorPresent: true,
+      userId: user._id,
+      careCaseId: careCase._id,
+      coordinatorChatIdPresent: Boolean(user.chatId),
+      contactCount: contacts.length,
+      openEventCount: openEvents.length,
+      controlledEventId: controlledEvent?._id,
+      controlledEventTitle: controlledEvent?.title,
+      controlledEventStatus: controlledEvent?.status,
+      controlledContacts: controlledContactReadiness,
+      blockers: [...new Set(blockers)],
+      warnings: [...new Set(warnings)],
+    };
+  },
+});
+
+export const getCoordinationLoopReport = internalQuery({
+  args: {
+    coordinatorPhone: v.string(),
+    controlledContactNames: v.optional(v.array(v.string())),
+    coordinationEventTitle: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<CoordinationLoopReport> => {
+    const blockers: string[] = [];
+    const warnings: string[] = [];
+    const coordinatorPhone = normalizePhone(args.coordinatorPhone);
+    if (!coordinatorPhone) {
+      return {
+        passed: false,
+        existingCoordinatorPresent: false,
+        blockers: ["invalid_coordinator_phone"],
+        warnings,
+        coordinatorStatusMessageIds: [],
+        contacts: [],
+      };
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", coordinatorPhone))
+      .first();
+    if (!user) {
+      return {
+        passed: false,
+        existingCoordinatorPresent: false,
+        blockers: ["coordinator_user_missing"],
+        warnings,
+        coordinatorStatusMessageIds: [],
+        contacts: [],
+      };
+    }
+
+    const careCase = await ctx.db.get(user.careCaseId);
+    if (!careCase) {
+      return {
+        passed: false,
+        existingCoordinatorPresent: true,
+        userId: user._id,
+        blockers: ["coordinator_care_case_missing"],
+        warnings,
+        coordinatorStatusMessageIds: [],
+        contacts: [],
+      };
+    }
+
+    if (user.status !== "active") blockers.push("coordinator_user_not_active");
+    if (careCase.status !== "active") blockers.push("coordinator_care_case_not_active");
+
+    const [contacts, events, outreachAttempts, messages, auditLogs] =
+      await Promise.all([
+        ctx.db
+          .query("careContacts")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("coordinationEvents")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("outreachAttempts")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("messages")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+        ctx.db
+          .query("auditLogs")
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
+          .collect(),
+      ]);
+
+    const requestedContactNames = args.controlledContactNames ?? [];
+    const requestedContacts = requestedContactNames.map((name) => {
+      const contact = contactByName(contacts, name);
+      if (!contact) blockers.push(`controlled_contact_missing:${name}`);
+      return contact;
+    }).filter((contact): contact is Doc<"careContacts"> => Boolean(contact));
+    const requestedContactIds = requestedContacts.map((contact) => contact._id);
+
+    let controlledEvent = args.coordinationEventTitle
+      ? events.find((event) => event.title === args.coordinationEventTitle)
+      : undefined;
+    if (!controlledEvent && requestedContactIds.length > 0) {
+      controlledEvent = events.find((event) =>
+        event.status !== "cancelled" &&
+        eventIncludesContacts(event, requestedContactIds)
+      );
+    }
+    if (!controlledEvent) {
+      controlledEvent = events.find((event) =>
+        event.status !== "cancelled" &&
+        outreachAttempts.some((attempt) =>
+          attempt.coordinationEventId === event._id && attempt.status === "sent"
+        )
+      );
+    }
+    if (!controlledEvent) {
+      controlledEvent = events.find((event) =>
+        event.status !== "cancelled" && contactIdsForEvent(event).length > 0
+      );
+    }
+    if (!controlledEvent) {
+      blockers.push("coordination_event_missing");
+    }
+
+    const eventContactIds = controlledEvent
+      ? uniqueIds(contactIdsForEvent(controlledEvent))
+      : [];
+    const sentAttemptContactIds = controlledEvent
+      ? outreachAttempts
+          .filter((attempt) =>
+            attempt.coordinationEventId === controlledEvent?._id &&
+            attempt.status === "sent"
+          )
+          .map((attempt) => attempt.careContactId)
+      : [];
+    const contactsToReport = requestedContacts.length > 0
+      ? requestedContacts
+      : contacts.filter((contact) =>
+          uniqueIds([...eventContactIds, ...sentAttemptContactIds]).some((id) =>
+            id === contact._id
+          )
+        );
+    if (controlledEvent && contactsToReport.length === 0) {
+      blockers.push("controlled_contacts_missing");
+    }
+
+    const coordinatorStatusMessages = controlledEvent
+      ? messages.filter((message) =>
+          message.coordinationEventId === controlledEvent._id &&
+          message.direction === "outbound" &&
+          message.actorType === "assistant" &&
+          !message.careContactId
+        )
+      : [];
+
+    const contactReports: CoordinationLoopContactReport[] = [];
+    let latestInboundReplyAt: number | undefined;
+
+    for (const contact of contactsToReport) {
+      const contactBlockers: string[] = [];
+      const contactWarnings: string[] = [];
+
+      let extraCareCaseUserId: Id<"users"> | undefined;
+      let extraCareCaseId: Id<"careCases"> | undefined;
+      if (contact.phone) {
+        const usersWithContactPhone = await ctx.db
+          .query("users")
+          .withIndex("by_phone", (q) => q.eq("phone", contact.phone ?? ""))
+          .collect();
+        const extraUser = usersWithContactPhone.find(
+          (candidate) => candidate.careCaseId !== careCase._id,
+        );
+        if (extraUser) {
+          extraCareCaseUserId = extraUser._id;
+          extraCareCaseId = extraUser.careCaseId;
+          contactBlockers.push(`extra_care_case_for_controlled_contact_phone:${contact.name}`);
+        }
+      }
+
+      const sentAttempts = controlledEvent
+        ? outreachAttempts
+            .filter((attempt) =>
+              attempt.coordinationEventId === controlledEvent?._id &&
+              attempt.careContactId === contact._id &&
+              attempt.status === "sent"
+            )
+            .sort((a, b) => (b.sentAt ?? b.updatedAt) - (a.sentAt ?? a.updatedAt))
+        : [];
+      const latestSentAttempt = sentAttempts[0];
+      if (controlledEvent && sentAttempts.length === 0) {
+        contactBlockers.push(`sent_outreach_missing:${contact.name}`);
+      }
+
+      const sentAttemptIds = sentAttempts.map((attempt) => attempt._id);
+      const outboundMessage = controlledEvent && sentAttemptIds.length > 0
+        ? messages
+            .filter((message) =>
+              message.coordinationEventId === controlledEvent?._id &&
+              message.careContactId === contact._id &&
+              message.direction === "outbound" &&
+              message.actorType === "assistant" &&
+              message.outreachAttemptId &&
+              sentAttemptIds.includes(message.outreachAttemptId)
+            )
+            .sort((a, b) => b.timestamp - a.timestamp)[0]
+        : undefined;
+      if (controlledEvent && !outboundMessage) {
+        contactBlockers.push(`outbound_message_missing:${contact.name}`);
+      }
+
+      const inboundReply = controlledEvent && sentAttemptIds.length > 0
+        ? messages
+            .filter((message) =>
+              message.coordinationEventId === controlledEvent?._id &&
+              message.careContactId === contact._id &&
+              message.direction === "inbound" &&
+              message.outreachAttemptId &&
+              sentAttemptIds.includes(message.outreachAttemptId)
+            )
+            .sort((a, b) => b.timestamp - a.timestamp)[0]
+        : undefined;
+      if (controlledEvent && !inboundReply) {
+        contactBlockers.push(`inbound_reply_missing:${contact.name}`);
+      }
+      if (inboundReply) {
+        latestInboundReplyAt = Math.max(latestInboundReplyAt ?? 0, inboundReply.timestamp);
+      }
+
+      const confirmedOnEvent = Boolean(
+        controlledEvent?.confirmedContactIds?.some((id) => id === contact._id),
+      );
+      const pendingOnEvent = Boolean(
+        controlledEvent?.pendingContactIds?.some((id) => id === contact._id),
+      );
+      const declinedOnEvent = Boolean(
+        controlledEvent?.declinedContactIds?.some((id) => id === contact._id),
+      );
+      const eventReflectsReply = Boolean(
+        inboundReply &&
+          (confirmedOnEvent ||
+            declinedOnEvent ||
+            controlledEvent?.lastReplyMessageId === inboundReply._id),
+      );
+      if (inboundReply && !eventReflectsReply) {
+        contactBlockers.push(`event_reply_state_missing:${contact.name}`);
+      }
+      if (inboundReply && pendingOnEvent && !confirmedOnEvent && !declinedOnEvent) {
+        contactWarnings.push(`reply_left_contact_pending:${contact.name}`);
+      }
+
+      const followUpClockClearedOrDeferred = Boolean(
+        latestSentAttempt &&
+          (!latestSentAttempt.nextActionAt ||
+            (inboundReply && latestSentAttempt.nextActionAt > inboundReply.timestamp)),
+      );
+      if (inboundReply && latestSentAttempt && !followUpClockClearedOrDeferred) {
+        contactBlockers.push(`follow_up_clock_still_due:${contact.name}`);
+      }
+
+      const auditFor = (event: Doc<"auditLogs">["event"]): boolean =>
+        Boolean(
+          controlledEvent &&
+            auditLogs.some((audit) =>
+              audit.event === event &&
+              audit.details.coordinationEventId === controlledEvent?._id &&
+              audit.details.careContactId === contact._id &&
+              (sentAttemptIds.length === 0 ||
+                !audit.details.outreachAttemptId ||
+                sentAttemptIds.includes(audit.details.outreachAttemptId as Id<"outreachAttempts">))
+            ),
+        );
+      const audit = {
+        outreachRequested: auditFor("outreach_requested"),
+        outreachApproved: auditFor("outreach_approved"),
+        outreachSent: auditFor("outreach_sent"),
+        liveReplyReceived: auditFor("care_contact_reply_received"),
+        statusSentToCoordinator: false,
+      };
+      if (latestSentAttempt && !audit.outreachRequested) {
+        contactBlockers.push(`outreach_requested_audit_missing:${contact.name}`);
+      }
+      if (latestSentAttempt && !audit.outreachApproved) {
+        contactBlockers.push(`outreach_approved_audit_missing:${contact.name}`);
+      }
+      if (latestSentAttempt && !audit.outreachSent) {
+        contactBlockers.push(`outreach_sent_audit_missing:${contact.name}`);
+      }
+      if (inboundReply && !audit.liveReplyReceived) {
+        contactWarnings.push(`live_reply_audit_missing:${contact.name}`);
+      }
+
+      contactReports.push({
+        key: contact.name,
+        name: contact.name,
+        contactId: contact._id,
+        phone: contact.phone,
+        linqChatId: contact.linqChatId,
+        sentOutreachAttemptIds: sentAttemptIds,
+        latestSentOutreachAttemptId: latestSentAttempt?._id,
+        outboundMessageId: outboundMessage?._id,
+        inboundReplyMessageId: inboundReply?._id,
+        replyStatus: contact.lastReplyStatus,
+        confirmedOnEvent,
+        pendingOnEvent,
+        declinedOnEvent,
+        followUpClockClearedOrDeferred,
+        extraCareCaseUserId,
+        extraCareCaseId,
+        audit,
+        blockers: [...new Set(contactBlockers)],
+        warnings: [...new Set(contactWarnings)],
+        passed: contactBlockers.length === 0,
+      });
+    }
+
+    const freshCoordinatorStatusMessages = coordinatorStatusMessages.filter((message) =>
+      latestInboundReplyAt === undefined || message.timestamp >= latestInboundReplyAt
+    );
+    const freshStatusAuditPresent = controlledEvent
+      ? auditLogs.some((audit) =>
+          audit.event === "response_sent" &&
+          audit.details.triggerMessage === "coordination_status_follow_up" &&
+          audit.details.coordinationEventId === controlledEvent?._id &&
+          (latestInboundReplyAt === undefined || audit.timestamp >= latestInboundReplyAt)
+        )
+      : false;
+    if (controlledEvent && freshCoordinatorStatusMessages.length === 0) {
+      blockers.push(
+        coordinatorStatusMessages.length === 0
+          ? "coordinator_status_message_missing"
+          : "coordinator_status_message_stale",
+      );
+    }
+    if (controlledEvent && !freshStatusAuditPresent) {
+      blockers.push(
+        auditLogs.some((audit) =>
+          audit.event === "response_sent" &&
+          audit.details.triggerMessage === "coordination_status_follow_up" &&
+          audit.details.coordinationEventId === controlledEvent?._id
+        )
+          ? "coordinator_status_audit_stale"
+          : "coordinator_status_audit_missing",
+      );
+    }
+    for (const contactReport of contactReports) {
+      contactReport.audit.statusSentToCoordinator = freshStatusAuditPresent;
+      blockers.push(...contactReport.blockers);
+      warnings.push(...contactReport.warnings);
+    }
+
+    return {
+      passed: blockers.length === 0,
+      existingCoordinatorPresent: true,
+      userId: user._id,
+      careCaseId: careCase._id,
+      controlledEventId: controlledEvent?._id,
+      controlledEventTitle: controlledEvent?.title,
+      controlledEventStatus: controlledEvent?.status,
+      coordinatorStatusMessageIds: freshCoordinatorStatusMessages.map((message) =>
+        message._id
+      ),
+      contacts: contactReports,
+      blockers: [...new Set(blockers)],
+      warnings: [...new Set(warnings)],
+    };
+  },
+});
+
+export const seedRobCareNetworkScenario = internalMutation({
   args: {
     robPhone: v.string(),
     robChatId: v.optional(v.string()),
@@ -516,7 +1127,7 @@ export const seedRobMultiplayerFixture = internalMutation({
     }
 
     if (!user || !careCase) {
-      throw new Error("Unable to create Rob activation fixture");
+      throw new Error("Unable to create Rob care network scenario");
     }
 
     const useTestContactPhones = args.useTestContactPhones ?? true;
@@ -526,7 +1137,7 @@ export const seedRobMultiplayerFixture = internalMutation({
       .collect();
     const contactIdsByKey = new Map<string, Id<"careContacts">>();
 
-    for (const [index, fixture] of ROB_CONTACTS.entries()) {
+    for (const [index, fixture] of ROB_SCENARIO_CONTACTS.entries()) {
       const override = overrideByKey(args.contactOverrides, fixture.key);
       const phone = normalizeOptionalFixturePhone(
         override?.phone ?? (useTestContactPhones ? testPhoneForIndex(index) : undefined),
@@ -568,7 +1179,7 @@ export const seedRobMultiplayerFixture = internalMutation({
       .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
       .collect();
     let scheduleItemCount = 0;
-    for (const item of ROB_SCHEDULE_ITEMS) {
+    for (const item of ROB_SCENARIO_SCHEDULE_ITEMS) {
       const existing = existingScheduleItems.find(
         (candidate) => candidate.title === item.title,
       );
@@ -626,7 +1237,7 @@ export const seedRobMultiplayerFixture = internalMutation({
     }
 
     const memoryContent =
-      "Rob's activation fixture focuses on schedule coordination through CareSupport texting caregivers one-on-one, storing replies in the care graph, and updating Rob conversationally.";
+      "Rob's care network scenario stress-tests schedule coordination through CareSupport texting caregivers one-on-one, storing replies in the care graph, and updating the coordinator conversationally.";
     const existingMemory = await ctx.db
       .query("memoryEntries")
       .withIndex("by_care_case", (q) => q.eq("careCaseId", careCase._id))
@@ -649,23 +1260,23 @@ export const seedRobMultiplayerFixture = internalMutation({
     return {
       careCaseId: careCase._id,
       userId: user._id,
-      contactCount: ROB_CONTACTS.length,
+      contactCount: ROB_SCENARIO_CONTACTS.length,
       scheduleItemCount,
       coordinationEventId,
       controlledPendingContactIds,
-      controlledPendingContactNames: ROB_CONTACTS
+      controlledPendingContactNames: ROB_SCENARIO_CONTACTS
         .filter((contact) => contact.key === "jim" || contact.key === "jennifer")
         .map((contact) => contact.name),
     };
   },
 });
 
-export const getRobMultiplayerReadiness = internalQuery({
+export const getRobScenarioReadiness = internalQuery({
   args: {
     robPhone: v.string(),
     controlledContactKeys: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, args): Promise<RobMultiplayerReadiness> => {
+  handler: async (ctx, args): Promise<RobScenarioReadiness> => {
     const blockers: string[] = [];
     const warnings: string[] = [];
     const robPhone = normalizePhone(args.robPhone);
@@ -734,7 +1345,7 @@ export const getRobMultiplayerReadiness = internalQuery({
     ]);
 
     const missingContactKeys: string[] = [];
-    for (const fixture of ROB_CONTACTS) {
+    for (const fixture of ROB_SCENARIO_CONTACTS) {
       if (!contactByName(contacts, fixture.name)) {
         missingContactKeys.push(fixture.key);
       }
@@ -743,7 +1354,7 @@ export const getRobMultiplayerReadiness = internalQuery({
       blockers.push(`missing_contacts:${missingContactKeys.join(",")}`);
     }
 
-    const missingScheduleTitles = ROB_SCHEDULE_ITEMS
+    const missingScheduleTitles = ROB_SCENARIO_SCHEDULE_ITEMS
       .map((item) => item.title)
       .filter((title) => !scheduleItems.some((item) => item.title === title));
     if (missingScheduleTitles.length > 0) {
@@ -819,9 +1430,9 @@ export const getRobMultiplayerReadiness = internalQuery({
       careCaseId: careCase._id,
       robChatIdPresent: Boolean(user.chatId),
       contactCount: contacts.length,
-      expectedContactCount: ROB_CONTACTS.length,
+      expectedContactCount: ROB_SCENARIO_CONTACTS.length,
       scheduleItemCount: scheduleItems.length,
-      expectedScheduleItemCount: ROB_SCHEDULE_ITEMS.length,
+      expectedScheduleItemCount: ROB_SCENARIO_SCHEDULE_ITEMS.length,
       controlledEventId: controlledEvent?._id,
       controlledEventStatus: controlledEvent?.status,
       controlledContacts,
@@ -831,21 +1442,21 @@ export const getRobMultiplayerReadiness = internalQuery({
   },
 });
 
-export const runRobControlledLoopDryRun = internalAction({
+export const runRobScenarioDryRun = internalAction({
   args: {
     robPhone: v.string(),
     contactKeys: v.optional(v.array(controlledContactKeyValidator)),
     replyBody: v.optional(v.string()),
     now: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<RobControlledDryRunResult> => {
+  handler: async (ctx, args): Promise<RobScenarioDryRunResult> => {
     const readiness = await ctx.runQuery(
-      internal.admin.getRobMultiplayerReadiness,
+      internal.admin.getRobScenarioReadiness,
       {
         robPhone: args.robPhone,
         controlledContactKeys: args.contactKeys,
       },
-    ) as RobMultiplayerReadiness;
+    ) as RobScenarioReadiness;
 
     if (!readiness.readyForControlledOutreach || !readiness.careCaseId) {
       return {
@@ -871,7 +1482,7 @@ export const runRobControlledLoopDryRun = internalAction({
     const now = args.now ?? Date.now();
     const contactKeys = args.contactKeys ?? ["jim", "jennifer"];
     const eventTitle = "Rob schedule confirmation controlled test";
-    const simulated: RobControlledDryRunItem[] = [];
+    const simulated: RobScenarioDryRunItem[] = [];
 
     for (const key of contactKeys) {
       const fixture = fixtureForKey(key);
@@ -1004,12 +1615,12 @@ export const runRobControlledLoopDryRun = internalAction({
   },
 });
 
-export const getRobControlledLoopReport = internalQuery({
+export const getRobScenarioReport = internalQuery({
   args: {
     robPhone: v.string(),
     controlledContactKeys: v.optional(v.array(controlledContactKeyValidator)),
   },
-  handler: async (ctx, args): Promise<RobControlledLoopReport> => {
+  handler: async (ctx, args): Promise<RobScenarioLoopReport> => {
     const blockers: string[] = [];
     const warnings: string[] = [];
     const robPhone = normalizePhone(args.robPhone);
@@ -1095,7 +1706,7 @@ export const getRobControlledLoopReport = internalQuery({
       : [];
 
     const controlledContactKeys = args.controlledContactKeys ?? ["jim", "jennifer"];
-    const contactReports: RobControlledLoopContactReport[] = [];
+    const contactReports: RobScenarioLoopContactReport[] = [];
     let latestInboundReplyAt: number | undefined;
 
     for (const key of controlledContactKeys) {
@@ -1317,13 +1928,13 @@ export const getRobControlledLoopReport = internalQuery({
   },
 });
 
-export const resetRobControlledLoopAfterDryRun = internalMutation({
+export const resetRobScenarioDryRunState = internalMutation({
   args: {
     robPhone: v.string(),
     controlledContactKeys: v.optional(v.array(controlledContactKeyValidator)),
     now: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<RobControlledLoopResetResult> => {
+  handler: async (ctx, args): Promise<RobScenarioLoopResetResult> => {
     const robPhone = normalizePhone(args.robPhone);
     if (!robPhone) {
       return {

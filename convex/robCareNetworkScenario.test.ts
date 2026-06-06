@@ -5,15 +5,15 @@ import { api, internal } from "./_generated/api";
 
 const modules = import.meta.glob("./**/*.ts");
 
-describe("Rob multiplayer activation fixture", () => {
-  it("seeds Rob's coordinator case, care network, schedule, and controlled event idempotently", async () => {
+describe("Rob care network scenario", () => {
+  it("seeds Rob's simulator case, care network, schedule, and controlled event idempotently", async () => {
     const t = convexTest(schema, modules);
-    const first = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    const first = await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559000",
       robChatId: "chat-rob-activation",
       useTestContactPhones: true,
     });
-    const second = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    const second = await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559000",
       robChatId: "chat-rob-activation",
       useTestContactPhones: true,
@@ -72,14 +72,14 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("reports readiness blockers until explicit controlled test numbers are installed", async () => {
     const t = convexTest(schema, modules);
-    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559002",
       robChatId: "chat-rob-readiness",
       useTestContactPhones: true,
     });
 
     const placeholderReadiness = await t.query(
-      internal.admin.getRobMultiplayerReadiness,
+      internal.admin.getRobScenarioReadiness,
       { robPhone: "+16515559002" },
     );
 
@@ -92,7 +92,7 @@ describe("Rob multiplayer activation fixture", () => {
       ]),
     );
 
-    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559002",
       robChatId: "chat-rob-readiness",
       useTestContactPhones: false,
@@ -106,7 +106,7 @@ describe("Rob multiplayer activation fixture", () => {
       ],
     });
 
-    const ready = await t.query(internal.admin.getRobMultiplayerReadiness, {
+    const ready = await t.query(internal.admin.getRobScenarioReadiness, {
       robPhone: "+16515559002",
     });
 
@@ -144,19 +144,19 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("refuses dry-run execution until readiness clears placeholder test numbers", async () => {
     const t = convexTest(schema, modules);
-    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559003",
       robChatId: "chat-rob-dry-run-blocked",
       useTestContactPhones: true,
     });
 
-    const result = await t.action(internal.admin.runRobControlledLoopDryRun, {
+    const result = await t.action(internal.admin.runRobScenarioDryRun, {
       robPhone: "+16515559003",
       contactKeys: ["jim"],
       now: 1_776_000_000_000,
     });
     const detail = await t.query(
-      internal.admin.getRobMultiplayerReadiness,
+      internal.admin.getRobScenarioReadiness,
       { robPhone: "+16515559003" },
     );
 
@@ -172,7 +172,7 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("runs a no-Linq controlled dry run through outreach, reply, and Rob status rows", async () => {
     const t = convexTest(schema, modules);
-    const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    const fixture = await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559004",
       robChatId: "chat-rob-dry-run",
       useTestContactPhones: false,
@@ -186,7 +186,7 @@ describe("Rob multiplayer activation fixture", () => {
       ],
     });
 
-    const result = await t.action(internal.admin.runRobControlledLoopDryRun, {
+    const result = await t.action(internal.admin.runRobScenarioDryRun, {
       robPhone: "+16515559004",
       now: 1_776_000_000_000,
     });
@@ -224,7 +224,7 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("reports activation blockers before the controlled loop has evidence", async () => {
     const t = convexTest(schema, modules);
-    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559005",
       robChatId: "chat-rob-report-before-run",
       useTestContactPhones: false,
@@ -238,7 +238,7 @@ describe("Rob multiplayer activation fixture", () => {
       ],
     });
 
-    const report = await t.query(internal.admin.getRobControlledLoopReport, {
+    const report = await t.query(internal.admin.getRobScenarioReport, {
       robPhone: "+16515559005",
     });
 
@@ -279,7 +279,7 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("reports the no-Linq controlled dry run as passing with source-linked evidence", async () => {
     const t = convexTest(schema, modules);
-    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559006",
       robChatId: "chat-rob-report-pass",
       useTestContactPhones: false,
@@ -293,12 +293,12 @@ describe("Rob multiplayer activation fixture", () => {
       ],
     });
 
-    await t.action(internal.admin.runRobControlledLoopDryRun, {
+    await t.action(internal.admin.runRobScenarioDryRun, {
       robPhone: "+16515559006",
       now: 1_776_000_000_000,
     });
 
-    const report = await t.query(internal.admin.getRobControlledLoopReport, {
+    const report = await t.query(internal.admin.getRobScenarioReport, {
       robPhone: "+16515559006",
     });
 
@@ -358,7 +358,7 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("resets dry-run state so the controlled event is ready for live test-number outreach", async () => {
     const t = convexTest(schema, modules);
-    const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    const fixture = await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559008",
       robChatId: "chat-rob-reset-after-dry-run",
       useTestContactPhones: false,
@@ -371,17 +371,17 @@ describe("Rob multiplayer activation fixture", () => {
         },
       ],
     });
-    await t.action(internal.admin.runRobControlledLoopDryRun, {
+    await t.action(internal.admin.runRobScenarioDryRun, {
       robPhone: "+16515559008",
       now: 1_776_000_000_000,
     });
 
     const reportBeforeReset = await t.query(
-      internal.admin.getRobControlledLoopReport,
+      internal.admin.getRobScenarioReport,
       { robPhone: "+16515559008" },
     );
     const readinessBeforeReset = await t.query(
-      internal.admin.getRobMultiplayerReadiness,
+      internal.admin.getRobScenarioReadiness,
       { robPhone: "+16515559008" },
     );
 
@@ -395,18 +395,18 @@ describe("Rob multiplayer activation fixture", () => {
     );
 
     const reset = await t.mutation(
-      internal.admin.resetRobControlledLoopAfterDryRun,
+      internal.admin.resetRobScenarioDryRunState,
       {
         robPhone: "+16515559008",
         now: 1_776_000_100_000,
       },
     );
     const readinessAfterReset = await t.query(
-      internal.admin.getRobMultiplayerReadiness,
+      internal.admin.getRobScenarioReadiness,
       { robPhone: "+16515559008" },
     );
     const reportAfterReset = await t.query(
-      internal.admin.getRobControlledLoopReport,
+      internal.admin.getRobScenarioReport,
       { robPhone: "+16515559008" },
     );
     const detail = await t.query(internal.admin.getCareCaseDetail, {
@@ -446,7 +446,7 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("requires Rob status evidence after the latest controlled reply", async () => {
     const t = convexTest(schema, modules);
-    const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    const fixture = await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559009",
       robChatId: "chat-rob-fresh-status",
       useTestContactPhones: false,
@@ -454,12 +454,12 @@ describe("Rob multiplayer activation fixture", () => {
         { key: "jim", phone: "+16515559961", linqChatId: "chat-jim-fresh" },
       ],
     });
-    await t.action(internal.admin.runRobControlledLoopDryRun, {
+    await t.action(internal.admin.runRobScenarioDryRun, {
       robPhone: "+16515559009",
       contactKeys: ["jim"],
       now: 1_776_000_000_000,
     });
-    await t.mutation(internal.admin.resetRobControlledLoopAfterDryRun, {
+    await t.mutation(internal.admin.resetRobScenarioDryRunState, {
       robPhone: "+16515559009",
       controlledContactKeys: ["jim"],
       now: 1_776_000_100_000,
@@ -522,7 +522,7 @@ describe("Rob multiplayer activation fixture", () => {
       sourceMessageId,
     });
 
-    const staleReport = await t.query(internal.admin.getRobControlledLoopReport, {
+    const staleReport = await t.query(internal.admin.getRobScenarioReport, {
       robPhone: "+16515559009",
       controlledContactKeys: ["jim"],
     });
@@ -544,7 +544,7 @@ describe("Rob multiplayer activation fixture", () => {
       now: replyAt + 1_000,
     });
 
-    const freshReport = await t.query(internal.admin.getRobControlledLoopReport, {
+    const freshReport = await t.query(internal.admin.getRobScenarioReport, {
       robPhone: "+16515559009",
       controlledContactKeys: ["jim"],
     });
@@ -557,7 +557,7 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("blocks activation when a controlled caregiver phone created another care case", async () => {
     const t = convexTest(schema, modules);
-    await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559007",
       robChatId: "chat-rob-report-extra-case",
       useTestContactPhones: false,
@@ -570,7 +570,7 @@ describe("Rob multiplayer activation fixture", () => {
         },
       ],
     });
-    await t.action(internal.admin.runRobControlledLoopDryRun, {
+    await t.action(internal.admin.runRobScenarioDryRun, {
       robPhone: "+16515559007",
       now: 1_776_000_000_000,
     });
@@ -593,7 +593,7 @@ describe("Rob multiplayer activation fixture", () => {
       });
     });
 
-    const report = await t.query(internal.admin.getRobControlledLoopReport, {
+    const report = await t.query(internal.admin.getRobScenarioReport, {
       robPhone: "+16515559007",
     });
     const jim = report.contacts.find((contact) => contact.key === "jim");
@@ -609,7 +609,7 @@ describe("Rob multiplayer activation fixture", () => {
 
   it("runs the seeded controlled event through approval, outreach, and caregiver reply state", async () => {
     const t = convexTest(schema, modules);
-    const fixture = await t.mutation(internal.admin.seedRobMultiplayerFixture, {
+    const fixture = await t.mutation(internal.admin.seedRobCareNetworkScenario, {
       robPhone: "+16515559001",
       robChatId: "chat-rob-controlled-loop",
       useTestContactPhones: true,

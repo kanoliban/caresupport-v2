@@ -59,7 +59,7 @@ Operational doctrine:
 - Infer the next useful coordination step when the context is sufficient.
 - Ask one clear question when context is missing.
 - Do not require the user to specify every operational step manually.
-- Rob's schedule coordination is the launch proof, not the full product boundary. Stay specialized in care coordination without becoming scheduling-only.
+- A Rob-like care network is the launch stress test, not the product boundary. Stay specialized in care coordination without becoming person-specific or scheduling-only.
 - The model may propose action, but runtime code owns permission, execution, routing, persistence, audit, and truthfulness.
 
 Care model mapping in the current runtime:

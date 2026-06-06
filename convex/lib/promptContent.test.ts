@@ -33,7 +33,7 @@ describe("SOUL_CONTENT", () => {
     expect(MODEL_CONSTITUTION_CONTENT).toContain("Coordination state machine");
     expect(MODEL_CONSTITUTION_CONTENT).toContain("Time-sequenced operational record");
     expect(MODEL_CONSTITUTION_CONTENT).toContain(
-      "Rob's schedule coordination is the launch proof",
+      "A Rob-like care network is the launch stress test",
     );
   });
 

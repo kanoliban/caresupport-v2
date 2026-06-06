@@ -175,8 +175,10 @@ The user should be able to say the care need in ordinary language; CareSupport
 should translate it into contacts, coordination events, outreach proposals,
 state updates, and follow-ups.
 
-CareSupport should preserve general care-coordination flexibility. Rob's
-schedule coordination is the launch proof, not the whole product boundary.
+CareSupport should preserve general care-coordination flexibility. A Rob-like
+care network is the launch stress test, not the whole product boundary.
+Production activation must work for any primary coordinator whose care graph is
+created through normal onboarding and conversation.
 
 ## Permission Rules
 
