@@ -1909,6 +1909,35 @@ Read the last 2-3 entries before starting work.
   read-only preflight.
 - After production functions are current, activate multiplayer through normal
   coordinator onboarding, not seeding.
+
+---
+
+## 2026-06-06 — Codex
+
+### Deployment follow-up
+- Committed and pushed the multiplayer runtime doctrine alignment:
+  `e7bd6d6 docs(coordination): align multiplayer runtime doctrine`.
+- Ran `npx convex deploy` and deployed the latest Convex functions/schema to
+  production `keen-raccoon-606`.
+- Production deploy completed successfully and added the Phase 2 coordination
+  indexes for `careClaims`, `careContacts`, `messages`, and
+  `outreachAttempts`.
+- Confirmed the generic production activation queries are now available:
+  - `admin:getCoordinationReadiness`
+  - `admin:getCoordinationLoopReport`
+
+### Read-only production checks
+- `admin:getCoordinationReadiness` with a dummy coordinator phone returned the
+  expected `coordinator_user_missing` blocker instead of function-not-found.
+- `admin:getCoordinationLoopReport` with the same dummy phone returned the
+  expected `coordinator_user_missing` blocker instead of function-not-found.
+
+### State
+- Production code is current.
+- No production fixture seed or row-level activation mutation was run.
+- Full live activation still requires a real primary coordinator to onboard,
+  add a controlled care contact and coordination need, approve one exact
+  outreach, and have that contact reply.
 - Full suite passed: 19 files / 263 tests.
 - `git diff --check` passed.
 - Full suite passed: 19 files / 262 tests.
