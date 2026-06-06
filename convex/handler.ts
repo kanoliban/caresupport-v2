@@ -52,6 +52,7 @@ const COORDINATION_BOUNDARY_RESPONSE =
 const COORDINATION_BOUNDARY_OUTBOUND_MARKER =
   "I need your approval before I message anyone";
 const COORDINATION_BOUNDARY_RECENT_HISTORY_WINDOW = 5;
+const ERROR_MESSAGE_MAX_LENGTH = 500;
 
 const PROFILE_SAVE_PATTERNS = [
   /^\s*please save this to my profile(?: for future messages)?[:\s,-]*(.+)$/i,
@@ -83,6 +84,14 @@ type OutreachExecutionResult = {
   chatId?: string;
   messageId?: string;
 };
+
+export interface RuntimeErrorSummary {
+  name: string;
+  message: string;
+  status?: number;
+  type?: string;
+  code?: string;
+}
 
 type CareContactReplyContext = {
   careCaseId: Id<"careCases">;
@@ -349,6 +358,83 @@ export function approvalResolutionResponse(
   }
 
   return `Got it. I have your approval to ask ${resolution.contactName}. I am preparing the send step now.`;
+}
+
+export function summarizeRuntimeError(error: unknown): RuntimeErrorSummary {
+  if (error instanceof Error) {
+    const record = isRecord(error) ? error : {};
+    return {
+      name: error.name || "Error",
+      message: truncateErrorMessage(scrubSensitiveText(error.message)),
+      status: numberProperty(record, "status"),
+      type: stringProperty(record, "type"),
+      code: stringProperty(record, "code"),
+    };
+  }
+
+  if (isRecord(error)) {
+    const message =
+      stringProperty(error, "message") ??
+      stringProperty(error, "error") ??
+      JSON.stringify(error);
+    return {
+      name: stringProperty(error, "name") ?? "UnknownError",
+      message: truncateErrorMessage(scrubSensitiveText(message)),
+      status: numberProperty(error, "status"),
+      type: stringProperty(error, "type"),
+      code: stringProperty(error, "code"),
+    };
+  }
+
+  return {
+    name: "UnknownError",
+    message: truncateErrorMessage(scrubSensitiveText(String(error))),
+  };
+}
+
+function formatRuntimeErrorSummary(summary: RuntimeErrorSummary): string {
+  const metadata = [
+    summary.status === undefined ? null : `status=${summary.status}`,
+    summary.type ? `type=${summary.type}` : null,
+    summary.code ? `code=${summary.code}` : null,
+  ].filter((value): value is string => Boolean(value));
+  const suffix = metadata.length > 0 ? ` (${metadata.join(", ")})` : "";
+  return `${summary.name}: ${summary.message}${suffix}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function stringProperty(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function numberProperty(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function truncateErrorMessage(message: string): string {
+  if (message.length <= ERROR_MESSAGE_MAX_LENGTH) {
+    return message;
+  }
+  return `${message.slice(0, ERROR_MESSAGE_MAX_LENGTH)}...`;
+}
+
+function scrubSensitiveText(text: string): string {
+  return text
+    .replace(/\bsk-ant-[A-Za-z0-9_-]+/g, "[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\bsso-key\s+[A-Za-z0-9:_-]+/gi, "sso-key [redacted]");
 }
 
 export const handleMessage = internalAction({
@@ -670,11 +756,32 @@ export const handleMessage = internalAction({
       });
       parsed = extractJson(aiResult.text);
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      const errorSummary = summarizeRuntimeError(error);
+      const errorMessage = formatRuntimeErrorSummary(errorSummary);
+      console.error("[handler] ai_response_failed", {
+        careCaseId,
+        userId,
+        error: errorSummary,
+      });
+
       const fallback =
         `Sorry ${replyDisplayName}, I wasn't able to process that. Can you send it again?`;
-      await logOutbound(
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId,
+        userId,
+        event: "message_failed",
+        phone: senderPhone,
+        details: {
+          failureReason: `ai_response_failed: ${errorMessage}`,
+          triggerMessage: messageBody.slice(0, 200),
+          sourceMessageId: inboundMessageId,
+          linqChatId: chatId,
+          linqMessageId: args.sourceMessageId,
+        },
+        timestamp: Date.now(),
+      });
+
+      const outboundMessageId = await logOutbound(
         ctx,
         careCaseId,
         userId,
@@ -684,7 +791,13 @@ export const handleMessage = internalAction({
         now,
         careContactReply,
       );
-      await sendResponse(chatId, fallback, env());
+      const linqMessageIds = await sendResponse(chatId, fallback, env(), startedAt);
+      if (linqMessageIds.length > 0) {
+        await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+          messageId: outboundMessageId,
+          linqMessageId: linqMessageIds[0],
+        });
+      }
       return { success: false, response: fallback, error: errorMessage };
     }
 

@@ -10,6 +10,7 @@ import {
   parseLesson,
   shouldFireCoordinationBoundaryOverride,
   stripMarkdown,
+  summarizeRuntimeError,
 } from "./handler";
 
 describe("parseLesson", () => {
@@ -264,6 +265,54 @@ describe("approvalResolutionResponse", () => {
 
     expect(response).toContain("no phone number saved");
     expect(response).toContain("I have not messaged them");
+  });
+});
+
+describe("summarizeRuntimeError", () => {
+  it("preserves provider metadata while trimming the message", () => {
+    const error = new Error(`${"x".repeat(520)}`);
+    Object.assign(error, {
+      status: 400,
+      type: "invalid_request_error",
+      code: "bad_request",
+    });
+
+    const result = summarizeRuntimeError(error);
+
+    expect(result).toMatchObject({
+      name: "Error",
+      status: 400,
+      type: "invalid_request_error",
+      code: "bad_request",
+    });
+    expect(result.message).toHaveLength(503);
+    expect(result.message.endsWith("...")).toBe(true);
+  });
+
+  it("redacts obvious credentials from error messages", () => {
+    const result = summarizeRuntimeError(
+      new Error("Anthropic failed with sk-ant-secret123 and Bearer token-secret"),
+    );
+
+    expect(result.message).toContain("[redacted]");
+    expect(result.message).not.toContain("sk-ant-secret123");
+    expect(result.message).not.toContain("token-secret");
+  });
+
+  it("summarizes non-Error provider objects", () => {
+    const result = summarizeRuntimeError({
+      name: "APIError",
+      message: "model unavailable",
+      status: "529",
+      type: "overloaded_error",
+    });
+
+    expect(result).toEqual({
+      name: "APIError",
+      message: "model unavailable",
+      status: 529,
+      type: "overloaded_error",
+    });
   });
 });
 

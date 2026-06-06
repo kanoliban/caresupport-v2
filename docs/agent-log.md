@@ -1853,6 +1853,32 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-06 — Codex
 
 ### What I did
+- Investigated repeated production fallback replies saying CareSupport could
+  not process the user's message.
+- Confirmed Linq webhooks and message delivery were reaching Convex; the opaque
+  failure was inside the AI call / response parse path.
+- Added sanitized runtime error summarization for the handler fallback path.
+- Logged AI response failures as `message_failed` audit rows with trigger
+  message, source Linq IDs, and sanitized failure reason.
+- Updated fallback sends to patch the outbound message with the returned Linq
+  provider message ID, matching the normal success path.
+- Deployed the diagnostics patch to production deployment `keen-raccoon-606`.
+
+### Validation
+- `npm test -- convex/handler.test.ts` passed.
+- `npm run typecheck` passed.
+- `npm test` passed: 28 files, 319 tests.
+
+### State I'm leaving
+- Production can now reveal the real provider/runtime error on the next failing
+  inbound text instead of only recording the apology fallback.
+- A fresh live message is still needed to capture the newly instrumented error.
+
+---
+
+## 2026-06-06 — Codex
+
+### What I did
 - Added `docs/multiplayer-runtime-architecture.md` as the canonical explanation
   of the care-case-scoped one-to-many runtime:
   - primary coordinator = `users`
