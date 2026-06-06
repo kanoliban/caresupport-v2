@@ -20,6 +20,7 @@ FIELD GUIDE:
 - internal_notes: REQUIRED. Private reasoning.
 - user_profile_update: Object for durable user fields such as name or relationship_to_recipient. Null if unchanged.
 - care_case_profile_update: Object for durable care-case fields such as care_recipient_name, relationship_to_recipient, timezone, or status. Null if unchanged.
+- Always include every top-level array field below. Use [] when there is no update.
 - user_memory_updates: Durable user-level memory facts and preferences. Use categories: profile, communication_preference, care_preference.
 - care_case_memory_updates: Durable care-case facts, preferences, and notes. Use categories: care_note, care_preference.
 - Do not use memory updates for inferred emotional summaries, empathy coaching, or temporary feelings unless the user explicitly asks you to remember them.

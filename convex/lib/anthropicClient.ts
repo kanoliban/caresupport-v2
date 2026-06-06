@@ -11,102 +11,21 @@ import type { SystemBlock } from "./pipeline/types";
 const MAX_TOKENS = 16_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 
-const MEMORY_UPDATE_SCHEMA = {
+const FREEFORM_OBJECT_SCHEMA = {
   type: "object",
-  required: ["category", "content"],
-  additionalProperties: false,
-  properties: {
-    category: {
-      type: "string",
-      enum: [
-        "profile",
-        "communication_preference",
-        "care_preference",
-        "care_note",
-        "lesson",
-      ],
-    },
-    content: { type: "string" },
-    source: { type: "string" },
-  },
+  additionalProperties: true,
 } as const;
 
-const CARE_CONTACT_UPDATE_SCHEMA = {
-  type: "object",
-  required: ["action"],
-  additionalProperties: false,
-  properties: {
-    action: { type: "string", enum: ["add", "update", "remove"] },
-    name: { type: "string" },
-    phone: { type: "string" },
-    relationship: { type: "string" },
-    contact_type: {
-      type: "string",
-      enum: ["family", "professional_caregiver", "agency", "clinician", "other"],
-    },
-    agency_name: { type: "string" },
-    role: { type: "string" },
-    availability_notes: { type: "string" },
-    contact_priority: { type: "number" },
-    can_receive_texts: { type: "boolean" },
-    consent_to_contact: { type: "boolean" },
-    active: { type: "boolean" },
-    notes: { type: "string" },
-  },
+const FREEFORM_OBJECT_OR_NULL_SCHEMA = {
+  anyOf: [
+    FREEFORM_OBJECT_SCHEMA,
+    { type: "null" },
+  ],
 } as const;
 
-const COORDINATION_EVENT_UPDATE_SCHEMA = {
-  type: "object",
-  required: ["action", "title"],
-  additionalProperties: false,
-  properties: {
-    action: { type: "string", enum: ["add", "update", "remove"] },
-    title: { type: "string" },
-    type: {
-      type: "string",
-      enum: [
-        "coverage_gap",
-        "schedule_change",
-        "handoff",
-        "task_followup",
-        "appointment",
-        "medication",
-        "outreach",
-        "other",
-      ],
-    },
-    status: {
-      type: "string",
-      enum: ["open", "waiting", "resolved", "cancelled"],
-    },
-    urgency: {
-      type: "string",
-      enum: ["low", "normal", "high", "urgent"],
-    },
-    description: { type: "string" },
-    starts_at: { type: "number" },
-    ends_at: { type: "number" },
-    original_assignee_name: { type: "string" },
-    confirmed_contact_names: { type: "array", items: { type: "string" } },
-    pending_contact_names: { type: "array", items: { type: "string" } },
-    declined_contact_names: { type: "array", items: { type: "string" } },
-    fallback_contact_names: { type: "array", items: { type: "string" } },
-    next_action_at: { type: "number" },
-    escalation_at: { type: "number" },
-    resolution: { type: "string" },
-  },
-} as const;
-
-const OUTREACH_REQUEST_SCHEMA = {
-  type: "object",
-  required: ["contact_name", "purpose", "message"],
-  additionalProperties: false,
-  properties: {
-    contact_name: { type: "string" },
-    purpose: { type: "string" },
-    message: { type: "string" },
-    coordination_event_title: { type: "string" },
-  },
+const FREEFORM_OBJECT_ARRAY_SCHEMA = {
+  type: "array",
+  items: FREEFORM_OBJECT_SCHEMA,
 } as const;
 
 const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
@@ -124,121 +43,27 @@ const AGENT_RESPONSE_FORMAT: JSONOutputFormat = {
       "self_corrections",
       "reactions",
       "effect",
+      "medication_updates",
+      "schedule_updates",
+      "care_contact_updates",
+      "coordination_event_updates",
+      "outreach_requests",
     ],
     properties: {
       sms_response: { type: "string" },
       internal_notes: { type: "string" },
-      user_profile_update: {
-        anyOf: [
-          {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              name: { type: "string" },
-              relationship_to_recipient: { type: "string" },
-              status: {
-                type: "string",
-                enum: ["onboarding", "active", "paused", "archived"],
-              },
-            },
-          },
-          { type: "null" },
-        ],
-      },
-      care_case_profile_update: {
-        anyOf: [
-          {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              care_recipient_name: { type: "string" },
-              relationship_to_recipient: { type: "string" },
-              timezone: { type: "string" },
-              status: {
-                type: "string",
-                enum: ["onboarding", "active", "paused", "archived"],
-              },
-            },
-          },
-          { type: "null" },
-        ],
-      },
-      user_memory_updates: { type: "array", items: MEMORY_UPDATE_SCHEMA },
-      care_case_memory_updates: { type: "array", items: MEMORY_UPDATE_SCHEMA },
+      user_profile_update: FREEFORM_OBJECT_OR_NULL_SCHEMA,
+      care_case_profile_update: FREEFORM_OBJECT_OR_NULL_SCHEMA,
+      user_memory_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
+      care_case_memory_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
       self_corrections: { type: "array", items: { type: "string" } },
-      reactions: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["target_message", "type"],
-          additionalProperties: false,
-          properties: {
-            target_message: { type: "string", enum: ["last_inbound", "last_outbound"] },
-            type: { type: "string", enum: ["love", "like", "dislike", "laugh", "emphasize", "question"] },
-          },
-        },
-      },
-      effect: {
-        anyOf: [
-          {
-            type: "object",
-            required: ["type", "name"],
-            additionalProperties: false,
-            properties: {
-              type: { type: "string", enum: ["screen", "bubble"] },
-              name: { type: "string" },
-            },
-          },
-          { type: "null" },
-        ],
-      },
-      medication_updates: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["action", "name"],
-          additionalProperties: false,
-          properties: {
-            action: { type: "string", enum: ["add", "update", "remove"] },
-            name: { type: "string" },
-            dose: { type: "string" },
-            schedule: { type: "string" },
-            prescriber: { type: "string" },
-            notes: { type: "string" },
-          },
-        },
-      },
-      schedule_updates: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["action", "type", "title"],
-          additionalProperties: false,
-          properties: {
-            action: { type: "string", enum: ["add", "update", "remove"] },
-            type: { type: "string", enum: ["appointment", "task", "reminder"] },
-            title: { type: "string" },
-            date: { type: "string" },
-            time: { type: "string" },
-            end_time: { type: "string" },
-            location: { type: "string" },
-            notes: { type: "string" },
-            provider: { type: "string" },
-          },
-        },
-      },
-      care_contact_updates: {
-        type: "array",
-        items: CARE_CONTACT_UPDATE_SCHEMA,
-      },
-      coordination_event_updates: {
-        type: "array",
-        items: COORDINATION_EVENT_UPDATE_SCHEMA,
-      },
-      outreach_requests: {
-        type: "array",
-        items: OUTREACH_REQUEST_SCHEMA,
-      },
+      reactions: FREEFORM_OBJECT_ARRAY_SCHEMA,
+      effect: FREEFORM_OBJECT_OR_NULL_SCHEMA,
+      medication_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
+      schedule_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
+      care_contact_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
+      coordination_event_updates: FREEFORM_OBJECT_ARRAY_SCHEMA,
+      outreach_requests: FREEFORM_OBJECT_ARRAY_SCHEMA,
     },
   },
 };

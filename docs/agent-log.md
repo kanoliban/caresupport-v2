@@ -1879,6 +1879,36 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-06 — Codex
 
 ### What I did
+- Used the new production diagnostics to identify the repeated live fallback
+  root cause.
+- Confirmed Anthropic rejected the structured output request before generation:
+  the JSON schema had 51 optional parameters, above the provider grammar limit
+  of 24.
+- Reduced the Anthropic structured-output schema to a provider-safe envelope:
+  required top-level response fields stay enforced, while nested update payloads
+  remain freeform and are normalized by CareSupport's own parser/validators.
+- Updated response-format prompt guidance so the model always includes every
+  top-level array field and uses `[]` when no update is needed.
+- Added a regression test that counts optional JSON schema parameters and keeps
+  the provider-facing schema under the Anthropic limit.
+- Deployed the schema fix to production deployment `keen-raccoon-606`.
+
+### Validation
+- `npm test -- convex/lib/anthropicClient.test.ts convex/lib/pipeline/promptBuilder.test.ts` passed.
+- `npm run typecheck` passed.
+- `npm test` passed: 28 files, 319 tests.
+
+### State I'm leaving
+- The known production failure causing `Sorry Liban, I wasn't able to process
+  that...` has been fixed and deployed.
+- A fresh live inbound text is needed to confirm the full iMessage response loop
+  now reaches Anthropic generation successfully.
+
+---
+
+## 2026-06-06 — Codex
+
+### What I did
 - Added `docs/multiplayer-runtime-architecture.md` as the canonical explanation
   of the care-case-scoped one-to-many runtime:
   - primary coordinator = `users`

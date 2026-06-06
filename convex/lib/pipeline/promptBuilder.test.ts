@@ -156,6 +156,9 @@ describe("buildSystemBlocks", () => {
     expect(responseFormatBlock?.text).toContain(
       'Never store "today", "tomorrow", or a day name as the date field',
     );
+    expect(responseFormatBlock?.text).toContain(
+      "Always include every top-level array field below",
+    );
   });
 
   it("describes third-party coordination as a current runtime boundary", () => {
