@@ -59,7 +59,7 @@ become critical path.
 - [x] 2E0 — Convex memory/retrieval architecture policy
 - [ ] 2E — Agent/context engine hardening
 - [x] 2F — Follow-up cron / next action scanner
-- [ ] 2G — Rob-style live test setup
+- [ ] 2G — Private-beta coordination activation
 - [ ] 2H — Web/iOS companion views (postponed)
 
 ## 2A — Structured Coordination Contract
@@ -461,7 +461,8 @@ Acceptance criteria:
 
 - [x] Due follow-ups are found deterministically.
 - [x] No follow-up is sent without valid permission.
-- [x] Rob receives status only when it changes what he needs to know or decide.
+- [x] The coordinator receives status only when it changes what they need to know
+      or decide.
 - [x] Completed/resolved events are ignored by the scanner.
 
 Test targets:
@@ -470,17 +471,19 @@ Test targets:
 - [x] Existing `convex/admin.test.ts` patterns for digest-like queries
 - [x] Existing reminder/digest tests as reference, not duplicated blindly
 
-## 2G — Rob-Style Live Test Setup
+## 2G — Private-Beta Coordination Activation
 
-Purpose: prove the loop with realistic data before widening beta behavior.
+Purpose: prove the loop through normal coordinator onboarding before widening
+beta behavior.
 
 Implementation tasks:
 
-- [x] Seed or manually create one active coordinator care case.
-- [x] Add 12-13 care contacts with phone, role, textability, and priority.
-- [x] Create one coverage/schedule coordination event.
+- [x] Verify one active coordinator care case created by normal onboarding.
+- [x] Verify contacts exist with phone, role, textability, and priority.
+- [x] Verify one coverage/schedule coordination event exists.
 - [ ] Run a controlled outreach sequence with test numbers first.
-- [ ] Then run with Rob only after the controlled sequence passes.
+- [ ] Then expand to Rob or another private-beta coordinator after the
+      controlled sequence passes.
 
 Acceptance criteria:
 
@@ -490,18 +493,21 @@ Acceptance criteria:
 - [ ] Replies update Convex contact/event state.
 - [x] Convex contact/event/outreach state reflects replies without UI
       intervention.
-- [ ] Rob receives concise status updates and does not need to pull status.
+- [ ] Coordinator receives concise status updates and does not need to pull status.
 
 Test targets:
 
 - [x] Local/Dev Convex smoke script or manual checklist
-  - `npm run rob:activate:controlled`
-  - `npm run rob:verify:controlled`
-  - `admin:seedRobMultiplayerFixture`
-  - `admin:getRobMultiplayerReadiness`
-  - `admin:runRobControlledLoopDryRun`
-  - `admin:getRobControlledLoopReport`
-  - `admin:resetRobControlledLoopAfterDryRun`
+  - `npm run coordination:preflight`
+  - `npm run coordination:verify`
+  - `admin:getCoordinationReadiness`
+  - `admin:getCoordinationLoopReport`
+- [x] Rob care network remains simulator/regression coverage only
+  - `admin:seedRobCareNetworkScenario`
+  - `admin:getRobScenarioReadiness`
+  - `admin:runRobScenarioDryRun`
+  - `admin:getRobScenarioReport`
+  - `admin:resetRobScenarioDryRunState`
 - [ ] Linq test-number verification
 - [ ] Agent-log entry with exact data state left behind
 
@@ -522,7 +528,7 @@ Resume only after:
 
 - [ ] The iMessage agent can complete the coordination loop with test contacts.
 - [ ] The context graph can be trusted as the source of truth.
-- [ ] Rob-style testing shows what state actually needs to be visible.
+- [ ] Private-beta coordination testing shows what state actually needs to be visible.
 
 ## Standard Gates Before Moving Between Slices
 

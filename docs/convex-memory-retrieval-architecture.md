@@ -86,8 +86,8 @@ Current runtime memory flow:
 7. Convex persists typed records, memory entries, messages, and audits.
 8. The next model turn receives the updated context.
 
-This is sufficient for the first Rob-style coordination loop, but it is not the
-final retrieval architecture.
+This is sufficient for the first private-beta coordination loop, but it is not
+the final retrieval architecture.
 
 ## Core Policy
 
@@ -340,7 +340,8 @@ Run a spike only when at least one of these is true:
 - older but relevant facts are being missed
 - users ask history/pattern questions that current structured context cannot
   answer
-- Rob-style tests need precedent recall across many prior coordination events
+- private-beta coordination tests need precedent recall across many prior
+  coordination events
 - resolved events become useful as examples for future decisions
 
 Spike acceptance criteria:

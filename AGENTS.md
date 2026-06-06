@@ -23,9 +23,9 @@ The long-term product is one-to-many family care coordination across care
 recipients, family caregivers, professional caregivers, agencies, schedules,
 reminders, outreach, and operational coordination events.
 
-## Rob Heuristic
+## Launch Stress Test
 
-Rob is the most important user model.
+Rob is the launch stress test, not the product boundary.
 
 He is quadriplegic, uses his nose to operate his iPhone, and coordinates 12
 people himself: 9 professional caregivers and 3 family members across 3
@@ -36,6 +36,10 @@ Core product question:
 > Does this reduce the number of times Rob has to use his nose to chase care coordination?
 
 If no, the feature is probably not central.
+
+Runtime code, operator scripts, and onboarding paths must still work for any
+private-beta primary coordinator. Do not make activation depend on Rob-specific
+fixtures, names, schedules, or seeded state.
 
 ## Current Runtime
 
@@ -114,6 +118,7 @@ Start with:
 - `docs/convex-memory-retrieval-architecture.md`
 - `docs/caresupport-learning-retrieval-implementation.md`
 - `docs/rob-care-operations-model.md`
+- `docs/private-beta-coordination-activation.md`
 - `docs/tools-and-capabilities-thought-experiment.md`
 - `docs/integrations-and-tool-bearing-agent.md`
 - `docs/research-integration-architecture.md`

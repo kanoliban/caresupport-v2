@@ -8,6 +8,40 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-05 — Codex
 
 ### What I did
+- De-Robified the production-facing coordination activation path.
+- Replaced `rob:*` npm scripts with `coordination:preflight` and
+  `coordination:verify`.
+- Rewrote the operator scripts to use coordinator-centered inputs and reject
+  old Rob-only env vars.
+- Added generic `admin:getCoordinationReadiness` and
+  `admin:getCoordinationLoopReport` queries that read existing onboarding-created
+  care graph state instead of seeding.
+- Renamed the old Rob activation fixture/test path into Rob care network
+  scenario language.
+- Replaced the Rob activation checklist with
+  `docs/private-beta-coordination-activation.md`.
+- Updated AGENTS, SOUL, model constitution, prompt doctrine, and Phase 2G tracker
+  to state that Rob is a launch stress test, not the product boundary.
+
+### Validation
+- Targeted tests passed: generic coordination scripts, generic activation query,
+  Rob scenario coverage, and prompt doctrine.
+- `npm run typecheck` passed.
+- `npm test` passed: 28 files / 316 tests.
+- `git diff --check` passed.
+
+### State I'm leaving
+- Production activation is now framed as normal coordinator onboarding plus
+  read-only preflight and live verification.
+- No production data was seeded or mutated.
+- Rob remains available as simulator/regression coverage, not as the activation
+  architecture.
+
+---
+
+## 2026-06-05 — Codex
+
+### What I did
 - Verified the production Convex deployment responds to read-only function calls
   after the dashboard showed it running.
 - Confirmed production has the required Linq/model environment variables present

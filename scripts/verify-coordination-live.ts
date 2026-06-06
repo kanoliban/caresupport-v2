@@ -1,12 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { convexRunArgs, extractJsonObject, isE164Phone } from "./run-rob-controlled-activation";
-
-type ControlledContactKey = "jim" | "jennifer";
+import { convexRunArgs, extractJsonObject, isE164Phone } from "./run-coordination-preflight";
 
 interface LiveVerificationConfig {
-  robPhone: string;
-  controlledContactKeys: ControlledContactKey[];
+  coordinatorPhone: string;
+  controlledContactNames: string[];
+  coordinationEventTitle?: string;
   deploymentName?: string;
   envFile?: string;
   prod?: boolean;
@@ -46,16 +45,9 @@ function parseOptions(argv: string[]): Record<string, string | undefined> {
   return options;
 }
 
-function parseControlledContactKeys(value: string | undefined): ControlledContactKey[] {
-  if (!value) return ["jim", "jennifer"];
-  const keys = value.split(",").map((key) => key.trim()).filter(Boolean);
-  if (keys.length === 0) return ["jim", "jennifer"];
-  for (const key of keys) {
-    if (key !== "jim" && key !== "jennifer") {
-      throw new Error(`Unsupported controlled contact key: ${key}`);
-    }
-  }
-  return keys as ControlledContactKey[];
+function listOption(value: string | undefined): string[] {
+  if (!value) return [];
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 export function parseLiveVerificationConfig(
@@ -63,15 +55,25 @@ export function parseLiveVerificationConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): LiveVerificationConfig {
   const options = parseOptions(argv);
-  const robPhone = options["rob-phone"] || env.ROB_PHONE;
+  const coordinatorPhone = options["coordinator-phone"] || env.COORDINATOR_PHONE;
+  const controlledContactNames = listOption(
+    options["contact-names"] || env.CONTROLLED_CONTACT_NAMES,
+  );
+  const coordinationEventTitle =
+    options["event-title"] || env.COORDINATION_EVENT_TITLE;
   const deploymentName = options["deployment-name"] || env.CONVEX_DEPLOYMENT_NAME;
   const prodValue = options.prod || env.CONVEX_PROD;
   const prod = prodValue === "true" || prodValue === "1";
-  if (!robPhone) {
-    throw new Error("Missing required activation input: ROB_PHONE or --rob-phone");
+
+  if (!coordinatorPhone) {
+    throw new Error(
+      "Missing required activation input: COORDINATOR_PHONE or --coordinator-phone",
+    );
   }
-  if (!isE164Phone(robPhone)) {
-    throw new Error("Rob phone must be E.164 format, for example +16515559000");
+  if (!isE164Phone(coordinatorPhone)) {
+    throw new Error(
+      "Coordinator phone must be E.164 format, for example +16515559000",
+    );
   }
   if (prod && deploymentName) {
     throw new Error(
@@ -80,10 +82,9 @@ export function parseLiveVerificationConfig(
   }
 
   return {
-    robPhone,
-    controlledContactKeys: parseControlledContactKeys(
-      options["contact-keys"] || env.CONTROLLED_CONTACT_KEYS,
-    ),
+    coordinatorPhone,
+    controlledContactNames,
+    coordinationEventTitle: coordinationEventTitle || undefined,
     deploymentName,
     envFile: options["env-file"] || env.CONVEX_ENV_FILE,
     prod: prod || undefined,
@@ -100,16 +101,23 @@ function reportBlockers(value: unknown): string {
   return isRecord(value) ? stringArray(value.blockers).join(", ") : "unknown";
 }
 
-export function assertLiveControlledReport(
+function contactMatchesExpected(
+  contact: Record<string, unknown>,
+  expectedName: string,
+): boolean {
+  return contact.name === expectedName || contact.key === expectedName;
+}
+
+export function assertLiveCoordinationReport(
   report: unknown,
-  expectedContactKeys: ControlledContactKey[] = ["jim", "jennifer"],
+  expectedContactNames: string[] = [],
 ): void {
   if (!isRecord(report)) {
-    throw new Error("Controlled-loop report was not an object");
+    throw new Error("Coordination-loop report was not an object");
   }
   if (report.passed !== true) {
     throw new Error(
-      `Controlled-loop report did not pass. Blockers: ${reportBlockers(report)}`,
+      `Coordination-loop report did not pass. Blockers: ${reportBlockers(report)}`,
     );
   }
   const warnings = stringArray(report.warnings);
@@ -121,38 +129,46 @@ export function assertLiveControlledReport(
       `Live reply audits are missing: ${liveReplyWarnings.join(", ")}`,
     );
   }
-  const robStatusMessageIds = stringArray(report.robStatusMessageIds);
-  if (robStatusMessageIds.length === 0) {
-    throw new Error("Fresh Rob status message evidence is missing");
+  const coordinatorStatusMessageIds = stringArray(report.coordinatorStatusMessageIds);
+  if (coordinatorStatusMessageIds.length === 0) {
+    throw new Error("Fresh coordinator status message evidence is missing");
   }
-  if (!Array.isArray(report.contacts)) {
-    throw new Error("Controlled-loop report did not include contacts");
+  const reportContacts = Array.isArray(report.contacts) ? report.contacts : [];
+  if (reportContacts.length === 0) {
+    throw new Error("Coordination-loop report did not include contacts");
   }
 
-  for (const key of expectedContactKeys) {
-    const contact = report.contacts.find(
-      (item) => isRecord(item) && item.key === key,
-    );
-    if (!isRecord(contact)) {
-      throw new Error(`Controlled contact report missing: ${key}`);
-    }
+  const contactsToVerify = expectedContactNames.length > 0
+    ? expectedContactNames.map((name) => {
+        const contact = reportContacts.find(
+          (item) => isRecord(item) && contactMatchesExpected(item, name),
+        );
+        if (!isRecord(contact)) {
+          throw new Error(`Controlled contact report missing: ${name}`);
+        }
+        return contact;
+      })
+    : reportContacts.filter(isRecord);
+
+  for (const contact of contactsToVerify) {
+    const label = typeof contact.name === "string" ? contact.name : "unknown contact";
     if (contact.passed !== true) {
-      throw new Error(`Controlled contact did not pass: ${key}`);
+      throw new Error(`Controlled contact did not pass: ${label}`);
     }
     if (typeof contact.latestSentOutreachAttemptId !== "string") {
-      throw new Error(`Sent outreach evidence missing for ${key}`);
+      throw new Error(`Sent outreach evidence missing for ${label}`);
     }
     if (typeof contact.outboundMessageId !== "string") {
-      throw new Error(`Outbound message evidence missing for ${key}`);
+      throw new Error(`Outbound message evidence missing for ${label}`);
     }
     if (typeof contact.inboundReplyMessageId !== "string") {
-      throw new Error(`Inbound reply evidence missing for ${key}`);
+      throw new Error(`Inbound reply evidence missing for ${label}`);
     }
     if (contact.followUpClockClearedOrDeferred !== true) {
-      throw new Error(`Follow-up clock is not cleared or deferred for ${key}`);
+      throw new Error(`Follow-up clock is not cleared or deferred for ${label}`);
     }
     if (!isRecord(contact.audit)) {
-      throw new Error(`Audit summary missing for ${key}`);
+      throw new Error(`Audit summary missing for ${label}`);
     }
     const audit = contact.audit;
     const auditFields = [
@@ -160,14 +176,14 @@ export function assertLiveControlledReport(
       "outreachApproved",
       "outreachSent",
       "liveReplyReceived",
-      "statusSentToRob",
+      "statusSentToCoordinator",
     ];
     const missingAuditFields = auditFields.filter(
       (field) => audit[field] !== true,
     );
     if (missingAuditFields.length > 0) {
       throw new Error(
-        `Audit evidence missing for ${key}: ${missingAuditFields.join(", ")}`,
+        `Audit evidence missing for ${label}: ${missingAuditFields.join(", ")}`,
       );
     }
   }
@@ -187,10 +203,11 @@ function defaultRunner(command: string, args: string[]): CommandResult {
 
 function runReport(config: LiveVerificationConfig, runner: CommandRunner): unknown {
   const args = convexRunArgs(
-    "admin:getRobControlledLoopReport",
+    "admin:getCoordinationLoopReport",
     {
-      robPhone: config.robPhone,
-      controlledContactKeys: config.controlledContactKeys,
+      coordinatorPhone: config.coordinatorPhone,
+      controlledContactNames: config.controlledContactNames,
+      coordinationEventTitle: config.coordinationEventTitle,
     },
     config,
   );
@@ -199,7 +216,7 @@ function runReport(config: LiveVerificationConfig, runner: CommandRunner): unkno
     const output = `${result.stdout}\n${result.stderr}`.trim();
     if (output.includes("deployment is paused")) {
       throw new Error(
-        "Convex deployment is paused. Resume it in the Convex dashboard before verifying Rob activation.",
+        "Convex deployment is paused. Resume it in the Convex dashboard before verifying coordination activation.",
       );
     }
     throw new Error(`Convex command failed: npx ${args.join(" ")}\n${output}`);
@@ -207,20 +224,23 @@ function runReport(config: LiveVerificationConfig, runner: CommandRunner): unkno
   return extractJsonObject(result.stdout);
 }
 
-export function verifyRobControlledLiveActivation(
+export function verifyCoordinationLiveActivation(
   config: LiveVerificationConfig,
   runner: CommandRunner = defaultRunner,
 ): void {
-  console.log("Verifying Rob controlled live activation report...");
+  console.log("Verifying coordination live activation report...");
   const report = runReport(config, runner);
-  assertLiveControlledReport(report, config.controlledContactKeys);
-  console.log("Rob controlled live activation verified.");
-  console.log(`Contacts verified: ${config.controlledContactKeys.join(", ")}`);
+  assertLiveCoordinationReport(report, config.controlledContactNames);
+  const contacts = config.controlledContactNames.length > 0
+    ? config.controlledContactNames.join(", ")
+    : "report-selected contacts";
+  console.log("Coordination live activation verified.");
+  console.log(`Contacts verified: ${contacts}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   try {
-    verifyRobControlledLiveActivation(
+    verifyCoordinationLiveActivation(
       parseLiveVerificationConfig(process.argv.slice(2)),
     );
   } catch (error) {
