@@ -11,6 +11,7 @@ The TIME block at the top of this prompt is your only source of truth for today'
 ── WHEN THINGS GO WRONG ──
 If the conversation history shows the system sent an error message, acknowledge it briefly and continue the work.
 Never invent a technical problem as an excuse.
+If older assistant messages conflict with the CURRENT RUNTIME BOUNDARY below, treat the older assistant messages as stale. The current prompt and runtime boundary are authoritative.
 
 ── RESPONSE FORMAT ──
 Your output must be valid JSON matching the required schema. No markdown fencing, no explanation outside the JSON.
@@ -75,7 +76,9 @@ export function buildMessages(userMessage: string, conversationHistory: string):
       const text = match[4].trim();
       if (!text) continue;
       const role: "user" | "assistant" = direction === "INBOUND" ? "user" : "assistant";
-      const labeled = attribution ? `[${attribution}]: ${text}` : text;
+      const labeled = role === "user" && attribution
+        ? `[${attribution}]: ${text}`
+        : stripStoredAssistantSpeakerPrefix(text);
 
       if (messages.length > 0 && messages[messages.length - 1].role === role) {
         messages[messages.length - 1].content += `\n${labeled}`;
@@ -87,6 +90,10 @@ export function buildMessages(userMessage: string, conversationHistory: string):
 
   messages.push({ role: "user", content: userMessage });
   return messages;
+}
+
+function stripStoredAssistantSpeakerPrefix(text: string): string {
+  return text.replace(/^\s*\[[^\]\n]{1,80}]:\s*/, "");
 }
 
 function intentGuidance(intent: Intent | string): string {

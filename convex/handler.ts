@@ -127,6 +127,10 @@ export function stripMarkdown(text: string): string {
     .replace(/(^|[\s([{"'])\*(?=\S)(.+?\S)\*(?=$|[\s)\]}.,!?;:'"])/g, "$1$2");
 }
 
+export function stripAssistantSpeakerPrefix(text: string): string {
+  return text.replace(/^\s*\[[^\]\n]{1,80}]:\s*/, "");
+}
+
 function truncateReplyQuote(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= MAX_REPLY_QUOTE_LENGTH) {
@@ -801,7 +805,7 @@ export const handleMessage = internalAction({
       return { success: false, response: fallback, error: errorMessage };
     }
 
-    let smsResponse = stripMarkdown(parsed.smsResponse);
+    let smsResponse = stripAssistantSpeakerPrefix(stripMarkdown(parsed.smsResponse));
     const coordinationBoundaryBlocked = careContactReply
       ? false
       : shouldFireCoordinationBoundaryOverride(messageBody, recentMessages);

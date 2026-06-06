@@ -53,8 +53,16 @@ describe("buildMessages", () => {
     const result = buildMessages("What next?", history);
 
     expect(result[0]).toEqual({ role: "user", content: "[Alex]: Hi" });
-    expect(result[1]).toEqual({ role: "assistant", content: "[Alex]: Hello" });
+    expect(result[1]).toEqual({ role: "assistant", content: "Hello" });
     expect(result[2]).toEqual({ role: "user", content: "What next?" });
+  });
+
+  it("strips stale speaker labels from stored assistant messages", () => {
+    const history =
+      "[2026-04-13 10:00:00 UTC] [OUTBOUND to Alex] [Alex]: Hello again";
+    const result = buildMessages("What next?", history);
+
+    expect(result[0]).toEqual({ role: "assistant", content: "Hello again" });
   });
 });
 
@@ -158,6 +166,9 @@ describe("buildSystemBlocks", () => {
     );
     expect(responseFormatBlock?.text).toContain(
       "Always include every top-level array field below",
+    );
+    expect(responseFormatBlock?.text).toContain(
+      "treat the older assistant messages as stale",
     );
   });
 

@@ -1939,6 +1939,48 @@ Read the last 2-3 entries before starting work.
 ## 2026-06-06 — Codex
 
 ### What I did
+- Investigated the report that two CareSupport instances appeared to be
+  responding in the same thread.
+- Checked production and dev Convex runtime state:
+  - Production is running and receiving live Linq webhook traffic.
+  - Dev deployment `valiant-tortoise-962` is paused and cannot execute
+    functions, so it is not a second live responder.
+- Checked production message rows for the affected care case and confirmed the
+  latest inbound turns each produced one stored outbound response, not duplicate
+  production handler replies.
+- Found a context construction bug: stored outbound history was being sent back
+  to the model as assistant content prefixed with the recipient label, e.g.
+  `[Name]: ...`; the model copied that label into new outbound replies.
+- Updated prompt history construction so only inbound/user messages carry
+  speaker labels; assistant history is now unlabeled.
+- Stripped stale `[Name]:` prefixes from stored assistant history before it is
+  shown to the model.
+- Added a defensive outbound cleanup that removes a leading `[Name]:` prefix
+  from model replies before sending.
+- Added runtime guidance that current capabilities override stale older
+  assistant messages in conversation history.
+- Deployed the context/prefix cleanup to production deployment
+  `keen-raccoon-606`.
+
+### Validation
+- `npm test -- convex/handler.test.ts convex/lib/pipeline/promptBuilder.test.ts` passed.
+- `npm run typecheck` passed.
+- `npm test` passed: 28 files, 322 tests.
+
+### State I'm leaving
+- Dev is paused; production is the only Convex deployment observed handling
+  live messages.
+- The `[Name]:` leakage and stale assistant-history capability conflict are
+  fixed in production.
+- If duplicate-looking bubbles still appear, the next check should compare Linq
+  provider message history against Convex `messages`, because production Convex
+  currently stores only one outbound row per latest inbound turn.
+
+---
+
+## 2026-06-06 — Codex
+
+### What I did
 - Added `docs/multiplayer-runtime-architecture.md` as the canonical explanation
   of the care-case-scoped one-to-many runtime:
   - primary coordinator = `users`

@@ -9,6 +9,7 @@ import {
   isUnsupportedCoordinationRequest,
   parseLesson,
   shouldFireCoordinationBoundaryOverride,
+  stripAssistantSpeakerPrefix,
   stripMarkdown,
   summarizeRuntimeError,
 } from "./handler";
@@ -68,6 +69,16 @@ describe("stripMarkdown", () => {
     expect(stripMarkdown(input)).toBe(
       ["Schedule update", "Appointment: Tomorrow at 10", "Bring paperwork"].join("\n"),
     );
+  });
+});
+
+describe("stripAssistantSpeakerPrefix", () => {
+  it("removes leaked user labels from assistant replies", () => {
+    expect(stripAssistantSpeakerPrefix("[Liban]: Hello there")).toBe("Hello there");
+  });
+
+  it("leaves ordinary text unchanged", () => {
+    expect(stripAssistantSpeakerPrefix("Hello there")).toBe("Hello there");
   });
 });
 
