@@ -547,6 +547,338 @@ export const getCareCaseDetail = internalQuery({
   },
 });
 
+export const getLinqChatMessageSummary = internalAction({
+  args: {
+    chatId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (_ctx, args) => {
+    const apiToken = process.env.LINQ_API_TOKEN ?? "";
+    if (!apiToken) {
+      return {
+        ok: false,
+        status: null,
+        error: "LINQ_API_TOKEN is not configured in this deployment",
+        messages: [],
+      };
+    }
+
+    const limit = Math.min(Math.max(args.limit ?? 30, 1), 100);
+    const url = new URL(
+      `https://api.linqapp.com/api/partner/v3/chats/${args.chatId}/messages`,
+    );
+    url.searchParams.set("limit", String(limit));
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        Accept: "application/json",
+      },
+    });
+    const body = await response.text();
+    let data: Record<string, unknown> = {};
+    try {
+      data = body ? JSON.parse(body) as Record<string, unknown> : {};
+    } catch {
+      data = { raw: body.slice(0, 500) };
+    }
+
+    const rawMessages = messageArrayFromLinqResponse(data);
+    return {
+      ok: response.ok,
+      status: response.status,
+      topLevelKeys: Object.keys(data),
+      error: response.ok ? null : summarizeLinqError(data),
+      count: rawMessages.length,
+      nextCursor:
+        stringValue(data.next_cursor) ??
+        stringValue(data.nextCursor) ??
+        null,
+      messages: rawMessages.slice(-limit).map(summarizeLinqMessage),
+    };
+  },
+});
+
+export const getLinqWebhookSubscriptionSummary = internalAction({
+  args: {},
+  handler: async () => {
+    const apiToken = process.env.LINQ_API_TOKEN ?? "";
+    if (!apiToken) {
+      return {
+        ok: false,
+        status: null,
+        error: "LINQ_API_TOKEN is not configured in this deployment",
+        count: 0,
+        activeCount: 0,
+        subscriptions: [],
+      };
+    }
+
+    const response = await fetch(
+      "https://api.linqapp.com/api/partner/v3/webhook-subscriptions",
+      {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    const body = await response.text();
+    let data: Record<string, unknown> = {};
+    try {
+      data = body ? JSON.parse(body) as Record<string, unknown> : {};
+    } catch {
+      data = { raw: body.slice(0, 500) };
+    }
+
+    const subscriptions = subscriptionArrayFromLinqResponse(data)
+      .map(summarizeLinqSubscription);
+    return {
+      ok: response.ok,
+      status: response.status,
+      topLevelKeys: Object.keys(data),
+      error: response.ok ? null : summarizeLinqError(data),
+      count: subscriptions.length,
+      activeCount: subscriptions.filter((subscription) => subscription.isActive).length,
+      subscriptions,
+    };
+  },
+});
+
+export const setLinqWebhookSubscriptionActive = internalAction({
+  args: {
+    subscriptionId: v.string(),
+    isActive: v.boolean(),
+    expectedHost: v.optional(v.string()),
+  },
+  handler: async (_ctx, args) => {
+    const apiToken = process.env.LINQ_API_TOKEN ?? "";
+    if (!apiToken) {
+      return {
+        ok: false,
+        status: null,
+        error: "LINQ_API_TOKEN is not configured in this deployment",
+        subscription: null,
+      };
+    }
+
+    const currentResponse = await fetch(
+      `https://api.linqapp.com/api/partner/v3/webhook-subscriptions/${args.subscriptionId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    const currentBody = await currentResponse.text();
+    const currentData = parseLinqJsonBody(currentBody);
+    if (!currentResponse.ok) {
+      return {
+        ok: false,
+        status: currentResponse.status,
+        error: summarizeLinqError(currentData),
+        subscription: null,
+      };
+    }
+
+    const currentSubscription = summarizeLinqSubscription(currentData);
+    if (
+      args.expectedHost &&
+      currentSubscription.target?.host !== args.expectedHost
+    ) {
+      return {
+        ok: false,
+        status: null,
+        error: "target_host_mismatch",
+        expectedHost: args.expectedHost,
+        actualTarget: currentSubscription.target,
+        subscription: currentSubscription,
+      };
+    }
+
+    const response = await fetch(
+      `https://api.linqapp.com/api/partner/v3/webhook-subscriptions/${args.subscriptionId}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ is_active: args.isActive }),
+      },
+    );
+    const body = await response.text();
+    const data = parseLinqJsonBody(body);
+    return {
+      ok: response.ok,
+      status: response.status,
+      error: response.ok ? null : summarizeLinqError(data),
+      subscription: response.ok ? summarizeLinqSubscription(data) : currentSubscription,
+    };
+  },
+});
+
+function messageArrayFromLinqResponse(data: Record<string, unknown>): Record<string, unknown>[] {
+  const candidates = [data.messages, data.data, data.items];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null,
+      );
+    }
+  }
+  return [];
+}
+
+function subscriptionArrayFromLinqResponse(data: Record<string, unknown>): Record<string, unknown>[] {
+  const candidates = [data.subscriptions, data.data, data.items];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null,
+      );
+    }
+  }
+  return [];
+}
+
+function parseLinqJsonBody(body: string): Record<string, unknown> {
+  try {
+    return body ? JSON.parse(body) as Record<string, unknown> : {};
+  } catch {
+    return { raw: body.slice(0, 500) };
+  }
+}
+
+function summarizeLinqError(data: Record<string, unknown>): unknown {
+  const error = data.error;
+  if (!error || typeof error !== "object") return error ?? null;
+  const record = error as Record<string, unknown>;
+  return {
+    code: record.code,
+    message: record.message,
+    status: record.status,
+  };
+}
+
+function summarizeLinqSubscription(subscription: Record<string, unknown>) {
+  const subscribedEvents = subscription.subscribed_events;
+  return {
+    id: stringValue(subscription.id) ?? null,
+    target: summarizeTargetUrl(stringValue(subscription.target_url)),
+    subscribedEvents: Array.isArray(subscribedEvents)
+      ? subscribedEvents.filter((event): event is string => typeof event === "string")
+      : [],
+    isActive: typeof subscription.is_active === "boolean"
+      ? subscription.is_active
+      : subscription.isActive === true,
+    createdAt:
+      stringValue(subscription.created_at) ??
+      stringValue(subscription.createdAt) ??
+      null,
+    updatedAt:
+      stringValue(subscription.updated_at) ??
+      stringValue(subscription.updatedAt) ??
+      null,
+  };
+}
+
+function summarizeLinqMessage(message: Record<string, unknown>) {
+  const parts = messageParts(message);
+  return {
+    id:
+      stringValue(message.id) ??
+      stringValue(message.message_id) ??
+      stringValue(message.messageId) ??
+      null,
+    createdAt:
+      stringValue(message.created_at) ??
+      stringValue(message.createdAt) ??
+      stringValue(message.sent_at) ??
+      stringValue(message.sentAt) ??
+      stringValue(message.timestamp) ??
+      null,
+    direction:
+      stringValue(message.direction) ??
+      stringValue(message.role) ??
+      stringValue(message.sender_type) ??
+      stringValue(message.senderType) ??
+      booleanDirection(message.is_from_me) ??
+      booleanDirection(message.isFromMe) ??
+      null,
+    status:
+      stringValue(message.status) ??
+      stringValue(message.delivery_status) ??
+      stringValue(message.deliveryStatus) ??
+      booleanStatus(message.is_delivered, "delivered") ??
+      booleanStatus(message.isDelivered, "delivered") ??
+      null,
+    service: stringValue(message.service) ?? null,
+    partCount: parts.length,
+    text: parts.join(" ").slice(0, 240),
+  };
+}
+
+function messageParts(message: Record<string, unknown>): string[] {
+  const direct =
+    stringValue(message.text) ??
+    stringValue(message.body) ??
+    stringValue(message.content);
+  if (direct) return [direct];
+
+  const directParts = partsFromUnknown(message.parts);
+  if (directParts.length > 0) return directParts;
+
+  const nestedMessage = message.message;
+  if (!nestedMessage || typeof nestedMessage !== "object") return [];
+  return partsFromUnknown((nestedMessage as Record<string, unknown>).parts);
+}
+
+function partsFromUnknown(parts: unknown): string[] {
+  if (!Array.isArray(parts)) return [];
+  return parts
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const record = part as Record<string, unknown>;
+      return (
+        stringValue(record.value) ??
+        stringValue(record.text) ??
+        stringValue(record.content) ??
+        ""
+      );
+    })
+    .filter(Boolean);
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function summarizeTargetUrl(url: string | undefined) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return {
+      protocol: parsed.protocol,
+      host: parsed.host,
+      path: `${parsed.pathname}${parsed.search}`,
+    };
+  } catch {
+    return { invalid: true };
+  }
+}
+
+function booleanDirection(value: unknown): "outbound" | "inbound" | undefined {
+  return typeof value === "boolean" ? (value ? "outbound" : "inbound") : undefined;
+}
+
+function booleanStatus(value: unknown, truthyStatus: string): string | undefined {
+  if (typeof value !== "boolean") return undefined;
+  return value ? truthyStatus : undefined;
+}
+
 export const getCoordinationReadiness = internalQuery({
   args: {
     coordinatorPhone: v.string(),

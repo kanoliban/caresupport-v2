@@ -5,6 +5,44 @@ Read the last 2-3 entries before starting work.
 
 ---
 
+## 2026-06-06 — Codex
+
+### Linq duplicate responder diagnosis
+- Investigated the live "two instances" behavior reported from the iMessage
+  thread.
+- Added read-only internal admin diagnostics to compare production Convex
+  message rows against the Linq provider chat transcript and webhook
+  subscription list.
+- Found production Convex had one stored assistant row per inbound problem turn,
+  but Linq had extra outbound provider messages around those same turns.
+- Confirmed the root cause was two active Linq webhook subscriptions under the
+  same partner account:
+  - current production Convex site subscription remained active
+  - stale June 3 Convex site subscription was also active
+- The configured dev Convex deployment is paused, so it was not the active
+  duplicate.
+
+### Action taken
+- Added a guarded internal action for toggling Linq webhook subscription active
+  state by subscription id, with an expected-host check before mutation.
+- Deactivated only the stale webhook subscription after the host guard matched.
+- Re-listed Linq subscriptions and confirmed only one active webhook target
+  remains: the current production endpoint.
+
+### Validation
+- `npm test -- convex/admin.test.ts` passed after each admin diagnostic change.
+- `npm run typecheck` passed after each admin diagnostic change.
+- `npx convex deploy --yes` deployed the admin diagnostics/actions to
+  production.
+
+### Follow-up
+- Ask Liban to send a fresh iMessage test. Expected result: one logical
+  CareSupport response from the current production runtime only.
+- Historical duplicate bubbles remain in Linq/iMessage history; this change only
+  prevents future double delivery.
+
+---
+
 ## 2026-06-05 — Codex
 
 ### What I did
