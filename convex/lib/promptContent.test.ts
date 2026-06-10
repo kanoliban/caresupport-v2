@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CAPABILITIES_CONTENT,
+  MODEL_CONSTITUTION_CONTENT,
   ROUTING_CONTENT,
   SKILLS_CONTENT,
   SOUL_CONTENT,

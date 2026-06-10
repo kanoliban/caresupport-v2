@@ -60,6 +60,12 @@ const eventValidator = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
+  v.literal("outreach_requested"),
+  v.literal("outreach_approved"),
+  v.literal("outreach_blocked"),
+  v.literal("outreach_sent"),
+  v.literal("outreach_failed"),
+  v.literal("care_contact_reply_received"),
   v.literal("calendar_connected"),
   v.literal("calendar_event_created"),
   v.literal("calendar_event_updated"),
@@ -82,6 +88,15 @@ const detailsValidator = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
+  outreachAttemptId: v.optional(v.string()),
+  coordinationEventId: v.optional(v.string()),
+  careContactId: v.optional(v.string()),
+  messageBody: v.optional(v.string()),
+  status: v.optional(v.string()),
+  reason: v.optional(v.string()),
+  matchedCount: v.optional(v.number()),
+  linqChatId: v.optional(v.string()),
+  linqMessageId: v.optional(v.string()),
   calendarEventId: v.optional(v.string()),
 });
 
@@ -332,6 +347,9 @@ export const logMessage = internalMutation({
     body: v.string(),
     timestamp: v.number(),
     linqMessageId: v.optional(v.string()),
+    careContactId: v.optional(v.id("careContacts")),
+    coordinationEventId: v.optional(v.id("coordinationEvents")),
+    outreachAttemptId: v.optional(v.id("outreachAttempts")),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("messages", args);

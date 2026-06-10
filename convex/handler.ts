@@ -124,6 +124,9 @@ type CareContactReplyContext = {
   outreachMessageBody?: string;
 };
 
+const CALENDAR_CONNECT_PATTERN =
+  /\b(connect|add|link|sync|attach|set\s*up)\b.{0,30}\b(google\s*calendar|calendar|gcal)\b/i;
+
 export function stripMarkdown(text: string): string {
   const withoutLinePrefixes = text
     .split("\n")
@@ -155,6 +158,46 @@ function truncateReplyQuote(text: string): string {
 
 function prependReplyContext(messageBody: string, quotedBody: string): string {
   return `[Replying to: "${truncateReplyQuote(quotedBody)}"] ${messageBody}`;
+}
+
+export function buildCareContactReplyMessage(
+  messageBody: string,
+  context: {
+    careContactName: string;
+    contactRelationship?: string;
+    contactRole?: string;
+    contactAvailabilityNotes?: string;
+    coordinationEventTitle?: string;
+    coordinationEventDescription?: string;
+    outreachPurpose?: string;
+    outreachMessageBody?: string;
+  },
+): string {
+  const contextLines = [
+    `Incoming speaker: care contact ${context.careContactName}.`,
+    context.contactRelationship
+      ? `Relationship: ${context.contactRelationship}.`
+      : "",
+    context.contactRole ? `Role: ${context.contactRole}.` : "",
+    context.contactAvailabilityNotes
+      ? `Known availability/context: ${context.contactAvailabilityNotes}.`
+      : "",
+    context.coordinationEventTitle
+      ? `Related coordination event: ${context.coordinationEventTitle}.`
+      : "",
+    context.coordinationEventDescription
+      ? `Event description: ${context.coordinationEventDescription}.`
+      : "",
+    context.outreachPurpose ? `Original outreach purpose: ${context.outreachPurpose}.` : "",
+    context.outreachMessageBody
+      ? `Original CareSupport message to this contact: "${truncateReplyQuote(
+          context.outreachMessageBody,
+        )}".`
+      : "",
+    "Do not treat this speaker as the primary coordinator. Use care_contact_updates for facts about this contact and coordination_event_updates for scheduling/coverage state.",
+  ].filter(Boolean);
+
+  return `[Care contact reply context]\n${contextLines.join("\n")}\n\n[Message]\n${messageBody}`;
 }
 
 function getInitialResponseDelayMs(bubbleCount: number): number {
@@ -424,14 +467,28 @@ export const handleMessage = internalAction({
     const now = startedAt;
     const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
 
-    let user = await ctx.runMutation(internal.mutations.getUserByPhone, {
-      phone: senderPhone,
-    }) as Doc<"users"> | null;
+    // Identity resolution: a reply from a known care contact maps back to the
+    // existing care case/user rather than creating a new onboarding user.
+    const careContactReply = await ctx.runMutation(
+      internal.contactReplies.resolveInbound,
+      { senderPhone, chatId },
+    ) as CareContactReplyContext | null;
+
+    let user: Doc<"users"> | null = null;
+    if (careContactReply) {
+      user = await ctx.runMutation(internal.mutations.getUserById, {
+        id: careContactReply.userId,
+      }) as Doc<"users"> | null;
+    } else {
+      user = await ctx.runMutation(internal.mutations.getUserByPhone, {
+        phone: senderPhone,
+      }) as Doc<"users"> | null;
+    }
 
     const isTestEnv = process.env.APP_ENV === "test";
     const isNewUser = !user;
 
-    if (!user) {
+    if (!user && !careContactReply) {
       const result = await ctx.runMutation(
         internal.mutations.createOnboardingUserAndCareCase,
         { phone: senderPhone, chatId },
@@ -457,10 +514,10 @@ export const handleMessage = internalAction({
     }
 
     let activeUser: Doc<"users"> = user;
-    const careCaseId = activeUser.careCaseId;
+    const careCaseId = careContactReply?.careCaseId ?? activeUser.careCaseId;
     const userId = activeUser._id;
 
-    if (!activeUser.chatId && chatId) {
+    if (!careContactReply && !activeUser.chatId && chatId) {
       await ctx.runMutation(internal.mutations.updateUserChatId, {
         userId,
         chatId,
@@ -501,16 +558,19 @@ export const handleMessage = internalAction({
       return { success: true, response: reply };
     }
 
-    await ctx.runMutation(internal.mutations.logMessage, {
+    const inboundMessageId = await ctx.runMutation(internal.mutations.logMessage, {
       careCaseId,
       userId,
       senderPhone,
       actorType: "user",
       direction: "inbound",
-      displayName: activeUser.name,
+      displayName: careContactReply?.careContactName ?? activeUser.name,
       body: messageBody,
       timestamp: now,
       linqMessageId: args.sourceMessageId,
+      careContactId: careContactReply?.careContactId,
+      coordinationEventId: careContactReply?.coordinationEventId,
+      outreachAttemptId: careContactReply?.outreachAttemptId,
     });
 
     if (careContactReply) {
@@ -551,6 +611,7 @@ export const handleMessage = internalAction({
     if (!compiledContext) {
       throw new Error("Unable to compile prompt context");
     }
+    const replyDisplayName = careContactReply?.careContactName ?? activeUser.name;
 
     const recentMessages = await ctx.runMutation(
       internal.mutations.getCareCaseRecentMessages,
@@ -591,9 +652,17 @@ export const handleMessage = internalAction({
         messageForModel = prependReplyContext(messageBody, quotedBody);
       }
     }
+    if (careContactReply) {
+      messageForModel = buildCareContactReplyMessage(
+        messageForModel,
+        careContactReply,
+      );
+    }
 
     const routeResult = route(messageForModel);
-    const intent = buildIntent(compiledContext.careCase.status, messageForModel);
+    const intent = careContactReply
+      ? routeResult.intent
+      : buildIntent(compiledContext.careCase.status, messageForModel);
 
     const nowDate = new Date(now);
     const currentDateIso = nowDate.toISOString().slice(0, 10);
@@ -1174,6 +1243,11 @@ async function logOutbound(
   displayName: string,
   body: string,
   timestamp: number,
+  context?: {
+    careContactId?: Id<"careContacts">;
+    coordinationEventId?: Id<"coordinationEvents">;
+    outreachAttemptId?: Id<"outreachAttempts">;
+  } | null,
 ): Promise<Id<"messages">> {
   return await ctx.runMutation(internal.mutations.logMessage, {
     careCaseId,
@@ -1184,6 +1258,9 @@ async function logOutbound(
     displayName,
     body,
     timestamp,
+    careContactId: context?.careContactId,
+    coordinationEventId: context?.coordinationEventId,
+    outreachAttemptId: context?.outreachAttemptId,
   });
 }
 
