@@ -497,6 +497,7 @@ export const getCompiledPromptContext = internalMutation({
       careContacts,
       openCoordinationEvents,
       waitingCoordinationEvents,
+      careClaims,
     ] = await Promise.all([
       ctx.db.get(args.userId),
       ctx.db.get(args.careCaseId),
@@ -534,6 +535,11 @@ export const getCompiledPromptContext = internalMutation({
           q.eq("careCaseId", args.careCaseId).eq("status", "waiting"),
         )
         .collect(),
+      ctx.db
+        .query("careClaims")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
+        .filter((q) => q.eq(q.field("active"), true))
+        .collect(),
     ]);
 
     if (!user || !careCase) {
@@ -548,6 +554,7 @@ export const getCompiledPromptContext = internalMutation({
       memoryEntries,
       careContacts,
       [...openCoordinationEvents, ...waitingCoordinationEvents],
+      careClaims,
     );
 
     return {
