@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { Id } from "./_generated/dataModel";
 import {
-  approvalResolutionResponse,
-  buildCareContactReplyMessage,
   ensureExplicitUserMemoryUpdate,
   formatConversationLog,
   inferExplicitUserMemoryUpdate,
+  isTestChat,
   isUnsupportedCoordinationRequest,
+  isValidTimeZone,
   parseLesson,
   runtimeFailureFallback,
   shouldFireCoordinationBoundaryOverride,
@@ -14,6 +13,31 @@ import {
   stripMarkdown,
   summarizeRuntimeError,
 } from "./handler";
+
+describe("isTestChat", () => {
+  it("flags synthetic web-UI chat ids", () => {
+    expect(isTestChat("test:+15550100199")).toBe(true);
+  });
+
+  it("does not flag real Linq chat ids", () => {
+    expect(isTestChat("imsg-chat-abc123")).toBe(false);
+    expect(isTestChat("")).toBe(false);
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it("accepts valid IANA zones", () => {
+    expect(isValidTimeZone("America/New_York")).toBe(true);
+    expect(isValidTimeZone("Europe/London")).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+  });
+
+  it("rejects garbage and empty values", () => {
+    expect(isValidTimeZone("Not/AZone")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
+    expect(isValidTimeZone(undefined)).toBe(false);
+  });
+});
 
 describe("parseLesson", () => {
   it("extracts a behavioral prefix", () => {
@@ -155,7 +179,7 @@ describe("isUnsupportedCoordinationRequest", () => {
 describe("shouldFireCoordinationBoundaryOverride", () => {
   const boundaryReply = {
     direction: "outbound" as const,
-    body: "I need your approval before I message anyone.",
+    body: "I can't add them or message them for you yet.",
   };
   const ordinaryOutbound = {
     direction: "outbound" as const,

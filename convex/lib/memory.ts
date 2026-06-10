@@ -61,7 +61,6 @@ export interface CareContactSnapshot {
   consentToContact?: boolean;
   active: boolean;
   notes?: string;
-  lastReplyStatus?: string;
 }
 
 export interface CoordinationEventSnapshot {
@@ -80,20 +79,6 @@ export interface CoordinationEventSnapshot {
   nextActionAt?: number;
   escalationAt?: number;
   resolution?: string;
-  lastReplyStatus?: string;
-}
-
-export interface CareClaimSnapshot {
-  subjectType: string;
-  subjectLabel: string;
-  predicate: string;
-  valueText: string;
-  normalizedValue?: string;
-  status: string;
-  confidence: string;
-  sensitivity: string;
-  clarificationQuestion?: string;
-  active: boolean;
 }
 
 export interface MemoryUpdateInstruction {
@@ -328,7 +313,6 @@ export function buildCareCaseContext(
   entries: MemoryEntryLike[],
   careContacts: CareContactSnapshot[] = [],
   coordinationEvents: CoordinationEventSnapshot[] = [],
-  careClaims: CareClaimSnapshot[] = [],
 ): { text: string; sections: string[]; lessons: string[] } {
   const sections: string[] = ["care_case_profile"];
   const lines = [
@@ -401,7 +385,6 @@ export function buildCareCaseContext(
           : contact.consentToContact === false
             ? "outreach consent no"
             : "outreach consent unknown",
-        contact.lastReplyStatus ? `last reply ${contact.lastReplyStatus}` : "",
       ].filter(Boolean);
       lines.push(
         `- ${contact.name} [${contact.contactType}]${
@@ -431,7 +414,6 @@ export function buildCareCaseContext(
         event.endsAt ? `ends ${formatDateTime(event.endsAt)}` : "",
         event.nextActionAt ? `next action ${formatDateTime(event.nextActionAt)}` : "",
         event.escalationAt ? `escalate ${formatDateTime(event.escalationAt)}` : "",
-        event.lastReplyStatus ? `last reply ${event.lastReplyStatus}` : "",
       ].filter(Boolean);
       lines.push(
         `- [${event.status}/${event.urgency}/${event.type}] ${event.title}${
@@ -440,52 +422,6 @@ export function buildCareCaseContext(
           event.description ? ` - ${event.description}` : ""
         }`,
       );
-    }
-  }
-
-  const unresolvedClaims = [...careClaims]
-    .filter(
-      (claim) =>
-        claim.active &&
-        (claim.status === "heard" ||
-          claim.status === "inferred" ||
-          claim.status === "needs_clarification"),
-    )
-    .sort((a, b) => {
-      const statusOrder = new Map([
-        ["needs_clarification", 0],
-        ["inferred", 1],
-        ["heard", 2],
-      ]);
-      const statusA = statusOrder.get(a.status) ?? 3;
-      const statusB = statusOrder.get(b.status) ?? 3;
-      if (statusA !== statusB) return statusA - statusB;
-      const subjectCompare = a.subjectLabel.localeCompare(b.subjectLabel);
-      if (subjectCompare !== 0) return subjectCompare;
-      return a.predicate.localeCompare(b.predicate);
-    });
-
-  if (unresolvedClaims.length > 0) {
-    sections.push("unconfirmed_understanding");
-    lines.push("", "## Unconfirmed Understanding");
-    lines.push(
-      "- These are source-linked claims CareSupport has heard or inferred but should not treat as current truth until clarified or confirmed.",
-    );
-    for (const claim of unresolvedClaims) {
-      const details = [
-        claim.status,
-        claim.confidence,
-        claim.sensitivity === "sensitive" ? "sensitive" : "",
-        claim.normalizedValue ? `normalized ${claim.normalizedValue}` : "",
-      ].filter(Boolean);
-      lines.push(
-        `- ${claim.subjectLabel} / ${claim.predicate}: ${claim.valueText}${
-          details.length > 0 ? ` (${details.join(", ")})` : ""
-        }`,
-      );
-      if (claim.clarificationQuestion) {
-        lines.push(`  Clarify: ${claim.clarificationQuestion}`);
-      }
     }
   }
 

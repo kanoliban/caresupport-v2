@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "convex dev",
+    "dev:chat": "node scripts/dev-chat.mjs",
     "deploy": "convex deploy",
     "reset:dev": "bash scripts/reset-convex.sh dev",
     "reset:prod": "bash scripts/reset-convex.sh prod",

@@ -1,6 +1,4 @@
-import { internalMutation } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   validateIsoDate,
@@ -61,12 +59,10 @@ const eventValidator = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
-  v.literal("outreach_requested"),
-  v.literal("outreach_approved"),
-  v.literal("outreach_blocked"),
-  v.literal("outreach_sent"),
-  v.literal("outreach_failed"),
-  v.literal("care_contact_reply_received"),
+  v.literal("calendar_connected"),
+  v.literal("calendar_event_created"),
+  v.literal("calendar_event_updated"),
+  v.literal("calendar_event_deleted"),
 );
 
 const detailsValidator = v.object({
@@ -85,15 +81,7 @@ const detailsValidator = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
-  outreachAttemptId: v.optional(v.string()),
-  coordinationEventId: v.optional(v.string()),
-  careContactId: v.optional(v.string()),
-  messageBody: v.optional(v.string()),
-  status: v.optional(v.string()),
-  reason: v.optional(v.string()),
-  matchedCount: v.optional(v.number()),
-  linqChatId: v.optional(v.string()),
-  linqMessageId: v.optional(v.string()),
+  calendarEventId: v.optional(v.string()),
 });
 
 const scheduleTypeValidator = v.union(
@@ -169,193 +157,10 @@ const memoryUpdateValidator = v.object({
   source: v.optional(v.string()),
 });
 
-const careContactUpdateValidator = v.object({
-  action: modelUpdateActionValidator,
-  name: v.optional(v.string()),
-  phone: v.optional(v.string()),
-  relationship: v.optional(v.string()),
-  contactType: v.optional(careContactTypeValidator),
-  agencyName: v.optional(v.string()),
-  role: v.optional(v.string()),
-  availabilityNotes: v.optional(v.string()),
-  contactPriority: v.optional(v.number()),
-  canReceiveTexts: v.optional(v.boolean()),
-  consentToContact: v.optional(v.boolean()),
-  active: v.optional(v.boolean()),
-  notes: v.optional(v.string()),
-});
-
-const coordinationEventUpdateValidator = v.object({
-  action: modelUpdateActionValidator,
-  title: v.optional(v.string()),
-  type: v.optional(coordinationEventTypeValidator),
-  status: v.optional(coordinationEventStatusValidator),
-  urgency: v.optional(coordinationUrgencyValidator),
-  description: v.optional(v.string()),
-  startsAt: v.optional(v.number()),
-  endsAt: v.optional(v.number()),
-  originalAssigneeName: v.optional(v.string()),
-  confirmedContactNames: v.optional(v.array(v.string())),
-  pendingContactNames: v.optional(v.array(v.string())),
-  declinedContactNames: v.optional(v.array(v.string())),
-  fallbackContactNames: v.optional(v.array(v.string())),
-  nextActionAt: v.optional(v.number()),
-  escalationAt: v.optional(v.number()),
-  resolution: v.optional(v.string()),
-});
-
-type CareContactType =
-  | "family"
-  | "professional_caregiver"
-  | "agency"
-  | "clinician"
-  | "other";
-
-type CoordinationEventType =
-  | "coverage_gap"
-  | "schedule_change"
-  | "handoff"
-  | "task_followup"
-  | "appointment"
-  | "medication"
-  | "outreach"
-  | "other";
-
-type CoordinationEventStatus = "open" | "waiting" | "resolved" | "cancelled";
-type CoordinationUrgency = "low" | "normal" | "high" | "urgent";
-
-interface CareContactModelPatch {
-  name?: string;
-  phone?: string;
-  relationship?: string;
-  contactType?: CareContactType;
-  agencyName?: string;
-  role?: string;
-  availabilityNotes?: string;
-  contactPriority?: number;
-  canReceiveTexts?: boolean;
-  consentToContact?: boolean;
-  linqChatId?: string;
-  active?: boolean;
-  notes?: string;
-  updatedAt: number;
-}
-
-interface CoordinationEventModelPatch {
-  type?: CoordinationEventType;
-  title?: string;
-  status?: CoordinationEventStatus;
-  urgency?: CoordinationUrgency;
-  description?: string;
-  startsAt?: number;
-  endsAt?: number;
-  originalAssigneeContactId?: Id<"careContacts">;
-  confirmedContactIds?: Array<Id<"careContacts">>;
-  pendingContactIds?: Array<Id<"careContacts">>;
-  declinedContactIds?: Array<Id<"careContacts">>;
-  fallbackOrderContactIds?: Array<Id<"careContacts">>;
-  nextActionAt?: number;
-  escalationAt?: number;
-  resolution?: string;
-  closedAt?: number;
-  updatedAt: number;
-}
-
+// Backwards-compatible alias. Phone *and* email handles are accepted; the name
+// is retained until the schema-wide `phone` → `handle` rename lands.
 export function normalizePhone(raw: string): string | null {
-  if (!raw) return null;
-  const stripped = raw.replace(/[^\d+]/g, "");
-  const digits = stripped.replace(/\+/g, "");
-  if (digits.length < 7) return null;
-  if (stripped.startsWith("+")) return `+${digits}`;
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return null;
-}
-
-function normalizeOptionalPhone(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  return normalizePhone(raw) ?? undefined;
-}
-
-function normalizeLookup(value: string | undefined): string | undefined {
-  const normalized = value?.trim().toLowerCase();
-  return normalized || undefined;
-}
-
-async function findCareContactByName(
-  ctx: Pick<MutationCtx, "db">,
-  careCaseId: Id<"careCases">,
-  name: string | undefined,
-): Promise<Doc<"careContacts"> | null> {
-  const target = normalizeLookup(name);
-  if (!target) return null;
-
-  const contacts = await ctx.db
-    .query("careContacts")
-    .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
-    .collect();
-
-  return contacts.find((contact) => normalizeLookup(contact.name) === target) ?? null;
-}
-
-async function findCareContactForModel(
-  ctx: Pick<MutationCtx, "db">,
-  careCaseId: Id<"careCases">,
-  name: string | undefined,
-  phone: string | undefined,
-): Promise<Doc<"careContacts"> | null> {
-  if (phone) {
-    const byPhone = await ctx.db
-      .query("careContacts")
-      .withIndex("by_care_case_phone", (q) =>
-        q.eq("careCaseId", careCaseId).eq("phone", phone),
-      )
-      .first();
-    if (byPhone) return byPhone;
-  }
-
-  return await findCareContactByName(ctx, careCaseId, name);
-}
-
-async function findCoordinationEventByTitle(
-  ctx: Pick<MutationCtx, "db">,
-  careCaseId: Id<"careCases">,
-  title: string | undefined,
-): Promise<Doc<"coordinationEvents"> | null> {
-  const target = normalizeLookup(title);
-  if (!target) return null;
-
-  const events = await ctx.db
-    .query("coordinationEvents")
-    .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
-    .collect();
-
-  return events.find((event) => normalizeLookup(event.title) === target) ?? null;
-}
-
-async function resolveContactIdByName(
-  ctx: Pick<MutationCtx, "db">,
-  careCaseId: Id<"careCases">,
-  name: string | undefined,
-): Promise<Id<"careContacts"> | undefined> {
-  const contact = await findCareContactByName(ctx, careCaseId, name);
-  return contact?._id;
-}
-
-async function resolveContactIdsByNames(
-  ctx: Pick<MutationCtx, "db">,
-  careCaseId: Id<"careCases">,
-  names: string[] | undefined,
-): Promise<Array<Id<"careContacts">> | undefined> {
-  if (names === undefined) return undefined;
-
-  const ids: Array<Id<"careContacts">> = [];
-  for (const name of names) {
-    const id = await resolveContactIdByName(ctx, careCaseId, name);
-    if (id && !ids.includes(id)) ids.push(id);
-  }
-
-  return ids;
+  return normalizeHandle(raw);
 }
 
 export const createOnboardingUserAndCareCase = internalMutation({
@@ -418,6 +223,20 @@ export const getUserById = internalMutation({
   },
 });
 
+// Used by the OAuth callback where the state is a raw string, not a typed Id
+export const getUserByRawId = internalMutation({
+  args: { id: v.string() },
+  handler: async (ctx, args): Promise<{ _id: import("./_generated/dataModel").Id<"users">; phone: string; chatId?: string; name: string } | null> => {
+    try {
+      const doc = await ctx.db.get(args.id as import("./_generated/dataModel").Id<"users">);
+      if (!doc || !("phone" in doc)) return null;
+      return doc as never;
+    } catch {
+      return null;
+    }
+  },
+});
+
 export const getUserByCareCase = internalMutation({
   args: { careCaseId: v.id("careCases") },
   handler: async (ctx, args) => {
@@ -465,6 +284,7 @@ export const updateCareCaseProfile = internalMutation({
     careRecipientName: v.optional(v.string()),
     relationshipToRecipient: v.optional(v.string()),
     timezone: v.optional(v.string()),
+    timezoneConfirmed: v.optional(v.boolean()),
     status: v.optional(entityStatusValidator),
   },
   handler: async (ctx, args) => {
@@ -511,9 +331,6 @@ export const logMessage = internalMutation({
     body: v.string(),
     timestamp: v.number(),
     linqMessageId: v.optional(v.string()),
-    careContactId: v.optional(v.id("careContacts")),
-    coordinationEventId: v.optional(v.id("coordinationEvents")),
-    outreachAttemptId: v.optional(v.id("outreachAttempts")),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("messages", args);
@@ -659,7 +476,6 @@ export const getCompiledPromptContext = internalMutation({
       scheduleItems,
       memoryEntries,
       careContacts,
-      careClaims,
       openCoordinationEvents,
       waitingCoordinationEvents,
     ] = await Promise.all([
@@ -688,11 +504,6 @@ export const getCompiledPromptContext = internalMutation({
         )
         .collect(),
       ctx.db
-        .query("careClaims")
-        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
-        .filter((q) => q.eq(q.field("active"), true))
-        .collect(),
-      ctx.db
         .query("coordinationEvents")
         .withIndex("by_care_case_status", (q) =>
           q.eq("careCaseId", args.careCaseId).eq("status", "open"),
@@ -718,7 +529,6 @@ export const getCompiledPromptContext = internalMutation({
       memoryEntries,
       careContacts,
       [...openCoordinationEvents, ...waitingCoordinationEvents],
-      careClaims,
     );
 
     return {
@@ -818,7 +628,7 @@ export const upsertScheduleItem = internalMutation({
 
     if (args.action === "remove" && existing) {
       await ctx.db.patch(existing._id, { status: "cancelled" });
-      return;
+      return null;
     }
 
     if (existing) {
@@ -831,8 +641,12 @@ export const upsertScheduleItem = internalMutation({
       if (args.notes) patch.notes = args.notes;
       if (args.provider) patch.provider = args.provider;
       await ctx.db.patch(existing._id, patch);
+      // Returning the id + resolved start lets the caller (handler) schedule a
+      // pre-event reminder. We re-validate at fire time, so no need to cancel
+      // the prior job on reschedule.
+      return { scheduleItemId: existing._id, date, time };
     } else if (args.action === "add") {
-      await ctx.db.insert("scheduleItems", {
+      const scheduleItemId = await ctx.db.insert("scheduleItems", {
         careCaseId: args.careCaseId,
         type: args.type,
         title: args.title,
@@ -845,213 +659,98 @@ export const upsertScheduleItem = internalMutation({
         provider: args.provider,
         status: "scheduled",
       });
+      return { scheduleItemId, date, time };
     }
+    return null;
   },
 });
 
-export const upsertCareContactFromModel = internalMutation({
-  args: {
-    careCaseId: v.id("careCases"),
-    update: careContactUpdateValidator,
-  },
+/**
+ * Snapshot a schedule item plus its care-case timezone, for a pre-event
+ * reminder to re-validate against just before it fires.
+ */
+export const getScheduleItemForReminder = internalQuery({
+  args: { scheduleItemId: v.id("scheduleItems") },
   handler: async (ctx, args) => {
-    const update = args.update;
-    const name = update.name?.trim();
-    const phone = normalizeOptionalPhone(update.phone);
-    const existing = await findCareContactForModel(
-      ctx,
-      args.careCaseId,
-      name,
-      phone,
-    );
-
-    if (update.action === "remove") {
-      if (!existing) return { action: "skipped", reason: "not_found" };
-      await ctx.db.patch(existing._id, {
-        active: false,
-        updatedAt: Date.now(),
-      });
-      return { action: "removed", id: existing._id };
-    }
-
-    if (existing) {
-      const patch: CareContactModelPatch = { updatedAt: Date.now() };
-      if (name !== undefined) patch.name = name;
-      if (update.phone !== undefined) patch.phone = phone;
-      if (update.relationship !== undefined) patch.relationship = update.relationship;
-      if (update.contactType !== undefined) patch.contactType = update.contactType;
-      if (update.agencyName !== undefined) patch.agencyName = update.agencyName;
-      if (update.role !== undefined) patch.role = update.role;
-      if (update.availabilityNotes !== undefined) {
-        patch.availabilityNotes = update.availabilityNotes;
-      }
-      if (update.contactPriority !== undefined) {
-        patch.contactPriority = update.contactPriority;
-      }
-      if (update.canReceiveTexts !== undefined) {
-        patch.canReceiveTexts = update.canReceiveTexts;
-      } else if (update.phone !== undefined) {
-        patch.canReceiveTexts = Boolean(phone);
-      }
-      if (update.consentToContact !== undefined) {
-        patch.consentToContact = update.consentToContact;
-      }
-      if (update.active !== undefined) {
-        patch.active = update.active;
-      } else if (update.action === "add" && !existing.active) {
-        patch.active = true;
-      }
-      if (update.notes !== undefined) patch.notes = update.notes;
-
-      await ctx.db.patch(existing._id, patch);
-      return { action: "updated", id: existing._id };
-    }
-
-    if (update.action !== "add" || !name) {
-      return { action: "skipped", reason: "missing_contact_identity" };
-    }
-
-    const now = Date.now();
-    const id = await ctx.db.insert("careContacts", {
-      careCaseId: args.careCaseId,
-      name,
-      phone,
-      relationship: update.relationship,
-      contactType: update.contactType ?? "other",
-      agencyName: update.agencyName,
-      role: update.role,
-      availabilityNotes: update.availabilityNotes,
-      contactPriority: update.contactPriority,
-      canReceiveTexts: update.canReceiveTexts ?? Boolean(phone),
-      consentToContact: update.consentToContact,
-      active: update.active ?? true,
-      notes: update.notes,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return { action: "created", id };
+    const item = await ctx.db.get(args.scheduleItemId);
+    if (!item) return null;
+    const careCase = await ctx.db.get(item.careCaseId);
+    return { item, timezone: careCase?.timezone ?? "UTC" };
   },
 });
 
-export const upsertCoordinationEventFromModel = internalMutation({
+export const saveConnectedAccount = internalMutation({
   args: {
-    careCaseId: v.id("careCases"),
-    update: coordinationEventUpdateValidator,
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    tokenExpiresAt: v.number(),
+    scope: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const update = args.update;
-    const title = update.title?.trim();
-    const existing = await findCoordinationEventByTitle(
-      ctx,
-      args.careCaseId,
-      title,
-    );
-
-    if (update.action === "remove") {
-      if (!existing) return { action: "skipped", reason: "not_found" };
-      await ctx.db.patch(existing._id, {
-        status: "cancelled",
-        closedAt: existing.closedAt ?? Date.now(),
-        updatedAt: Date.now(),
-      });
-      return { action: "removed", id: existing._id };
-    }
-
-    const originalAssigneeContactId = await resolveContactIdByName(
-      ctx,
-      args.careCaseId,
-      update.originalAssigneeName,
-    );
-    const confirmedContactIds = await resolveContactIdsByNames(
-      ctx,
-      args.careCaseId,
-      update.confirmedContactNames,
-    );
-    const pendingContactIds = await resolveContactIdsByNames(
-      ctx,
-      args.careCaseId,
-      update.pendingContactNames,
-    );
-    const declinedContactIds = await resolveContactIdsByNames(
-      ctx,
-      args.careCaseId,
-      update.declinedContactNames,
-    );
-    const fallbackOrderContactIds = await resolveContactIdsByNames(
-      ctx,
-      args.careCaseId,
-      update.fallbackContactNames,
-    );
-
-    if (existing) {
-      const patch: CoordinationEventModelPatch = { updatedAt: Date.now() };
-      if (update.type !== undefined) patch.type = update.type;
-      if (title !== undefined) patch.title = title;
-      if (update.status !== undefined) {
-        patch.status = update.status;
-        if (
-          (update.status === "resolved" || update.status === "cancelled") &&
-          existing.closedAt === undefined
-        ) {
-          patch.closedAt = Date.now();
-        }
-      }
-      if (update.urgency !== undefined) patch.urgency = update.urgency;
-      if (update.description !== undefined) patch.description = update.description;
-      if (update.startsAt !== undefined) patch.startsAt = update.startsAt;
-      if (update.endsAt !== undefined) patch.endsAt = update.endsAt;
-      if (originalAssigneeContactId !== undefined) {
-        patch.originalAssigneeContactId = originalAssigneeContactId;
-      }
-      if (confirmedContactIds !== undefined) {
-        patch.confirmedContactIds = confirmedContactIds;
-      }
-      if (pendingContactIds !== undefined) {
-        patch.pendingContactIds = pendingContactIds;
-      }
-      if (declinedContactIds !== undefined) {
-        patch.declinedContactIds = declinedContactIds;
-      }
-      if (fallbackOrderContactIds !== undefined) {
-        patch.fallbackOrderContactIds = fallbackOrderContactIds;
-      }
-      if (update.nextActionAt !== undefined) patch.nextActionAt = update.nextActionAt;
-      if (update.escalationAt !== undefined) patch.escalationAt = update.escalationAt;
-      if (update.resolution !== undefined) patch.resolution = update.resolution;
-
-      await ctx.db.patch(existing._id, patch);
-      return { action: "updated", id: existing._id };
-    }
-
-    if (update.action !== "add" || !title) {
-      return { action: "skipped", reason: "missing_event_title" };
-    }
-
+    const existing = await ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", args.userId).eq("provider", args.provider),
+      )
+      .first();
     const now = Date.now();
-    const status = update.status ?? "open";
-    const id = await ctx.db.insert("coordinationEvents", {
-      careCaseId: args.careCaseId,
-      type: update.type ?? "other",
-      title,
-      status,
-      urgency: update.urgency ?? "normal",
-      description: update.description,
-      startsAt: update.startsAt,
-      endsAt: update.endsAt,
-      originalAssigneeContactId,
-      confirmedContactIds,
-      pendingContactIds,
-      declinedContactIds,
-      fallbackOrderContactIds,
-      nextActionAt: update.nextActionAt,
-      escalationAt: update.escalationAt,
-      resolution: update.resolution,
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken ?? existing.refreshToken,
+        tokenExpiresAt: args.tokenExpiresAt,
+        scope: args.scope,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+    return ctx.db.insert("connectedAccounts", {
+      userId: args.userId,
+      provider: args.provider,
+      accessToken: args.accessToken,
+      refreshToken: args.refreshToken,
+      tokenExpiresAt: args.tokenExpiresAt,
+      scope: args.scope,
       createdAt: now,
       updatedAt: now,
-      closedAt: status === "resolved" || status === "cancelled" ? now : undefined,
     });
+  },
+});
 
-    return { action: "created", id };
+export const getConnectedAccount = internalMutation({
+  args: { userId: v.id("users"), provider: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", args.userId).eq("provider", args.provider),
+      )
+      .first();
+  },
+});
+
+export const updateConnectedAccountTokens = internalMutation({
+  args: {
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    tokenExpiresAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const account = await ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_user_provider", (q) =>
+        q.eq("userId", args.userId).eq("provider", args.provider),
+      )
+      .first();
+    if (account) {
+      await ctx.db.patch(account._id, {
+        accessToken: args.accessToken,
+        tokenExpiresAt: args.tokenExpiresAt,
+        updatedAt: Date.now(),
+      });
+    }
   },
 });

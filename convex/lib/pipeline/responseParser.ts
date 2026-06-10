@@ -1,11 +1,5 @@
 import { normalizeMemoryCategory } from "../memory";
-import type {
-  AgentResponse,
-  CareContactType,
-  CoordinationEventStatus,
-  CoordinationEventType,
-  CoordinationUrgency,
-} from "./types";
+import type { AgentResponse } from "./types";
 
 const EMPTY_ARRAYS: Omit<
   AgentResponse,
@@ -16,9 +10,6 @@ const EMPTY_ARRAYS: Omit<
   selfCorrections: [],
   reactions: [],
   effect: null,
-  careContactUpdates: [],
-  coordinationEventUpdates: [],
-  outreachRequests: [],
 };
 
 const SNAKE_TO_CAMEL: Record<string, string> = {
@@ -31,37 +22,9 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   self_corrections: "selfCorrections",
   medication_updates: "medicationUpdates",
   schedule_updates: "scheduleUpdates",
-  care_contact_updates: "careContactUpdates",
-  coordination_event_updates: "coordinationEventUpdates",
-  outreach_requests: "outreachRequests",
+  calendar_updates: "calendarUpdates",
   target_message: "targetMessage",
 };
-
-const ACTIONS = new Set(["add", "update", "remove"]);
-const CONTACT_TYPES = new Set([
-  "family",
-  "professional_caregiver",
-  "agency",
-  "clinician",
-  "other",
-]);
-const COORDINATION_EVENT_TYPES = new Set([
-  "coverage_gap",
-  "schedule_change",
-  "handoff",
-  "task_followup",
-  "appointment",
-  "medication",
-  "outreach",
-  "other",
-]);
-const COORDINATION_EVENT_STATUSES = new Set([
-  "open",
-  "waiting",
-  "resolved",
-  "cancelled",
-]);
-const COORDINATION_URGENCIES = new Set(["low", "normal", "high", "urgent"]);
 
 function normalizeMemoryUpdates(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -86,195 +49,37 @@ function normalizeMemoryUpdates(value: unknown) {
   return updates;
 }
 
-function stringField(
-  record: Record<string, unknown>,
-  camelKey: string,
-  snakeKey?: string,
-): string | undefined {
-  const raw = record[camelKey] ?? (snakeKey ? record[snakeKey] : undefined);
-  return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+function str(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }
 
-function numberField(
-  record: Record<string, unknown>,
-  camelKey: string,
-  snakeKey?: string,
-): number | undefined {
-  const raw = record[camelKey] ?? (snakeKey ? record[snakeKey] : undefined);
-  return typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
-}
-
-function booleanField(
-  record: Record<string, unknown>,
-  camelKey: string,
-  snakeKey?: string,
-): boolean | undefined {
-  const raw = record[camelKey] ?? (snakeKey ? record[snakeKey] : undefined);
-  return typeof raw === "boolean" ? raw : undefined;
-}
-
-function stringArrayField(
-  record: Record<string, unknown>,
-  camelKey: string,
-  snakeKey?: string,
-): string[] | undefined {
-  const raw = record[camelKey] ?? (snakeKey ? record[snakeKey] : undefined);
-  if (!Array.isArray(raw)) return undefined;
-  const values = raw
-    .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  return values.length > 0 ? values : undefined;
-}
-
-function enumField<T extends string>(
-  record: Record<string, unknown>,
-  camelKey: string,
-  allowed: Set<string>,
-  snakeKey?: string,
-): T | undefined {
-  const raw = stringField(record, camelKey, snakeKey);
-  return raw && allowed.has(raw) ? (raw as T) : undefined;
-}
-
-function normalizeCareContactUpdates(value: unknown): AgentResponse["careContactUpdates"] {
-  if (!Array.isArray(value)) return [];
-  const updates: NonNullable<AgentResponse["careContactUpdates"]> = [];
-
+function normalizeCalendarUpdates(value: unknown): AgentResponse["calendarUpdates"] {
+  if (!Array.isArray(value)) return undefined;
+  const updates: NonNullable<AgentResponse["calendarUpdates"]> = [];
   for (const entry of value) {
     if (!entry || typeof entry !== "object") continue;
-    const record = entry as Record<string, unknown>;
-    const action = enumField<"add" | "update" | "remove">(record, "action", ACTIONS);
-    const name = stringField(record, "name");
-    const phone = stringField(record, "phone");
-    if (!action || (!name && !phone)) continue;
-
+    const r = entry as Record<string, unknown>;
+    const rawAction = str(r.action);
+    const action =
+      rawAction === "create" || rawAction === "update" || rawAction === "delete"
+        ? rawAction
+        : undefined;
+    if (!action) continue;
     updates.push({
       action,
-      name,
-      phone,
-      relationship: stringField(record, "relationship"),
-      contactType: enumField<CareContactType>(
-        record,
-        "contactType",
-        CONTACT_TYPES,
-        "contact_type",
-      ),
-      agencyName: stringField(record, "agencyName", "agency_name"),
-      role: stringField(record, "role"),
-      availabilityNotes: stringField(
-        record,
-        "availabilityNotes",
-        "availability_notes",
-      ),
-      contactPriority: numberField(record, "contactPriority", "contact_priority"),
-      canReceiveTexts: booleanField(record, "canReceiveTexts", "can_receive_texts"),
-      consentToContact: booleanField(
-        record,
-        "consentToContact",
-        "consent_to_contact",
-      ),
-      active: booleanField(record, "active"),
-      notes: stringField(record, "notes"),
+      title: str(r.title),
+      date: str(r.date),
+      startTime: str(r.startTime) ?? str(r.start_time),
+      endTime: str(r.endTime) ?? str(r.end_time),
+      description: str(r.description),
+      location: str(r.location),
+      eventId: str(r.eventId) ?? str(r.event_id),
+      recurrence: str(r.recurrence),
     });
   }
-
   return updates;
-}
-
-function normalizeCoordinationEventUpdates(
-  value: unknown,
-): AgentResponse["coordinationEventUpdates"] {
-  if (!Array.isArray(value)) return [];
-  const updates: NonNullable<AgentResponse["coordinationEventUpdates"]> = [];
-
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object") continue;
-    const record = entry as Record<string, unknown>;
-    const action = enumField<"add" | "update" | "remove">(record, "action", ACTIONS);
-    const title = stringField(record, "title");
-    if (!action || !title) continue;
-
-    updates.push({
-      action,
-      title,
-      type: enumField<CoordinationEventType>(
-        record,
-        "type",
-        COORDINATION_EVENT_TYPES,
-      ),
-      status: enumField<CoordinationEventStatus>(
-        record,
-        "status",
-        COORDINATION_EVENT_STATUSES,
-      ),
-      urgency: enumField<CoordinationUrgency>(
-        record,
-        "urgency",
-        COORDINATION_URGENCIES,
-      ),
-      description: stringField(record, "description"),
-      startsAt: numberField(record, "startsAt", "starts_at"),
-      endsAt: numberField(record, "endsAt", "ends_at"),
-      originalAssigneeName: stringField(
-        record,
-        "originalAssigneeName",
-        "original_assignee_name",
-      ),
-      confirmedContactNames: stringArrayField(
-        record,
-        "confirmedContactNames",
-        "confirmed_contact_names",
-      ),
-      pendingContactNames: stringArrayField(
-        record,
-        "pendingContactNames",
-        "pending_contact_names",
-      ),
-      declinedContactNames: stringArrayField(
-        record,
-        "declinedContactNames",
-        "declined_contact_names",
-      ),
-      fallbackContactNames: stringArrayField(
-        record,
-        "fallbackContactNames",
-        "fallback_contact_names",
-      ),
-      nextActionAt: numberField(record, "nextActionAt", "next_action_at"),
-      escalationAt: numberField(record, "escalationAt", "escalation_at"),
-      resolution: stringField(record, "resolution"),
-    });
-  }
-
-  return updates;
-}
-
-function normalizeOutreachRequests(value: unknown): AgentResponse["outreachRequests"] {
-  if (!Array.isArray(value)) return [];
-  const requests: NonNullable<AgentResponse["outreachRequests"]> = [];
-
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object") continue;
-    const record = entry as Record<string, unknown>;
-    const contactName = stringField(record, "contactName", "contact_name");
-    const purpose = stringField(record, "purpose");
-    const message = stringField(record, "message");
-    if (!contactName || !purpose || !message) continue;
-
-    requests.push({
-      contactName,
-      purpose,
-      message,
-      coordinationEventTitle: stringField(
-        record,
-        "coordinationEventTitle",
-        "coordination_event_title",
-      ),
-    });
-  }
-
-  return requests;
 }
 
 export function normalizeResponse(parsed: Record<string, unknown>): AgentResponse {
@@ -308,11 +113,7 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
     scheduleUpdates: Array.isArray(result.scheduleUpdates)
       ? (result.scheduleUpdates as AgentResponse["scheduleUpdates"])
       : undefined,
-    careContactUpdates: normalizeCareContactUpdates(result.careContactUpdates),
-    coordinationEventUpdates: normalizeCoordinationEventUpdates(
-      result.coordinationEventUpdates,
-    ),
-    outreachRequests: normalizeOutreachRequests(result.outreachRequests),
+    calendarUpdates: normalizeCalendarUpdates(result.calendarUpdates),
   };
 }
 

@@ -68,73 +68,59 @@ describe("normalizeResponse", () => {
     expect(result.selfCorrections).toEqual(["[behavioral] Keep it short"]);
   });
 
-  it("normalizes care contacts, coordination events, and outreach proposals", () => {
+  it("normalizes calendar updates with camelCase fields", () => {
     const result = normalizeResponse({
-      sms_response: "I can get that ready, but I need approval before messaging Maya.",
-      internal_notes: "Structured coordination proposal",
-      user_profile_update: null,
-      care_case_profile_update: null,
-      user_memory_updates: [],
-      care_case_memory_updates: [],
-      self_corrections: [],
-      reactions: [],
-      effect: null,
-      care_contact_updates: [
+      sms_response: "Added it.",
+      calendar_updates: [
         {
-          action: "add",
-          name: "Maya",
-          phone: "(651) 555-4001",
-          relationship: "sister",
-          contact_type: "family",
-          availability_notes: "Can cover Wednesday evenings",
-          can_receive_texts: true,
-          consent_to_contact: false,
-        },
-      ],
-      coordination_event_updates: [
-        {
-          action: "add",
-          title: "Wednesday evening coverage",
-          type: "coverage_gap",
-          status: "waiting",
-          urgency: "normal",
-          pending_contact_names: ["Maya"],
-          next_action_at: 1780000000000,
-        },
-      ],
-      outreach_requests: [
-        {
-          contact_name: "Maya",
-          purpose: "Ask about Wednesday evening coverage",
-          message: "Hi Maya, are you available Wednesday evening for Rob?",
-          coordination_event_title: "Wednesday evening coverage",
+          action: "create",
+          title: "Meeting with Liban",
+          date: "2026-06-03",
+          startTime: "20:08",
+          endTime: "21:08",
+          location: "Office",
         },
       ],
     });
 
-    expect(result.careContactUpdates).toEqual([
-      expect.objectContaining({
-        action: "add",
-        name: "Maya",
-        contactType: "family",
-        availabilityNotes: "Can cover Wednesday evenings",
-        consentToContact: false,
-      }),
-    ]);
-    expect(result.coordinationEventUpdates).toEqual([
-      expect.objectContaining({
-        action: "add",
-        title: "Wednesday evening coverage",
-        type: "coverage_gap",
-        pendingContactNames: ["Maya"],
-      }),
-    ]);
-    expect(result.outreachRequests).toEqual([
-      expect.objectContaining({
-        contactName: "Maya",
-        purpose: "Ask about Wednesday evening coverage",
-        coordinationEventTitle: "Wednesday evening coverage",
-      }),
-    ]);
+    expect(result.calendarUpdates).toHaveLength(1);
+    expect(result.calendarUpdates?.[0]).toMatchObject({
+      action: "create",
+      title: "Meeting with Liban",
+      date: "2026-06-03",
+      startTime: "20:08",
+      endTime: "21:08",
+      location: "Office",
+    });
+  });
+
+  it("accepts snake_case time and event id fields on calendar updates", () => {
+    const result = normalizeResponse({
+      sms_response: "Updated.",
+      calendar_updates: [
+        {
+          action: "update",
+          event_id: "evt_123",
+          start_time: "09:00",
+          end_time: "10:00",
+        },
+      ],
+    });
+
+    expect(result.calendarUpdates?.[0]).toMatchObject({
+      action: "update",
+      eventId: "evt_123",
+      startTime: "09:00",
+      endTime: "10:00",
+    });
+  });
+
+  it("drops calendar updates with an unknown action", () => {
+    const result = normalizeResponse({
+      sms_response: "Hmm.",
+      calendar_updates: [{ action: "frobnicate", title: "x" }],
+    });
+
+    expect(result.calendarUpdates).toEqual([]);
   });
 });

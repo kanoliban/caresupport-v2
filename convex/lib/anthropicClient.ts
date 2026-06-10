@@ -139,10 +139,10 @@ export async function callAnthropic(
       );
     } catch (error: unknown) {
       lastError = error;
-      if (isAbortError(error)) {
-        throw error;
-      }
-      if (isRetryableStatus(error)) {
+      // A timeout (abort) or an overloaded/rate-limited model should fall back
+      // to the next model in the chain rather than failing the whole request.
+      // Only surface the error once every model has been exhausted.
+      if (isAbortError(error) || isRetryableStatus(error)) {
         continue;
       }
       throw error;

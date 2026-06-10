@@ -500,14 +500,7 @@ export const getCareCaseDetail = internalQuery({
     const careCase = await ctx.db.get(args.careCaseId);
     if (!careCase) return null;
 
-    const [
-      user,
-      messages,
-      memoryEntries,
-      careContacts,
-      coordinationEvents,
-      outreachAttempts,
-    ] = await Promise.all([
+    const [user, messages, memoryEntries, careContacts, coordinationEvents] = await Promise.all([
       ctx.db
         .query("users")
         .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
@@ -529,10 +522,6 @@ export const getCareCaseDetail = internalQuery({
         .query("coordinationEvents")
         .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
         .collect(),
-      ctx.db
-        .query("outreachAttempts")
-        .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
-        .collect(),
     ]);
 
     return {
@@ -542,7 +531,6 @@ export const getCareCaseDetail = internalQuery({
       memoryEntries,
       careContacts,
       coordinationEvents,
-      outreachAttempts,
     };
   },
 });
@@ -2455,7 +2443,6 @@ export const clearAppData = internalMutation({
       "medications",
       "scheduleItems",
       "memoryEntries",
-      "outreachAttempts",
       "coordinationEvents",
       "careContacts",
       "auditLogs",
@@ -2489,7 +2476,6 @@ export const tableCounts = internalQuery({
       "memoryEntries",
       "careContacts",
       "coordinationEvents",
-      "outreachAttempts",
       "auditLogs",
     ] as const;
 

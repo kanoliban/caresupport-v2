@@ -15,12 +15,6 @@ const eventValidator = v.union(
   v.literal("user_profile_updated"),
   v.literal("care_case_updated"),
   v.literal("memory_saved"),
-  v.literal("outreach_requested"),
-  v.literal("outreach_approved"),
-  v.literal("outreach_blocked"),
-  v.literal("outreach_sent"),
-  v.literal("outreach_failed"),
-  v.literal("care_contact_reply_received"),
 );
 
 const detailsValidator = v.object({
@@ -39,15 +33,6 @@ const detailsValidator = v.object({
   participantAction: v.optional(v.string()),
   participantPhone: v.optional(v.string()),
   savedCategories: v.optional(v.array(v.string())),
-  outreachAttemptId: v.optional(v.string()),
-  coordinationEventId: v.optional(v.string()),
-  careContactId: v.optional(v.string()),
-  messageBody: v.optional(v.string()),
-  status: v.optional(v.string()),
-  reason: v.optional(v.string()),
-  matchedCount: v.optional(v.number()),
-  linqChatId: v.optional(v.string()),
-  linqMessageId: v.optional(v.string()),
 });
 
 export const listByCareCase = query({

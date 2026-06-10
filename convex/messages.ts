@@ -33,9 +33,6 @@ export const create = mutation({
     timestamp: v.number(),
     linqMessageId: v.optional(v.string()),
     displayName: v.optional(v.string()),
-    careContactId: v.optional(v.id("careContacts")),
-    coordinationEventId: v.optional(v.id("coordinationEvents")),
-    outreachAttemptId: v.optional(v.id("outreachAttempts")),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("messages", args);

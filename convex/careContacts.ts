@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { normalizeHandle } from "./lib/handles";
 
 const contactTypeValidator = v.union(
   v.literal("family"),
@@ -27,21 +28,13 @@ interface CareContactPatch {
   contactPriority?: number;
   canReceiveTexts?: boolean;
   consentToContact?: boolean;
-  linqChatId?: string;
   active?: boolean;
   notes?: string;
   updatedAt: number;
 }
 
 function normalizeOptionalPhone(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const stripped = raw.replace(/[^\d+]/g, "");
-  const digits = stripped.replace(/\+/g, "");
-  if (digits.length < 7) return undefined;
-  if (stripped.startsWith("+")) return `+${digits}`;
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return undefined;
+  return normalizeHandle(raw) ?? undefined;
 }
 
 export const listByCareCase = query({
@@ -107,7 +100,6 @@ export const create = mutation({
     contactPriority: v.optional(v.number()),
     canReceiveTexts: v.optional(v.boolean()),
     consentToContact: v.optional(v.boolean()),
-    linqChatId: v.optional(v.string()),
     active: v.optional(v.boolean()),
     notes: v.optional(v.string()),
   },
@@ -127,7 +119,6 @@ export const create = mutation({
       contactPriority: args.contactPriority,
       canReceiveTexts: args.canReceiveTexts ?? Boolean(phone),
       consentToContact: args.consentToContact,
-      linqChatId: args.linqChatId,
       active: args.active ?? true,
       notes: args.notes,
       createdAt: now,
@@ -150,7 +141,6 @@ export const update = mutation({
     contactPriority: v.optional(v.number()),
     canReceiveTexts: v.optional(v.boolean()),
     consentToContact: v.optional(v.boolean()),
-    linqChatId: v.optional(v.string()),
     active: v.optional(v.boolean()),
     notes: v.optional(v.string()),
   },
@@ -179,7 +169,6 @@ export const update = mutation({
     if (args.consentToContact !== undefined) {
       patch.consentToContact = args.consentToContact;
     }
-    if (args.linqChatId !== undefined) patch.linqChatId = args.linqChatId;
     if (args.active !== undefined) patch.active = args.active;
     if (args.notes !== undefined) patch.notes = args.notes;
 
