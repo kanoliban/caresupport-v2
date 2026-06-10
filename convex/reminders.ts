@@ -12,7 +12,7 @@ import {
   recurrenceMatchesToday,
 } from "./lib/digestComposer";
 import type { DigestItem } from "./lib/digestComposer";
-import { sendMessageSequence, splitIntoBubbles } from "./lib/linqClient";
+import { sendMessage, sendMessageSequence, splitIntoBubbles } from "./lib/linqClient";
 import { zonedDateTimeToUtcMs } from "./lib/reminderTiming";
 import { isTestChat } from "./handler";
 

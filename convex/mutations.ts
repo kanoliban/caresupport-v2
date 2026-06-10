@@ -13,6 +13,7 @@ import {
   uniqueMemoryUpdates,
 } from "./lib/memory";
 import { retrieveCareContext } from "./lib/knowledge/retrieveCareContext";
+import { normalizeHandle } from "./lib/handles";
 
 const directionValidator = v.union(
   v.literal("inbound"),
