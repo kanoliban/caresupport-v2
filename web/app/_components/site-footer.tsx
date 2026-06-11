@@ -2,9 +2,9 @@ import Image from "next/image";
 import styles from "./site-footer.module.css";
 
 const PRODUCT = [
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Why iMessage", href: "#why-imessage" },
-  { label: "FAQ", href: "#faq" },
+  { label: "How it works", href: "/#how-it-works" },
+  { label: "Why iMessage", href: "/#why-imessage" },
+  { label: "FAQ", href: "/#faq" },
 ];
 
 const COMPANY = [
@@ -77,7 +77,7 @@ export function SiteFooter() {
         </nav>
 
         <div className={styles.authCol}>
-          <a href="#waitlist" className={`${styles.btn} ${styles.btnPrimary}`}>
+          <a href="/#waitlist" className={`${styles.btn} ${styles.btnPrimary}`}>
             Join the waitlist
           </a>
           <p className={styles.authNote}>
@@ -89,9 +89,9 @@ export function SiteFooter() {
       <div className={styles.legalStrip}>
         <span>© {year} CareSupport. Coordination, not clinical advice.</span>
         <div>
-          <a href="#">Privacy</a>
+          <a href="/privacy">Privacy</a>
           <span className={styles.legalSep}>·</span>
-          <a href="#">Terms</a>
+          <a href="/terms">Terms</a>
         </div>
       </div>
     </footer>
