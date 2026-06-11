@@ -724,9 +724,12 @@ export const handleMessage = internalAction({
     });
     const messages = buildMessages(messageForModel, conversationLog);
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = openRouterKey ?? process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY environment variable is not set");
+      throw new Error(
+        "Neither OPENROUTER_API_KEY nor ANTHROPIC_API_KEY environment variable is set",
+      );
     }
 
     let parsed: AgentResponse;
@@ -736,6 +739,7 @@ export const handleMessage = internalAction({
         messages,
         model: routeResult.model,
         apiKey,
+        ...(openRouterKey ? { baseURL: "https://openrouter.ai/api" } : {}),
       });
       if (/calendar_updates/.test(aiResult.text)) {
         console.log("[calendar] RAW model text:", aiResult.text.slice(0, 900));

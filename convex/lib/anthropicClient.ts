@@ -20,6 +20,9 @@ export interface AnthropicInput {
   messages: MessageParam[];
   model?: string;
   apiKey: string;
+  /** Anthropic-compatible gateway base URL (e.g. OpenRouter). When set, the
+   * key is sent as a bearer token instead of an x-api-key header. */
+  baseURL?: string;
 }
 
 export interface AnthropicResult {
@@ -115,7 +118,13 @@ function isAbortError(error: unknown): boolean {
 export async function callAnthropic(
   input: AnthropicInput,
 ): Promise<AnthropicResult> {
-  const client = new Anthropic({ apiKey: input.apiKey });
+  const client = input.baseURL
+    ? new Anthropic({
+        apiKey: null,
+        authToken: input.apiKey,
+        baseURL: input.baseURL,
+      })
+    : new Anthropic({ apiKey: input.apiKey });
   const system = buildSystemParam(input.systemBlocks);
   const startModel = input.model ?? MODEL_FALLBACK_CHAIN[0];
 
