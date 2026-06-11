@@ -461,4 +461,17 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user_provider", ["userId", "provider"]),
+
+  waitlistSignups: defineTable({
+    email: v.string(),
+    phone: v.optional(v.string()),
+    fullName: v.optional(v.string()),
+    role: v.optional(v.string()),
+    source: v.string(),
+    userAgent: v.optional(v.string()),
+    submittedAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_source", ["source"])
+    .index("by_submitted_at", ["submittedAt"]),
 });
