@@ -18,6 +18,8 @@
                  sensor layer, verified care record as atomic object, Stripe analogy
                  precision, L1 relief/consent ethics, CFSS validation posture, UCP
                  sequencing, broader proof-of-care market, caregiver economic identity.
+    2026-06-15 — Added jurisdictional ladder: each layer is both product and moat for
+                 the next; L1 proof in a real kitchen anchors the credibility of L5.
 -->
 
 # The CareSupport Doctrine
@@ -203,6 +205,22 @@ CareSupport, completed, is **the system of record for whether care actually happ
 | **L3 — Verified care record** | The atomic unit: time + presence + task + consent + audit trail, corroborated across the network's messages — evidentiary grade | To be built from L2 exhaust |
 | **L4 — Program schemas** | Regulation as code: CFSS-Minnesota first because of access, timing, policy movement, and founder network; then program × state. The operational twin of Givers' eligibility database | Schema #1 begins with Rob's program |
 | **L5 — The API (UCP)** | FMSs, agencies, MCOs, enrollers, states, insurers, and future care-benefit systems consume verified records in their required formats | Future; becomes de facto standard via adoption, not committee |
+
+### 5.1.1 The jurisdictional ladder
+
+Each layer is not merely a feature unlock. Each layer is a **jurisdictional claim**.
+
+| Layer | Jurisdictional claim | Product meaning | Moat / next-layer implication |
+|---|---|---|---|
+| **L1 — Thread** | **We own the thread.** | CareSupport lives where family care already happens: group text, SMS, iMessage, reminders, calls, and informal updates. | The thread is the raw sensor layer. Without owning the native coordination surface, there is no durable source of care facts. |
+| **L2 — Schedule / coordination engine** | **We own the schedule.** | CareSupport knows who is supposed to do what, when, for whom, and what changed. | The operating graph makes delegation, coverage gaps, shift swaps, and accountability structured enough to become evidence. |
+| **L3 — Verified care record** | **We own the care record.** | CareSupport converts raw coordination and schedule state into corroborated, consented, program-relevant proof that care happened. | The verified care record is the atomic object. Without it, L4 is paperwork automation; with it, L4 becomes compliance infrastructure. |
+| **L4 — Program schemas** | **We own the compliance layer.** | CareSupport encodes program rules — CFSS first — so verified records can be transformed into what FMSs, states, and payers require. | The schema library compounds. Each encoded program lowers the cost of the next and makes CareSupport harder to replace. |
+| **L5 — API / UCP** | **We are the rails.** | External systems consume verified care records directly through CareSupport's formats and interfaces. | The rails only become believable after L3 records are trusted and L4 schemas are accepted. L5 is earned, not announced. |
+
+The grandeur is not accidental. It is structural. CareSupport cannot build L3 without L2's operational data. It cannot credibly sell L5 without L3's verification. Each layer is both the product at that stage and the moat that makes the next stage possible. The ambition is not an aesthetic choice; it is the consequence of taking the first step seriously.
+
+This is also the risk. Any investor who hears L5 before seeing L1 work will reasonably suspect delusion. The proof of concept is not just a demo. It is the credibility anchor for the entire stack: **L1 must work in someone's kitchen before L5 can be believed in anyone's boardroom.**
 
 ### 5.2 The atomic unit
 
