@@ -1,25 +1,42 @@
 <!--
   DOCTRINE.md — The CareSupport Doctrine
   Created: 2026-06-12
-  Purpose: Canonical statement of what CareSupport is, the theses it rests on,
-           the endgame it is building toward, and the staged proofs that validate it.
+  Purpose: Single canonical statement of what CareSupport is, the theses it rests on,
+           the precise language the company should use, the endgame it is building
+           toward, and the staged proofs that validate it.
   Contents: The naming thesis (invisible home care agencies), the design thesis,
-            the economic thesis (reimbursement chain), the analogy machine
-            (Givers/TurboTax/Plaid/Stripe/Poke), the completed entity, the policy bet,
-            why Minnesota, the staged validation chain, open questions, glossary, sources.
-  Provenance: Distilled from founder strategy sessions and calls, June 7–12, 2026
-              (Obssa product-vision call, Clinton handoff call, Cascade working sessions).
+            the economic thesis (coordination → verified care records), the analogy
+            machine (Givers/TurboTax/Plaid/Stripe/Poke), the completed entity, the
+            policy bet, why Minnesota, the staged validation chain, open questions,
+            glossary, sources.
+  Provenance: Distilled from founder strategy sessions and calls, June 7–15, 2026
+              (Obssa product-vision call, Clinton handoff call, Cascade working sessions,
+              and the June 15 doctrine calibration).
   Changelog:
     2026-06-12 — Initial version.
+    2026-06-15 — Integrated calibration directly into canonical doctrine: thread as raw
+                 sensor layer, verified care record as atomic object, Stripe analogy
+                 precision, L1 relief/consent ethics, CFSS validation posture, UCP
+                 sequencing, broader proof-of-care market, caregiver economic identity.
 -->
 
 # The CareSupport Doctrine
 
-**Status:** Living document. This is the canonical statement of the company. When code, pitch, or roadmap conflict with this document, either the work is wrong or this document must be amended — never silently both.
+**Status:** Living document and **single canonical doctrine**. When code, pitch, roadmap, or another document conflicts with this document, either the work is wrong or this document must be amended — never silently both. `DOCTRINE-ARTICULATIONS.md` is historical reasoning; `STATE-OF-THE-COMPANY.md` is operational status. This file is the source of truth.
 
 **The one-sentence company:**
 
-> **Families are invisible home care agencies. Everyone knows this, but no one has named it. CareSupport is the infrastructure that makes the invisible agency visible, supported, and payable.**
+> **Families are invisible home care agencies. CareSupport instruments the care workflows they already run, turns the family thread into the raw sensor layer for verified care records, and makes family care visible, supported, and economically legible.**
+
+**The canonical thesis:**
+
+> CareSupport starts from a naming problem: families are invisible home care agencies. They already perform agency-level care operations through group texts, calendars, calls, and memory, but because this work has no software layer, it remains illegible to the systems that fund, audit, and support care.
+>
+> CareSupport does not create a new workflow. It instruments the workflow that already exists. The family thread becomes the raw sensor layer: coordination events, task delegations, shift changes, incidents, and care notes are preserved, structured, and — when corroborated and consented — converted into verified care records.
+>
+> The verified care record is the atomic object. CareSupport does not provide care; it creates a trusted record that care happened. That record can be consumed by FMS providers, Medicaid programs, states, MCOs, insurers, and future caregiver-benefit systems.
+>
+> The wedge is burden relief for families. The business is infrastructure for the systems that need trustworthy care data. CFSS is the first schema. Minnesota is the first state. Medicaid is the first payer. The terminal state is a universal care protocol: a programmable substrate for family care.
 
 ---
 
@@ -88,15 +105,17 @@ Each step removed "software" until only the family's native medium remained. Ent
 
 Consumer agents living in iMessage are a proven form factor (Poke; Poppy — see `docs/research/poppy-ios/`). The CareSupport MVP proves the *care* version of the form factor: coordination, reminders, calendar, multiplayer threads — all conversational, all in the thread the family already uses. The Convex data model (`careContacts`, `coordinationEvents`, `careClaims`, `auditLogs`) is the embryo of the verification rails described in §5.
 
+The thread is not automatically the verified care record. It is the **raw sensor layer** where the care record begins. A daughter texting "Dad fell again" is not automatically a verified clinical event, a billable note, or a program-compliant record; it is a signal. CareSupport's job is to make the important facts survive, classify them, corroborate them, obtain consent where required, and graduate them into verified records.
+
 ---
 
 ## 3. The Economic Thesis — The Reimbursement Chain
 
 ### 3.1 The chain
 
-> **Coordination is documentation. Documentation is clean data. Clean data is verifiable care. Verifiable care is reimbursable care.**
+> **Coordination produces documentation. Documentation produces structured data. Structured data produces verified care records. Verified care records become consumable by the systems that fund, audit, support, insure, or credential care.**
 
-Families coordinate care anyway — in texts. The exhaust of that coordination, properly structured, is exactly the documentation Medicaid-funded care runs on. CareSupport converts the coordination families already do into the records the money already requires.
+Families coordinate care anyway — in texts. The exhaust of that coordination, when preserved, structured, corroborated, and consented, becomes the documentation Medicaid-funded care runs on. CareSupport converts the coordination families already do into records that money-touchers and oversight systems can trust.
 
 ### 3.2 The payer stack
 
@@ -122,6 +141,8 @@ The falsifiable pitch, one sentence: *"Enrolled families lose payments over bad 
 
 CareSupport does not run payroll, hold care licenses, or carry employer liability — at this stage, and possibly ever. That is the licensed layer's job (FMS, agency of record). This is a **stage posture, not a permanent identity** (see §5.4): the company is architected so the funds flow is an option to exercise when leverage permits, never a prerequisite.
 
+The family-facing wedge is burden relief, not data extraction. L1 can be free because family relief is the adoption engine. With consent, the coordination layer generates structured records that make reimbursement, compliance, and system integration possible. The family should never experience CareSupport as free because they are being mined; the family gets relief first, and the system pays only when records create administrative, compliance, reimbursement, or proof-of-care value.
+
 ---
 
 ## 4. The Analogy Machine
@@ -133,7 +154,7 @@ These are not interchangeable metaphors. Each analogy is a **component** of one 
 | **Givers** (givers.com) | Demand: "get paid to care" pulls millions/yr; navigation is a viable wedge | Eligibility/navigation as acquisition surface; their program database as the eligibility twin of our operations schema library | Becoming the licensed agency of record (their model: licensure state-by-state, keeping 35–50% of the stipend) |
 | **TurboTax / Intuit** | A private interface on government rails can become a $4.9B/yr business with ~60% share | Compliance-as-product: translate citizen reality into government-grade data; ride the state's rails | Touching the money; also the dark moat (lobbying to keep filing painful) — we win by making verification *better*, not by keeping it broken |
 | **Plaid** | Data connectivity that money-touchers depend on is a durable position | The near-term identity: verification/data rails consumed by FMSs, agencies, MCOs, states | Mistaking plumbing for the terminal state |
-| **Stripe** | Whoever abstracts compliance owns the flow; infrastructure compounds (Radar → Treasury → Issuing) | The terminal identity: the rails all value in the category crosses; partner with the licensed layer rather than becoming it | Entering the funds flow before the verification monopoly is earned |
+| **Stripe** | Whoever abstracts regulated complexity around value movement can own the programmable object and the surrounding infrastructure | The terminal identity: trusted programmable care events that value can move around; partner with the licensed layer rather than becoming it | Entering the funds flow before the verification monopoly is earned |
 | **Poke / Poppy** | Consumers accept an agent that lives in iMessage | The form factor; consumer-grade trust design (ZDR, transparency-then-consent) | Building "an app" — the descent (§2.2) is settled |
 | **Uber / Airbnb / SpaceX** | Informal supply + infrastructure + policy shift = category flip; governments switch when the cheaper supplier is standing there | The survival playbook for the policy gap (§7, §9) | Betting the company on the policy timeline (every stage must pay under today's rules) |
 
@@ -152,42 +173,63 @@ From founder Max Mayblum directly: Givers mapped every caregiver-payment program
 
 **What Givers leaves open — the hole CareSupport occupies:** enrollment is an event; care is every day. Once a family is enrolled — by Givers, an FMS, or a county worker — the daily operational reality (twelve caregivers, shift swaps, coverage gaps, and the documentation stream payments depend on) has no product. **Nobody owns the daily layer.** Givers is a potential channel partner (they enroll; we operate), not a competitor — unless we make the mistake of fighting them for the front door instead of owning the house.
 
+### 4.3 Stripe, stated precisely
+
+Stripe absolutely participates in money movement. The correct analogy is not "Stripe does not move money." The correct analogy is: **Stripe does not become the bank. It abstracts the regulated complexity around money movement and creates trusted programmable objects around payments.**
+
+CareSupport's analog is: **CareSupport does not become the care provider. It abstracts the regulated complexity around care verification and creates trusted programmable objects around care events.**
+
+```text
+Stripe: verified payment event
+CareSupport: verified care event
+```
+
+Stripe partners with licensed financial institutions. CareSupport initially partners with licensed care and fiscal intermediaries.
+
 ---
 
 ## 5. The Completed Entity — Verification Rails for the Care Economy
 
-Pull on any regulation, document, or requirement in home care and the thread ends at financing: **documentation is the release mechanism for money.** Medicaid moved ~$909B in FY2024; HCBS is north of $100B of it; self-direction is ~1.5M participants and growing. Every dollar is gated on proof that care happened — and the proof layer is punch-clock apps, paper timesheets, and fraud scandals.
+Pull on any regulation, document, or requirement in home care and the thread eventually touches financing: **documentation is the release mechanism for money.** Medicaid moved ~$909B in FY2024; HCBS is north of $100B of it; self-direction is ~1.5M participants and growing. Every dollar is gated on proof that care happened — and the proof layer is punch-clock apps, paper timesheets, and fraud scandals.
 
-CareSupport, completed, is **the system of record for whether care actually happened** — the verification rails every money-toucher in the care economy depends on.
+CareSupport, completed, is **the system of record for whether care actually happened** — the verification rails that every system needing trustworthy proof of care can depend on: FMS providers, states, MCOs, insurers, agencies, employer caregiver-benefit programs, VA programs, hospital-at-home programs, credentialing systems, and eventually credit or income-verification systems for caregivers.
 
 ### 5.1 The stack
 
 | Layer | What it is | Status |
 |---|---|---|
-| **L1 — The thread** | Family coordination in iMessage/SMS; free forever; acquisition + ground-truth capture at the moment of care | MVP live; Rob's network onboarding now |
+| **L1 — The thread** | Family coordination in iMessage/SMS; free because burden relief is the adoption engine; raw sensor layer for care facts | MVP live; Rob's network onboarding now |
 | **L2 — Coordination engine** | Conversation → structured operational state (`careContacts`, `coordinationEvents`, `careClaims`) | Embryo in repo |
 | **L3 — Verified care record** | The atomic unit: time + presence + task + consent + audit trail, corroborated across the network's messages — evidentiary grade | To be built from L2 exhaust |
-| **L4 — Program schemas** | Regulation as code: CFSS-Minnesota first, then program × state. The operational twin of Givers' eligibility database | Schema #1 begins with Rob's program |
-| **L5 — The API (UCP)** | FMSs, agencies, MCOs, enrollers, eventually DHS consume verified records in their required formats | Future; becomes de facto standard via adoption, not committee |
+| **L4 — Program schemas** | Regulation as code: CFSS-Minnesota first because of access, timing, policy movement, and founder network; then program × state. The operational twin of Givers' eligibility database | Schema #1 begins with Rob's program |
+| **L5 — The API (UCP)** | FMSs, agencies, MCOs, enrollers, states, insurers, and future care-benefit systems consume verified records in their required formats | Future; becomes de facto standard via adoption, not committee |
 
 ### 5.2 The atomic unit
 
-The **verified care record** is to CareSupport what the charge object is to Stripe. It is richer than any EVV punch-clock because it is corroborated by the coordination graph itself — who confirmed the shift, who showed up, what was done, witnessed across twelve people's messages. Ground truth captured where care actually happens is the one asset no incumbent can retrofit.
+The **verified care record** is to CareSupport what the charge object is to Stripe. It is richer than any EVV punch-clock because it can be corroborated by the coordination graph itself — who confirmed the shift, who showed up, what was done, what changed, and what was witnessed across the family's messages and operational context. The thread begins as raw signal; the verified care record is what survives classification, corroboration, consent, and program-specific validation.
 
 ### 5.3 Revenue and moats at completion
 
-- **Who pays:** the money-touchers — FMSs, agencies, MCOs, state programs — per-member-per-month plus per-verified-record. The family never pays. The state pays for fraud-visibility and audit-grade data.
+- **Who pays:** the systems that need proof of care — first FMSs, agencies, MCOs, and state programs; later insurers, employer caregiver-benefit programs, VA programs, hospital-at-home programs, credentialing systems, and other care-financing or care-validation systems. Pricing can be per-member-per-month plus per-verified-record. The family never pays.
 - **Moats:** (1) the only ground-truth capture point in the industry; (2) the program-schema library — tedious, unglamorous, compounding; (3) audit-grade trust with states — in a fraud-crackdown era, *the layer that makes fraud visible* is politically protected infrastructure; (4) network effects once UCP-formatted records are what the ecosystem reads and writes.
 
 ### 5.4 Data rails first, funds rails as architected option
 
-Near-term identity: **Plaid-of-care** (verification rails; money never passes through). Terminal option: **Stripe-of-care** (reimbursement clears over the rails via licensed partners — exactly as Stripe rode banks without becoming one). Every verified care record is structured so a payment instruction can one day hang off it. The option is earned, not pitched.
+Near-term identity: **Plaid-of-care** (verification rails; money does not need to pass through CareSupport). Terminal option: **Stripe-of-care** (reimbursement clears over the rails via licensed partners — exactly as Stripe rode banks without becoming one). Every verified care record is structured so a payment instruction can one day hang off it. The option is earned, not pitched.
+
+The Universal Care Protocol is the terminal state, not the first pitch. Early stakeholders need the ladder:
+
+```text
+Thread → verified care record → CFSS schema → FMS pipe → multi-state schema library → UCP
+```
+
+Lead with the wedge. Earn the protocol.
 
 ### 5.5 The terminal frame
 
 **Care is the largest economic activity in America that has never been economically legible.** Unpaid family care is estimated at ~$600B/yr (AARP) — work that exists in no ledger, builds no work history, earns no credit, and is invisible to every system that allocates money. The completed CareSupport makes an act of care a first-class economic event — verifiable, payable, auditable, insurable, creditable — independent of payer.
 
-From that altitude: Medicaid is not the market, it is the **first payer**. The FMS is the **first consumer of verified records**. CFSS is **schema #1**. The thread is **the sensor**. And the caregiver who today exits six years of caring with nothing on paper gains an **economic identity** — a constituency that will defend the infrastructure that made their work visible.
+From that altitude: Medicaid is not the market, it is the **first payer**. The FMS is the **first consumer of verified records**. CFSS is **schema #1**. The thread is **the raw sensor layer**. And the caregiver who today exits six years of caring with nothing on paper gains an **economic identity** — a constituency that will defend the infrastructure that made their work visible.
 
 **The principal question, answered:** at completion, CareSupport's principal is the family. States, payers, and intermediaries pay for access to the legibility the family generates. That single sentence unifies the consumer product, the B2G revenue, and the infrastructure ambition into one company instead of three.
 
@@ -257,7 +299,7 @@ Policy-bet companies survive by making **every stage valuable under today's rule
 Claims in this doctrine that remain unverified, with the verification path:
 
 1. **Rob's current submission reality** — how his caregivers submit time today (paper? portal? EVV app?), error/rejection rate, payment delays. *Path: watch the onboarding; ask directly.*
-2. **CFSS/EVV mapping** — exactly which fields a CFSS time entry and care note require; whether coordination exhaust covers them; Minnesota's EVV aggregator integration requirements (believed HHAeXchange; verify). *Path: DHS documentation + one FMS conversation.*
+2. **CFSS/EVV mapping** — exactly which fields a CFSS time entry and care note require; whether coordination exhaust covers them; Minnesota's EVV aggregator integration requirements (believed HHAeXchange; verify). Do not claim CFSS is "clean enough" until these fields, flows, and audit requirements are mapped. *Path: DHS documentation + one FMS conversation.*
 3. **FMS economics ground truth** — per-member admin fee, processing cost per timesheet, error rates. *Path: first FMS meeting; Rob's FMS is the natural door.*
 4. **The reachable number** — MN CFSS/CDCS enrollee count (the beachhead market size when the deck says "how many invisible agencies can you reach"). *Path: DHS public enrollment data.*
 5. **Rate arbitrage figures** — verify ~$35/hr agency vs ~$15/hr family-rate claims against current DHS fee schedules.
