@@ -1,4 +1,4 @@
-// 2026-06-17: Unit coverage for chat runtime helpers, including empty-response fallback and repair behavior.
+// 2026-06-17: Unit coverage for chat runtime helpers, including empty-response repair, calendar guards, and event ID stripping.
 import { describe, expect, it } from "vitest";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -19,6 +19,7 @@ import {
   runtimeFailureFallback,
   shouldFireCoordinationBoundaryOverride,
   stripAssistantSpeakerPrefix,
+  stripCalendarEventIdsFromSms,
   stripMarkdown,
   summarizeRuntimeError,
 } from "./handler";
@@ -444,6 +445,14 @@ describe("calendar runtime guards", () => {
 
     expect(message).toContain("already on your Google Calendar");
     expect(message).toContain("I did not create another copy");
+  });
+
+  it("strips internal calendar event ids from outbound sms", () => {
+    expect(
+      stripCalendarEventIdsFromSms(
+        "2:15 PM — Mayo Clinic (eventId: cghq3ptr63strsoragbijdi6vo)\n3:00 PM — Mayo [event id: kt6o2thbjjemjdnun8ekd6j1n0]",
+      ),
+    ).toBe("2:15 PM — Mayo Clinic\n3:00 PM — Mayo");
   });
 });
 

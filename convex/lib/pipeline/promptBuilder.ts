@@ -1,3 +1,4 @@
+// 2026-06-17: Builds CareSupport model prompts, including calendar instructions that keep internal event IDs out of user-visible SMS.
 import type { Intent, MessageTurn, SystemBlock, SystemBlocksInput } from "./types";
 
 export const RESPONSE_FORMAT = `── WHAT YOU CAN AND CANNOT DO ──
@@ -218,6 +219,7 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
         "CREATE: {\"action\":\"create\",\"title\":...,\"date\":\"YYYY-MM-DD\",\"startTime\":\"HH:MM\"} (24h, endTime optional).",
         "UPDATE (move/retime/rename): {\"action\":\"update\",\"eventId\":<id from list above>, plus the NEW values for whatever changed}. Moving to another day REQUIRES the new \"date\". Changing the time REQUIRES the new \"startTime\". An update with only action+eventId does NOTHING — always include the changed date/startTime. Example: move abc123 to June 9 → {\"action\":\"update\",\"eventId\":\"abc123\",\"date\":\"2026-06-09\"}.",
         "DELETE: {\"action\":\"delete\",\"eventId\":<id>} — confirm with the user first. Updates and deletes affect the whole recurring series.",
+        "Event IDs are internal only. Use them only inside calendar_updates.eventId. Never include event IDs in sms_response when summarizing or listing calendar events.",
         "recurrence: set ONLY when the user wants the event to repeat (weekly, daily, etc.). For a one-time move/retime/rename, OMIT recurrence entirely — do not guess it.",
         "Only claim you changed the calendar if a matching calendar_updates entry with the changed fields is present in this response.",
       ].join("\n"),

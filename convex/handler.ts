@@ -1,4 +1,4 @@
-// 2026-06-17: Core chat runtime handler; retries empty AI SMS replies and prevents silent outbound messages.
+// 2026-06-17: Core chat runtime handler; retries empty AI SMS replies, guards duplicate calendar writes, and strips internal event IDs from outbound SMS.
 "use node";
 
 import { internalAction } from "./_generated/server";
@@ -55,7 +55,8 @@ const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
 const MAX_RESPONSE_MS = 6_000;
 const MAX_REPLY_QUOTE_LENGTH = 200;
-const CALENDAR_CONTEXT_LOOKAHEAD_DAYS = 60;
+const CALENDAR_CONTEXT_LOOKAHEAD_DAYS = 14;
+const MAX_UPCOMING_CALENDAR_EVENTS_IN_PROMPT = 12;
 
 const TEST_ENV_MARKER = "TEST ENVIRONMENT INITIALIZED";
 
@@ -466,6 +467,15 @@ export function duplicateCalendarResponse(event: CalendarEvent): string {
   const when = [date, time].filter(Boolean).join(" at ");
   const where = event.location ? ` at ${event.location}` : "";
   return `I found that already on your Google Calendar: ${event.summary}${when ? ` on ${when}` : ""}${where}. I did not create another copy.`;
+}
+
+export function stripCalendarEventIdsFromSms(text: string): string {
+  return text
+    .replace(/\s*[\[(]\s*event\s*id\s*:\s*[^)\]\n]+[\])]/gi, "")
+    .replace(/\s*\bevent\s*id\s*:\s*[^\s,.;)\]\n]+/gi, "")
+    .replace(/\s*\beventId\s*:\s*[^\s,.;)\]\n]+/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 export function buildEmptySmsRepairMessages<T extends { role: "user" | "assistant"; content: string }>(
@@ -1281,6 +1291,7 @@ export const handleMessage = internalAction({
       replyDisplayName,
       calendarWriteSucceeded,
     });
+    smsResponse = stripCalendarEventIdsFromSms(smsResponse);
     if (hadEmptySmsResponse) {
       await ctx.runMutation(internal.mutations.logAudit, {
         careCaseId,
@@ -1548,7 +1559,7 @@ async function loadCalendarContext(
     const upcomingEvents = events.filter((e) => {
       const d = e.start.dateTime ?? e.start.date ?? "";
       return d.slice(0, 10) > tomorrowIso;
-    });
+    }).slice(0, MAX_UPCOMING_CALENDAR_EVENTS_IN_PROMPT);
 
     const todayLabel = `Today (${todayIso})`;
     const tomorrowLabel = `Tomorrow (${tomorrowIso})`;

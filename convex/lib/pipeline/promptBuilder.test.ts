@@ -1,3 +1,4 @@
+// 2026-06-17: Unit coverage for prompt building, including calendar event ID privacy instructions.
 import { describe, expect, it } from "vitest";
 import {
   buildMessages,
@@ -186,6 +187,18 @@ describe("buildSystemBlocks", () => {
       "CareSupport is currently one trusted thread around one care situation",
     );
     expect(responseFormatBlock?.text).toContain("cannot do that yet");
+  });
+
+  it("keeps calendar event ids internal to structured updates", () => {
+    const blocks = buildSystemBlocks(makeInput({
+      calendarContext: "Today: 9:00 AM: Visit [eventId: abc123]",
+    }));
+    const calendarBlock = blocks.find((block) =>
+      block.text.includes("── GOOGLE CALENDAR (CONNECTED) ──"),
+    );
+
+    expect(calendarBlock?.text).toContain("Event IDs are internal only");
+    expect(calendarBlock?.text).toContain("Never include event IDs in sms_response");
   });
 });
 
