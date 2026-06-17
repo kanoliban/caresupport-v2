@@ -1,3 +1,4 @@
+// 2026-06-17: Convex schema for CareSupport runtime tables, including calendar account metadata and duplicate-write audit events.
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -152,6 +153,7 @@ const careClaimPromotionTarget = v.union(
   v.literal("memory_entry"),
 );
 
+// 2026-06-17: Convex schema for CareSupport runtime tables; includes calendar account metadata and duplicate-write audit events.
 const auditEvent = v.union(
   v.literal("context_load"),
   v.literal("response_sent"),
@@ -176,6 +178,7 @@ const auditEvent = v.union(
   v.literal("calendar_event_created"),
   v.literal("calendar_event_updated"),
   v.literal("calendar_event_deleted"),
+  v.literal("calendar_event_duplicate_skipped"),
 );
 
 const auditDetails = v.object({
@@ -204,6 +207,9 @@ const auditDetails = v.object({
   linqChatId: v.optional(v.string()),
   linqMessageId: v.optional(v.string()),
   calendarEventId: v.optional(v.string()),
+  calendarEventTitle: v.optional(v.string()),
+  calendarEventDate: v.optional(v.string()),
+  calendarAccountEmail: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -458,6 +464,8 @@ export default defineSchema({
     refreshToken: v.optional(v.string()),
     tokenExpiresAt: v.number(),
     scope: v.optional(v.string()),
+    accountEmail: v.optional(v.string()),
+    accountName: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user_provider", ["userId", "provider"]),

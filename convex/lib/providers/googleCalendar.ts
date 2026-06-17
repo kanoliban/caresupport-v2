@@ -1,6 +1,9 @@
+// 2026-06-17: Google Calendar provider helpers; includes OAuth account metadata and duplicate event matching.
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
+const GOOGLE_USERINFO_API = "https://www.googleapis.com/oauth2/v2/userinfo";
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
+export const GOOGLE_ACCOUNT_SCOPE = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile";
 
 export interface TokenResponse {
   access_token: string;
@@ -19,12 +22,17 @@ export interface CalendarEvent {
   end: { dateTime?: string; date?: string; timeZone?: string };
 }
 
+export interface GoogleAccountProfile {
+  email?: string;
+  name?: string;
+}
+
 export function buildOAuthUrl(clientId: string, redirectUri: string, state: string): string {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: CALENDAR_SCOPE,
+    scope: `${CALENDAR_SCOPE} ${GOOGLE_ACCOUNT_SCOPE}`,
     access_type: "offline",
     prompt: "consent",
     state,
@@ -78,6 +86,22 @@ export async function refreshAccessToken(
   return response.json() as Promise<TokenResponse>;
 }
 
+export async function fetchGoogleAccountProfile(
+  accessToken: string,
+): Promise<GoogleAccountProfile | null> {
+  const response = await fetch(GOOGLE_USERINFO_API, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const data = (await response.json()) as { email?: unknown; name?: unknown };
+  return {
+    email: typeof data.email === "string" ? data.email : undefined,
+    name: typeof data.name === "string" ? data.name : undefined,
+  };
+}
+
 export async function fetchEventsForRange(
   accessToken: string,
   timeMin: string,
@@ -122,6 +146,80 @@ export async function getCalendarEvent(
   // A cancelled event is effectively deleted from the user's perspective.
   if (event.status === "cancelled") return null;
   return event;
+}
+
+function normalizeCalendarText(value: string | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(appointment|appt|event|calendar|the|at|for)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function eventDate(event: CalendarEvent): string {
+  return (event.start.dateTime ?? event.start.date ?? "").slice(0, 10);
+}
+
+function eventStartTime(event: CalendarEvent): string | undefined {
+  const value = event.start.dateTime;
+  return value ? value.slice(11, 16) : undefined;
+}
+
+export function isLikelyDuplicateCalendarEvent(
+  existing: CalendarEvent,
+  candidate: {
+    title?: string;
+    date: string;
+    startTime?: string;
+    location?: string;
+  },
+): boolean {
+  if (eventDate(existing) !== candidate.date) {
+    return false;
+  }
+
+  const existingTitle = normalizeCalendarText(existing.summary);
+  const candidateTitle = normalizeCalendarText(candidate.title);
+  const existingLocation = normalizeCalendarText(existing.location);
+  const candidateLocation = normalizeCalendarText(candidate.location);
+  const existingStartTime = eventStartTime(existing);
+
+  if (candidate.startTime && existingStartTime && candidate.startTime !== existingStartTime) {
+    return false;
+  }
+
+  if (existingTitle && candidateTitle) {
+    if (existingTitle === candidateTitle) {
+      return true;
+    }
+    if (existingTitle.includes(candidateTitle) || candidateTitle.includes(existingTitle)) {
+      return true;
+    }
+  }
+
+  if (
+    candidateLocation &&
+    existingLocation &&
+    (existingLocation.includes(candidateLocation) || candidateLocation.includes(existingLocation))
+  ) {
+    return true;
+  }
+
+  const combined = `${existingTitle} ${existingLocation}`.trim();
+  return Boolean(candidateTitle && combined.includes(candidateTitle));
+}
+
+export function findLikelyDuplicateCalendarEvent(
+  events: CalendarEvent[],
+  candidate: {
+    title?: string;
+    date: string;
+    startTime?: string;
+    location?: string;
+  },
+): CalendarEvent | null {
+  return events.find((event) => isLikelyDuplicateCalendarEvent(event, candidate)) ?? null;
 }
 
 // Maps a simple recurrence keyword to a Google Calendar RRULE array.

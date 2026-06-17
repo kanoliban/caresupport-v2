@@ -1,3 +1,4 @@
+// 2026-06-17: Internal Convex mutations for CareSupport runtime; includes calendar account metadata and duplicate-write audit details.
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -70,6 +71,7 @@ const eventValidator = v.union(
   v.literal("calendar_event_created"),
   v.literal("calendar_event_updated"),
   v.literal("calendar_event_deleted"),
+  v.literal("calendar_event_duplicate_skipped"),
 );
 
 const detailsValidator = v.object({
@@ -98,6 +100,9 @@ const detailsValidator = v.object({
   linqChatId: v.optional(v.string()),
   linqMessageId: v.optional(v.string()),
   calendarEventId: v.optional(v.string()),
+  calendarEventTitle: v.optional(v.string()),
+  calendarEventDate: v.optional(v.string()),
+  calendarAccountEmail: v.optional(v.string()),
 });
 
 const scheduleTypeValidator = v.union(
@@ -713,6 +718,8 @@ export const saveConnectedAccount = internalMutation({
     refreshToken: v.optional(v.string()),
     tokenExpiresAt: v.number(),
     scope: v.optional(v.string()),
+    accountEmail: v.optional(v.string()),
+    accountName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -728,6 +735,8 @@ export const saveConnectedAccount = internalMutation({
         refreshToken: args.refreshToken ?? existing.refreshToken,
         tokenExpiresAt: args.tokenExpiresAt,
         scope: args.scope,
+        accountEmail: args.accountEmail ?? existing.accountEmail,
+        accountName: args.accountName ?? existing.accountName,
         updatedAt: now,
       });
       return existing._id;
@@ -739,6 +748,8 @@ export const saveConnectedAccount = internalMutation({
       refreshToken: args.refreshToken,
       tokenExpiresAt: args.tokenExpiresAt,
       scope: args.scope,
+      accountEmail: args.accountEmail,
+      accountName: args.accountName,
       createdAt: now,
       updatedAt: now,
     });

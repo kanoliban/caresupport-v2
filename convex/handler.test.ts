@@ -5,6 +5,9 @@ import {
   approvalResolutionResponse,
   buildEmptySmsRepairMessages,
   buildCareContactReplyMessage,
+  calendarDayRangeIso,
+  doesReplyClaimCalendarWrite,
+  duplicateCalendarResponse,
   ensureFinalSmsResponse,
   ensureExplicitUserMemoryUpdate,
   formatConversationLog,
@@ -413,6 +416,34 @@ describe("buildEmptySmsRepairMessages", () => {
       content: expect.stringContaining("sms_response is required"),
     });
     expect(result[2].content).toContain("No side effects have run yet");
+  });
+});
+
+describe("calendar runtime guards", () => {
+  it("detects implied calendar write claims without the word calendar", () => {
+    expect(doesReplyClaimCalendarWrite("Adding it now — one sec.")).toBe(true);
+    expect(doesReplyClaimCalendarWrite("I'm adding the appointment right now.")).toBe(true);
+    expect(doesReplyClaimCalendarWrite("I can help you figure that out.")).toBe(false);
+  });
+
+  it("builds a one-day UTC range for duplicate checks", () => {
+    expect(calendarDayRangeIso("2026-06-25")).toEqual({
+      timeMin: "2026-06-25T00:00:00.000Z",
+      timeMax: "2026-06-26T00:00:00.000Z",
+    });
+  });
+
+  it("explains when a duplicate calendar event was skipped", () => {
+    const message = duplicateCalendarResponse({
+      id: "event-1",
+      summary: "Degitu - Mayo Clinic Appointment",
+      location: "Mayo Clinic",
+      start: { dateTime: "2026-06-25T15:00:00-05:00" },
+      end: { dateTime: "2026-06-25T15:00:00-05:00" },
+    });
+
+    expect(message).toContain("already on your Google Calendar");
+    expect(message).toContain("I did not create another copy");
   });
 });
 

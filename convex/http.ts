@@ -1,3 +1,4 @@
+// 2026-06-17: HTTP routes for Linq webhooks and Google Calendar OAuth, including connected account metadata capture.
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { httpRouter } from "convex/server";
@@ -17,6 +18,7 @@ import {
 import {
   buildOAuthUrl,
   exchangeCodeForTokens,
+  fetchGoogleAccountProfile,
 } from "./lib/providers/googleCalendar";
 
 const http = httpRouter();
@@ -246,6 +248,7 @@ http.route({
     }
 
     const tokenExpiresAt = Date.now() + tokens.expires_in * 1000;
+    const accountProfile = await fetchGoogleAccountProfile(tokens.access_token);
 
     // Resolve userId → user doc so we have phone + chatId for the confirmation SMS
     const user = await ctx.runMutation(internal.mutations.getUserByRawId, {
@@ -263,13 +266,17 @@ http.route({
       refreshToken: tokens.refresh_token,
       tokenExpiresAt,
       scope: tokens.scope,
+      accountEmail: accountProfile?.email,
+      accountName: accountProfile?.name,
     });
 
     await ctx.runMutation(internal.mutations.logAudit, {
       userId: user._id,
       event: "calendar_connected",
       phone: user.phone,
-      details: {},
+      details: {
+        calendarAccountEmail: accountProfile?.email,
+      },
       timestamp: Date.now(),
     });
 

@@ -46,13 +46,16 @@ import {
   formatEventsForPrompt,
   buildRecurrenceRule,
   toSeriesEventId,
+  findLikelyDuplicateCalendarEvent,
 } from "./lib/providers/googleCalendar";
+import type { CalendarEvent } from "./lib/providers/googleCalendar";
 import { computeReminderFireAt, zonedDateTimeToUtcMs } from "./lib/reminderTiming";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
 const MAX_RESPONSE_MS = 6_000;
 const MAX_REPLY_QUOTE_LENGTH = 200;
+const CALENDAR_CONTEXT_LOOKAHEAD_DAYS = 60;
 
 const TEST_ENV_MARKER = "TEST ENVIRONMENT INITIALIZED";
 
@@ -60,6 +63,8 @@ const TEST_ENV_MARKER = "TEST ENVIRONMENT INITIALIZED";
 // used to suppress false "added it to your calendar" replies when no write landed.
 const CALENDAR_WRITE_CLAIM_PATTERN =
   /\b(add(?:ed|ing)?|creat(?:e|ed|ing)|schedul(?:e|ed|ing)|put|plac(?:e|ed)|book(?:ed)?|sav(?:e|ed)|updat(?:e|ed)|mov(?:e|ed)|remov(?:e|ed)|delet(?:e|ed)|cancel(?:ed|led)?)\b[^.?!\n]{0,60}\b(calendar|gcal)\b/i;
+const CALENDAR_IMPLIED_WRITE_CLAIM_PATTERN =
+  /\b(?:adding|creating|scheduling|booking|saving|updating|moving|removing|deleting|canceling|cancelling)\s+(?:it|that|this|the event|the appointment|the reminder)\s+(?:now|right now|for you|once)?\b/i;
 
 const COORDINATION_BOUNDARY_RESPONSE =
   "I can't add them or message them for you yet. I can draft the message and keep track of the coordination issue here. Want me to put one together?";
@@ -431,6 +436,36 @@ export function ensureFinalSmsResponse(
     return "Done — I updated your Google Calendar.";
   }
   return runtimeFailureFallback(options.replyDisplayName);
+}
+
+export function doesReplyClaimCalendarWrite(text: string): boolean {
+  return (
+    CALENDAR_WRITE_CLAIM_PATTERN.test(text) ||
+    CALENDAR_IMPLIED_WRITE_CLAIM_PATTERN.test(text)
+  );
+}
+
+export function calendarDayRangeIso(date: string): { timeMin: string; timeMax: string } {
+  const start = new Date(`${date}T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
+}
+
+function calendarEventDate(event: CalendarEvent): string {
+  return (event.start.dateTime ?? event.start.date ?? "").slice(0, 10);
+}
+
+function calendarEventTime(event: CalendarEvent): string | undefined {
+  return event.start.dateTime?.slice(11, 16);
+}
+
+export function duplicateCalendarResponse(event: CalendarEvent): string {
+  const date = calendarEventDate(event);
+  const time = calendarEventTime(event);
+  const when = [date, time].filter(Boolean).join(" at ");
+  const where = event.location ? ` at ${event.location}` : "";
+  return `I found that already on your Google Calendar: ${event.summary}${when ? ` on ${when}` : ""}${where}. I did not create another copy.`;
 }
 
 export function buildEmptySmsRepairMessages<T extends { role: "user" | "assistant"; content: string }>(
@@ -1055,6 +1090,7 @@ export const handleMessage = internalAction({
       );
 
     let calendarWriteSucceeded = false;
+    let calendarDuplicateSkipped = false;
     if (parsed.calendarUpdates?.length) {
       console.log("[calendar] updates payload:", JSON.stringify(parsed.calendarUpdates));
       const accessToken = await getValidGoogleToken(ctx, userId, timezone);
@@ -1062,6 +1098,37 @@ export const handleMessage = internalAction({
         for (const update of parsed.calendarUpdates) {
           try {
             if (update.action === "create" && update.title && update.date) {
+              const duplicateRange = calendarDayRangeIso(update.date);
+              const sameDayEvents = await fetchEventsForRange(
+                accessToken,
+                duplicateRange.timeMin,
+                duplicateRange.timeMax,
+                timezone,
+              );
+              const duplicate = findLikelyDuplicateCalendarEvent(sameDayEvents, {
+                title: update.title,
+                date: update.date,
+                startTime: update.startTime,
+                location: update.location,
+              });
+              if (duplicate) {
+                calendarDuplicateSkipped = true;
+                smsResponse = duplicateCalendarResponse(duplicate);
+                await ctx.runMutation(internal.mutations.logAudit, {
+                  careCaseId,
+                  userId,
+                  event: "calendar_event_duplicate_skipped",
+                  phone: senderPhone,
+                  details: {
+                    calendarEventId: duplicate.id,
+                    calendarEventTitle: duplicate.summary,
+                    calendarEventDate: calendarEventDate(duplicate),
+                  },
+                  timestamp: Date.now(),
+                });
+                continue;
+              }
+
               const created = await createCalendarEvent(accessToken, {
                 title: update.title,
                 date: update.date,
@@ -1201,7 +1268,8 @@ export const handleMessage = internalAction({
     const calendarWriteAttempted = Boolean(parsed.calendarUpdates?.length);
     if (
       !calendarWriteSucceeded &&
-      (calendarWriteAttempted || CALENDAR_WRITE_CLAIM_PATTERN.test(smsResponse))
+      !calendarDuplicateSkipped &&
+      (calendarWriteAttempted || doesReplyClaimCalendarWrite(smsResponse))
     ) {
       smsResponse = calendarContext
         ? "I hit a snag updating your Google Calendar just now, so that change didn't go through. Want me to try again?"
@@ -1450,15 +1518,19 @@ async function loadCalendarContext(
   if (!accessToken) return null;
 
   try {
+    const account = await ctx.runMutation(internal.mutations.getConnectedAccount, {
+      userId,
+      provider: "google",
+    });
     const todayStart = new Date(now);
     todayStart.setUTCHours(0, 0, 0, 0);
-    const tomorrowEnd = new Date(todayStart);
-    tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 2);
+    const lookaheadEnd = new Date(todayStart);
+    lookaheadEnd.setUTCDate(lookaheadEnd.getUTCDate() + CALENDAR_CONTEXT_LOOKAHEAD_DAYS);
 
     const events = await fetchEventsForRange(
       accessToken,
       todayStart.toISOString(),
-      tomorrowEnd.toISOString(),
+      lookaheadEnd.toISOString(),
       timezone,
     );
 
@@ -1473,13 +1545,22 @@ async function loadCalendarContext(
       const d = e.start.dateTime ?? e.start.date ?? "";
       return d.startsWith(tomorrowIso);
     });
+    const upcomingEvents = events.filter((e) => {
+      const d = e.start.dateTime ?? e.start.date ?? "";
+      return d.slice(0, 10) > tomorrowIso;
+    });
 
     const todayLabel = `Today (${todayIso})`;
     const tomorrowLabel = `Tomorrow (${tomorrowIso})`;
+    const upcomingLabel = `Upcoming next ${CALENDAR_CONTEXT_LOOKAHEAD_DAYS} days`;
 
     return [
+      account?.accountEmail
+        ? `Connected Google account: ${account.accountEmail}`
+        : "Connected Google account: unknown",
       formatEventsForPrompt(todayEvents, todayLabel, timezone),
       formatEventsForPrompt(tomorrowEvents, tomorrowLabel, timezone),
+      formatEventsForPrompt(upcomingEvents, upcomingLabel, timezone),
     ].join("\n\n");
   } catch (err) {
     console.error("[calendar] loadContext fetch failed:", err instanceof Error ? err.message : String(err));

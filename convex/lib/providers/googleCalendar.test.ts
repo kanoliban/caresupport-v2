@@ -1,5 +1,12 @@
+// 2026-06-17: Unit coverage for Google Calendar helpers, including OAuth scopes and duplicate event detection.
 import { describe, expect, it } from "vitest";
-import { buildRecurrenceRule, toSeriesEventId } from "./googleCalendar";
+import {
+  buildOAuthUrl,
+  buildRecurrenceRule,
+  findLikelyDuplicateCalendarEvent,
+  isLikelyDuplicateCalendarEvent,
+  toSeriesEventId,
+} from "./googleCalendar";
 
 describe("buildRecurrenceRule", () => {
   it("maps keywords to RRULEs", () => {
@@ -34,5 +41,56 @@ describe("toSeriesEventId", () => {
 
   it("leaves a plain (non-recurring) event id untouched", () => {
     expect(toSeriesEventId("abc123")).toBe("abc123");
+  });
+});
+
+describe("buildOAuthUrl", () => {
+  it("requests calendar and account identity scopes", () => {
+    const url = new URL(buildOAuthUrl("client", "https://example.com/callback", "user-1"));
+    const scope = url.searchParams.get("scope") ?? "";
+
+    expect(scope).toContain("https://www.googleapis.com/auth/calendar");
+    expect(scope).toContain("https://www.googleapis.com/auth/userinfo.email");
+    expect(scope).toContain("https://www.googleapis.com/auth/userinfo.profile");
+  });
+});
+
+describe("calendar duplicate matching", () => {
+  const existing = {
+    id: "event-1",
+    summary: "Degitu - Mayo Clinic Appointment",
+    location: "Mayo Clinic",
+    start: { dateTime: "2026-06-25T15:00:00-05:00", timeZone: "America/Chicago" },
+    end: { dateTime: "2026-06-25T15:00:00-05:00", timeZone: "America/Chicago" },
+  };
+
+  it("matches the same appointment on the same date and time", () => {
+    expect(
+      isLikelyDuplicateCalendarEvent(existing, {
+        title: "Mayo Clinic appointment",
+        date: "2026-06-25",
+        startTime: "15:00",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not match the same appointment at a different explicit time", () => {
+    expect(
+      isLikelyDuplicateCalendarEvent(existing, {
+        title: "Mayo Clinic appointment",
+        date: "2026-06-25",
+        startTime: "16:00",
+      }),
+    ).toBe(false);
+  });
+
+  it("finds the duplicate event from a list", () => {
+    expect(
+      findLikelyDuplicateCalendarEvent([existing], {
+        title: "Mayo Clinic appointment",
+        date: "2026-06-25",
+        startTime: "15:00",
+      })?.id,
+    ).toBe("event-1");
   });
 });
