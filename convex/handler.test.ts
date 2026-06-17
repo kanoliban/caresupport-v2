@@ -1,8 +1,9 @@
-// 2026-06-17: Unit coverage for chat runtime helpers, including empty-response fallback behavior.
+// 2026-06-17: Unit coverage for chat runtime helpers, including empty-response fallback and repair behavior.
 import { describe, expect, it } from "vitest";
 import type { Id } from "./_generated/dataModel";
 import {
   approvalResolutionResponse,
+  buildEmptySmsRepairMessages,
   buildCareContactReplyMessage,
   ensureFinalSmsResponse,
   ensureExplicitUserMemoryUpdate,
@@ -392,6 +393,26 @@ describe("ensureFinalSmsResponse", () => {
         calendarWriteSucceeded: true,
       }),
     ).toBe("Done — I updated your Google Calendar.");
+  });
+});
+
+describe("buildEmptySmsRepairMessages", () => {
+  it("asks the model to repair an empty sms response before side effects run", () => {
+    const result = buildEmptySmsRepairMessages(
+      [{ role: "user" as const, content: "What happened?" }],
+      '{"sms_response":"","internal_notes":"Need answer","calendar_updates":[]}',
+    );
+
+    expect(result).toHaveLength(3);
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: expect.stringContaining('"sms_response":""'),
+    });
+    expect(result[2]).toMatchObject({
+      role: "user",
+      content: expect.stringContaining("sms_response is required"),
+    });
+    expect(result[2].content).toContain("No side effects have run yet");
   });
 });
 

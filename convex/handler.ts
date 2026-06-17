@@ -1,4 +1,4 @@
-// 2026-06-17: Core chat runtime handler; guards malformed AI replies so production never logs or sends silent outbound messages.
+// 2026-06-17: Core chat runtime handler; retries empty AI SMS replies and prevents silent outbound messages.
 "use node";
 
 import { internalAction } from "./_generated/server";
@@ -433,6 +433,29 @@ export function ensureFinalSmsResponse(
   return runtimeFailureFallback(options.replyDisplayName);
 }
 
+export function buildEmptySmsRepairMessages<T extends { role: "user" | "assistant"; content: string }>(
+  messages: T[],
+  rawResponse: string,
+): T[] {
+  const previousResponse = rawResponse.trim() || "{\"sms_response\":\"\"}";
+  return [
+    ...messages,
+    {
+      role: "assistant",
+      content: previousResponse.slice(0, 4_000),
+    } as T,
+    {
+      role: "user",
+      content: [
+        "Your previous JSON response had an empty sms_response.",
+        "Return valid JSON only, using the same schema.",
+        "sms_response is required and must contain the user-visible text message.",
+        "If you intended any structured updates, include them again. No side effects have run yet.",
+      ].join("\n"),
+    } as T,
+  ];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -763,6 +786,22 @@ export const handleMessage = internalAction({
         console.log("[calendar] RAW model text:", aiResult.text.slice(0, 900));
       }
       parsed = extractJson(aiResult.text);
+      if (!parsed.smsResponse.trim()) {
+        console.warn("[handler] empty_sms_response_retrying", {
+          careCaseId,
+          userId,
+          outputTokens: aiResult.outputTokens,
+          rawPreview: aiResult.text.slice(0, 500),
+        });
+        const repairResult = await callAnthropic({
+          systemBlocks,
+          messages: buildEmptySmsRepairMessages(messages, aiResult.text),
+          model: routeResult.model,
+          apiKey,
+          ...(openRouterKey ? { baseURL: "https://openrouter.ai/api" } : {}),
+        });
+        parsed = extractJson(repairResult.text);
+      }
     } catch (error: unknown) {
       const errorSummary = summarizeRuntimeError(error);
       const errorMessage = formatRuntimeErrorSummary(errorSummary);
