@@ -47,6 +47,7 @@ import {
   buildRecurrenceRule,
   toSeriesEventId,
   findLikelyDuplicateCalendarEvent,
+  fetchPrimaryCalendarProfile,
 } from "./lib/providers/googleCalendar";
 import type { CalendarEvent } from "./lib/providers/googleCalendar";
 import { computeReminderFireAt, zonedDateTimeToUtcMs } from "./lib/reminderTiming";
@@ -1519,6 +1520,38 @@ export async function getValidGoogleToken(
   }
 }
 
+async function loadConnectedGoogleAccountLabel(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  accessToken: string,
+): Promise<string> {
+  const account = await ctx.runMutation(internal.mutations.getConnectedAccount, {
+    userId,
+    provider: "google",
+  });
+  if (account?.accountEmail) {
+    return account.accountName
+      ? `${account.accountEmail} (${account.accountName})`
+      : account.accountEmail;
+  }
+
+  const profile = await fetchPrimaryCalendarProfile(accessToken);
+  if (profile?.email || profile?.name) {
+    await ctx.runMutation(internal.mutations.updateConnectedAccountTokens, {
+      userId,
+      provider: "google",
+      accessToken,
+      tokenExpiresAt: account?.tokenExpiresAt ?? Date.now() + 30 * 60 * 1000,
+      accountEmail: profile.email,
+      accountName: profile.name,
+    });
+  }
+  if (profile?.email) {
+    return profile.name ? `${profile.email} (${profile.name})` : profile.email;
+  }
+  return profile?.name ?? "unknown";
+}
+
 async function loadCalendarContext(
   ctx: ActionCtx,
   userId: Id<"users">,
@@ -1529,10 +1562,7 @@ async function loadCalendarContext(
   if (!accessToken) return null;
 
   try {
-    const account = await ctx.runMutation(internal.mutations.getConnectedAccount, {
-      userId,
-      provider: "google",
-    });
+    const accountLabel = await loadConnectedGoogleAccountLabel(ctx, userId, accessToken);
     const todayStart = new Date(now);
     todayStart.setUTCHours(0, 0, 0, 0);
     const lookaheadEnd = new Date(todayStart);
@@ -1566,9 +1596,7 @@ async function loadCalendarContext(
     const upcomingLabel = `Upcoming next ${CALENDAR_CONTEXT_LOOKAHEAD_DAYS} days`;
 
     return [
-      account?.accountEmail
-        ? `Connected Google account: ${account.accountEmail}`
-        : "Connected Google account: unknown",
+      `Connected Google account: ${accountLabel}`,
       formatEventsForPrompt(todayEvents, todayLabel, timezone),
       formatEventsForPrompt(tomorrowEvents, tomorrowLabel, timezone),
       formatEventsForPrompt(upcomingEvents, upcomingLabel, timezone),

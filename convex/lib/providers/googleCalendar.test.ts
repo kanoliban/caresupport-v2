@@ -1,12 +1,17 @@
-// 2026-06-17: Unit coverage for Google Calendar helpers, including OAuth scopes and duplicate event detection.
-import { describe, expect, it } from "vitest";
+// 2026-06-17: Unit coverage for Google Calendar helpers, including OAuth scopes, account discovery, and duplicate event detection.
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildOAuthUrl,
   buildRecurrenceRule,
+  fetchPrimaryCalendarProfile,
   findLikelyDuplicateCalendarEvent,
   isLikelyDuplicateCalendarEvent,
   toSeriesEventId,
 } from "./googleCalendar";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("buildRecurrenceRule", () => {
   it("maps keywords to RRULEs", () => {
@@ -52,6 +57,26 @@ describe("buildOAuthUrl", () => {
     expect(scope).toContain("https://www.googleapis.com/auth/calendar");
     expect(scope).toContain("https://www.googleapis.com/auth/userinfo.email");
     expect(scope).toContain("https://www.googleapis.com/auth/userinfo.profile");
+  });
+});
+
+describe("fetchPrimaryCalendarProfile", () => {
+  it("derives the linked email from the primary calendar id", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: "liban@example.com", summary: "Liban Kano" }),
+    })));
+
+    await expect(fetchPrimaryCalendarProfile("token")).resolves.toEqual({
+      email: "liban@example.com",
+      name: "Liban Kano",
+    });
+  });
+
+  it("returns null when the primary calendar cannot be read", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false })));
+
+    await expect(fetchPrimaryCalendarProfile("token")).resolves.toBeNull();
   });
 });
 

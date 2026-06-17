@@ -102,6 +102,27 @@ export async function fetchGoogleAccountProfile(
   };
 }
 
+export async function fetchPrimaryCalendarProfile(
+  accessToken: string,
+): Promise<GoogleAccountProfile | null> {
+  const response = await fetch(`${GOOGLE_CALENDAR_API}/users/me/calendarList/primary`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const data = (await response.json()) as { id?: unknown; summary?: unknown };
+  const id = typeof data.id === "string" ? data.id : undefined;
+  const summary = typeof data.summary === "string" ? data.summary : undefined;
+  const summaryEmail = summary?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  const email = id?.includes("@") ? id : summaryEmail;
+  const name = summary && summary !== email ? summary : undefined;
+  if (!email && !name) {
+    return null;
+  }
+  return { email, name };
+}
+
 export async function fetchEventsForRange(
   accessToken: string,
   timeMin: string,

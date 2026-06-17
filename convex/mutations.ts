@@ -774,6 +774,8 @@ export const updateConnectedAccountTokens = internalMutation({
     provider: v.string(),
     accessToken: v.string(),
     tokenExpiresAt: v.number(),
+    accountEmail: v.optional(v.string()),
+    accountName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const account = await ctx.db
@@ -786,6 +788,8 @@ export const updateConnectedAccountTokens = internalMutation({
       await ctx.db.patch(account._id, {
         accessToken: args.accessToken,
         tokenExpiresAt: args.tokenExpiresAt,
+        accountEmail: args.accountEmail ?? account.accountEmail,
+        accountName: args.accountName ?? account.accountName,
         updatedAt: Date.now(),
       });
     }
