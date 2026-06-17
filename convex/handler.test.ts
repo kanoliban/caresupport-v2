@@ -1,8 +1,10 @@
+// 2026-06-17: Unit coverage for chat runtime helpers, including empty-response fallback behavior.
 import { describe, expect, it } from "vitest";
 import type { Id } from "./_generated/dataModel";
 import {
   approvalResolutionResponse,
   buildCareContactReplyMessage,
+  ensureFinalSmsResponse,
   ensureExplicitUserMemoryUpdate,
   formatConversationLog,
   inferExplicitUserMemoryUpdate,
@@ -362,6 +364,34 @@ describe("runtimeFailureFallback", () => {
     expect(result).toContain("system issue on my side");
     expect(result).toContain("I have your message");
     expect(result).not.toContain("send it again");
+  });
+});
+
+describe("ensureFinalSmsResponse", () => {
+  it("keeps a non-empty model response after trimming whitespace", () => {
+    expect(
+      ensureFinalSmsResponse("  Got it — I updated that.  ", {
+        replyDisplayName: "Liban",
+      }),
+    ).toBe("Got it — I updated that.");
+  });
+
+  it("falls back when the model returns an empty sms response", () => {
+    const result = ensureFinalSmsResponse("   ", {
+      replyDisplayName: "Liban",
+    });
+
+    expect(result).toContain("system issue on my side");
+    expect(result).toContain("I have your message");
+  });
+
+  it("confirms a successful calendar write when the model response is empty", () => {
+    expect(
+      ensureFinalSmsResponse("", {
+        replyDisplayName: "Liban",
+        calendarWriteSucceeded: true,
+      }),
+    ).toBe("Done — I updated your Google Calendar.");
   });
 });
 

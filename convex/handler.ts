@@ -1,3 +1,4 @@
+// 2026-06-17: Core chat runtime handler; guards malformed AI replies so production never logs or sends silent outbound messages.
 "use node";
 
 import { internalAction } from "./_generated/server";
@@ -413,6 +414,23 @@ function formatRuntimeErrorSummary(summary: RuntimeErrorSummary): string {
 
 export function runtimeFailureFallback(displayName: string): string {
   return `Sorry ${displayName}, I'm having a system issue on my side right now. I have your message, but I can't respond properly yet.`;
+}
+
+export function ensureFinalSmsResponse(
+  smsResponse: string,
+  options: {
+    replyDisplayName: string;
+    calendarWriteSucceeded?: boolean;
+  },
+): string {
+  const trimmed = smsResponse.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  if (options.calendarWriteSucceeded) {
+    return "Done — I updated your Google Calendar.";
+  }
+  return runtimeFailureFallback(options.replyDisplayName);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1149,6 +1167,28 @@ export const handleMessage = internalAction({
       smsResponse = calendarContext
         ? "I hit a snag updating your Google Calendar just now, so that change didn't go through. Want me to try again?"
         : "I'm not connected to your Google Calendar yet, so I couldn't do that. Text \"connect my calendar\" to link it — or I can keep track of it here in the meantime.";
+    }
+
+    const hadEmptySmsResponse = !smsResponse.trim();
+    smsResponse = ensureFinalSmsResponse(smsResponse, {
+      replyDisplayName,
+      calendarWriteSucceeded,
+    });
+    if (hadEmptySmsResponse) {
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId,
+        userId,
+        event: "message_failed",
+        phone: senderPhone,
+        details: {
+          failureReason: "empty_sms_response",
+          triggerMessage: messageBody.slice(0, 200),
+          sourceMessageId: inboundMessageId,
+          linqChatId: chatId,
+          linqMessageId: args.sourceMessageId,
+        },
+        timestamp: Date.now(),
+      });
     }
 
     await ctx.runMutation(internal.mutations.logAudit, {
