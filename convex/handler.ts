@@ -52,6 +52,7 @@ import {
 } from "./lib/providers/googleCalendar";
 import type { CalendarEvent } from "./lib/providers/googleCalendar";
 import { computeReminderFireAt, zonedDateTimeToUtcMs } from "./lib/reminderTiming";
+import { isOutreachApprovalMessage } from "./outreachAttempts";
 
 const MIN_RESPONSE_MS = 3_000;
 const EXTRA_RESPONSE_MS_PER_BUBBLE = 1_000;
@@ -80,6 +81,9 @@ const PROFILE_SAVE_PATTERNS = [
 
 const VALID_LESSON_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
 
+const CARE_CONTACT_IDENTITY_CLARIFICATION_PATTERN =
+  /\b(who is this|who are you|what is this|are you stupid|you'?re talking about me|why are you texting me)\b/i;
+
 type OutreachApprovalResolution =
   | { action: "none" }
   | { action: "ambiguous"; contactNames: string[]; matchedCount: number }
@@ -104,6 +108,19 @@ type ApprovedOutreachForExecution = {
   contact: Doc<"careContacts">;
   coordinationEvent: Doc<"coordinationEvents">;
   requestedByUser: Doc<"users">;
+};
+
+type ConversationRecord = {
+  direction: "inbound" | "outbound";
+  body: string;
+  timestamp: number;
+};
+
+type InferredOutreachDraft = {
+  contactName: string;
+  phone: string;
+  message: string;
+  draftTimestamp?: number;
 };
 
 export interface RuntimeErrorSummary {
@@ -286,6 +303,97 @@ export function ensureExplicitUserMemoryUpdate(
   return [...updates, inferred];
 }
 
+function extractNormalizedPhone(text: string): string | undefined {
+  const match = text.match(/(?:\+?1[\s.-]*)?\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4}/);
+  return match ? normalizePhone(match[0]) ?? undefined : undefined;
+}
+
+function inferContactNameFromDraftMessage(message: string): string | undefined {
+  const greeting = message.match(/^\s*(?:hi|hello|hey)\s+([^,\n!.?]+)/i);
+  return greeting?.[1]?.trim();
+}
+
+export function inferOutreachDraftFromApprovalPrompt(
+  smsResponse: string,
+  recentMessages: ConversationRecord[],
+  draftTimestamp?: number,
+): InferredOutreachDraft | null {
+  if (!/\bwant me to send (?:that|this|it)\b/i.test(smsResponse)) {
+    return null;
+  }
+
+  const draftMatch = smsResponse.match(
+    /(?:here(?:'s| is)\s+what\s+i(?:'d| would)\s+send(?:\s+(?:him|her|them|[^:\n]+))?:\s*)\n+([\s\S]+?)\n+\s*want me to send (?:that|this|it)\??/i,
+  );
+  const message = draftMatch?.[1]?.trim();
+  if (!message) return null;
+
+  const contactName = inferContactNameFromDraftMessage(message);
+  if (!contactName) return null;
+
+  const phone = [...recentMessages]
+    .reverse()
+    .filter((record) => record.direction === "inbound")
+    .map((record) => extractNormalizedPhone(record.body))
+    .find((value): value is string => Boolean(value));
+  if (!phone) return null;
+
+  return { contactName, phone, message, draftTimestamp };
+}
+
+export function inferOutreachDraftFromRecentApprovalContext(
+  recentMessages: ConversationRecord[],
+): InferredOutreachDraft | null {
+  const latestDraft = [...recentMessages]
+    .reverse()
+    .find(
+      (record) =>
+        record.direction === "outbound" &&
+        /\bwant me to send (?:that|this|it)\b/i.test(record.body),
+    );
+  return latestDraft
+    ? inferOutreachDraftFromApprovalPrompt(latestDraft.body, recentMessages, latestDraft.timestamp)
+    : null;
+}
+
+export function hasApprovalAfterOutreachDraft(
+  recentMessages: ConversationRecord[],
+  draftTimestamp: number | undefined,
+): boolean {
+  if (draftTimestamp === undefined) return false;
+  return recentMessages.some(
+    (record) =>
+      record.direction === "inbound" &&
+      record.timestamp > draftTimestamp &&
+      isOutreachApprovalMessage(record.body),
+  );
+}
+
+export function isOutreachRetryRequest(message: string): boolean {
+  return /\b(?:try sending again|actually send|send (?:it|that|this)|can you text|text my|message my|send (?:him|her|them|to))\b/i
+    .test(message);
+}
+
+export function isCareContactIdentityClarification(message: string): boolean {
+  return CARE_CONTACT_IDENTITY_CLARIFICATION_PATTERN.test(message);
+}
+
+export function careContactIdentityClarificationResponse(context: {
+  contactName: string;
+  requesterName: string;
+  careRecipientName?: string;
+}): string {
+  const careRecipient = context.careRecipientName?.trim();
+  const careContext = careRecipient
+    ? ` coordinate care for ${careRecipient}`
+    : " coordinate care";
+  return [
+    `Sorry for the confusion, ${context.contactName}.`,
+    `I'm CareSupport, a care coordination assistant. ${context.requesterName} asked me to reach out to you to help${careContext}.`,
+    "You can reply here, and I'll pass useful updates back into the care thread. If this is not a good number or you do not want texts from me, just say so and I'll stop.",
+  ].join(" ");
+}
+
 export function parseLesson(text: string): { category: string; cleanText: string } {
   const match = text.match(/^\[(behavioral|factual|operational)]\s*/i);
   if (match) {
@@ -420,6 +528,69 @@ async function executeApprovedOutreach(
   };
 }
 
+async function createPendingOutreachFromInferredDraft(
+  ctx: ActionCtx,
+  args: {
+    careCaseId: Id<"careCases">;
+    userId: Id<"users">;
+    timezone: string;
+    draft: InferredOutreachDraft;
+    senderPhone: string;
+  },
+): Promise<boolean> {
+  await ctx.runMutation(internal.mutations.upsertCareContactFromModel, {
+    careCaseId: args.careCaseId,
+    update: {
+      action: "add",
+      name: args.draft.contactName,
+      phone: args.draft.phone,
+      contactType: "family",
+      canReceiveTexts: true,
+    },
+  });
+  const coordinationEventTitle = `Text ${args.draft.contactName}`;
+  await ctx.runMutation(internal.mutations.upsertCoordinationEventFromModel, {
+    careCaseId: args.careCaseId,
+    userId: args.userId,
+    timezone: args.timezone,
+    update: {
+      action: "add",
+      title: coordinationEventTitle,
+      type: "outreach",
+      status: "open",
+      contactName: args.draft.contactName,
+      description: "Introductory CareSupport outreach.",
+    },
+  });
+  const result = await ctx.runMutation(internal.outreachAttempts.createPendingFromModel, {
+    careCaseId: args.careCaseId,
+    requestedByUserId: args.userId,
+    request: {
+      contactName: args.draft.contactName,
+      purpose: "Introductory CareSupport outreach",
+      message: args.draft.message,
+      coordinationEventTitle,
+    },
+    approvalPrompt: `Want me to send this to ${args.draft.contactName}?`,
+  });
+  if (result.action === "skipped") {
+    await ctx.runMutation(internal.mutations.logAudit, {
+      careCaseId: args.careCaseId,
+      userId: args.userId,
+      event: "outreach_blocked",
+      phone: args.senderPhone,
+      details: {
+        messageBody: args.draft.message.slice(0, 500),
+        status: "skipped",
+        reason: result.reason,
+      },
+      timestamp: Date.now(),
+    });
+    return false;
+  }
+  return result.status === "pending_approval";
+}
+
 export function summarizeRuntimeError(error: unknown): RuntimeErrorSummary {
   if (error instanceof Error) {
     const record = isRecord(error) ? error : {};
@@ -488,6 +659,12 @@ export function doesReplyClaimCalendarWrite(text: string): boolean {
     CALENDAR_WRITE_CLAIM_PATTERN.test(text) ||
     CALENDAR_IMPLIED_WRITE_CLAIM_PATTERN.test(text)
   );
+}
+
+export function doesReplyClaimOutreachExecution(text: string): boolean {
+  if (/\bwant me to send (?:that|this|it)\b/i.test(text)) return false;
+  return /\b(?:outreach\b[^.?!\n]{0,80}\bqueued|queued (?:the )?outreach|trying to send|sending (?:it|that|this|the message)|i(?:'ll| will)? let you know when (?:he|she|they) respond|i asked|i texted|i messaged|i reached out)\b/i
+    .test(text);
 }
 
 export function calendarDayRangeIso(date: string): { timeMin: string; timeMax: string } {
@@ -734,8 +911,55 @@ export const handleMessage = internalAction({
       });
     }
 
+    if (
+      careContactReply &&
+      isCareContactIdentityClarification(messageBody)
+    ) {
+      const contactReplyContext = await ctx.runMutation(
+        internal.mutations.getCompiledPromptContext,
+        { userId, careCaseId },
+      );
+      const reply = careContactIdentityClarificationResponse({
+        contactName: careContactReply.careContactName,
+        requesterName: activeUser.name,
+        careRecipientName: contactReplyContext?.careCase.careRecipientName,
+      });
+      const outboundMessageId = await logOutbound(
+        ctx,
+        careCaseId,
+        userId,
+        senderPhone,
+        careContactReply.careContactName,
+        reply,
+        now,
+        careContactReply,
+      );
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId,
+        userId,
+        event: "response_sent",
+        phone: senderPhone,
+        details: {
+          responseLength: reply.length,
+          triggerMessage: "care_contact_identity_clarification",
+          careContactId: careContactReply.careContactId,
+          coordinationEventId: careContactReply.coordinationEventId,
+          outreachAttemptId: careContactReply.outreachAttemptId,
+        },
+        timestamp: now,
+      });
+      const linqMessageIds = await sendResponse(chatId, reply, envVarsEarly, startedAt);
+      if (linqMessageIds.length > 0) {
+        await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+          messageId: outboundMessageId,
+          linqMessageId: linqMessageIds[0],
+        });
+      }
+      return { success: true, response: reply };
+    }
+
     if (!careContactReply) {
-      const approvalResolution = await ctx.runMutation(
+      let approvalResolution = await ctx.runMutation(
         internal.outreachAttempts.resolveApprovalFromMessage,
         {
           careCaseId,
@@ -743,6 +967,84 @@ export const handleMessage = internalAction({
           messageBody,
         },
       ) as OutreachApprovalResolution;
+      if (approvalResolution.action === "none") {
+        const recentForApproval = await ctx.runMutation(
+          internal.mutations.getCareCaseRecentMessages,
+          { careCaseId, limit: 80 },
+        );
+        const recentApprovalRecords = recentForApproval.map((message) => ({
+          direction: message.direction,
+          body: message.body,
+          timestamp: message.timestamp,
+        }));
+        const inferredDraft = inferOutreachDraftFromRecentApprovalContext(
+          recentApprovalRecords,
+        );
+        const shouldRecoverDraft =
+          Boolean(inferredDraft) &&
+          (isOutreachApprovalMessage(messageBody) ||
+            (isOutreachRetryRequest(messageBody) &&
+              hasApprovalAfterOutreachDraft(
+                recentApprovalRecords,
+                inferredDraft?.draftTimestamp,
+              )));
+        if (inferredDraft && shouldRecoverDraft) {
+          const created = await createPendingOutreachFromInferredDraft(ctx, {
+            careCaseId,
+            userId,
+            timezone: isValidTimeZone(args.timezone) ? args.timezone : "UTC",
+            draft: inferredDraft,
+            senderPhone,
+          });
+          if (created) {
+            approvalResolution = await ctx.runMutation(
+              internal.outreachAttempts.resolveApprovalFromMessage,
+              {
+                careCaseId,
+                approvedByUserId: userId,
+                messageBody: isOutreachApprovalMessage(messageBody)
+                  ? messageBody
+                  : "send it",
+              },
+            ) as OutreachApprovalResolution;
+          }
+        }
+      }
+      if (
+        approvalResolution.action === "none" &&
+        isOutreachApprovalMessage(messageBody)
+      ) {
+        const recentForApproval = await ctx.runMutation(
+          internal.mutations.getCareCaseRecentMessages,
+          { careCaseId, limit: 80 },
+        );
+        const inferredDraft = inferOutreachDraftFromRecentApprovalContext(
+          recentForApproval.map((message) => ({
+            direction: message.direction,
+            body: message.body,
+            timestamp: message.timestamp,
+          })),
+        );
+        if (inferredDraft) {
+          const created = await createPendingOutreachFromInferredDraft(ctx, {
+            careCaseId,
+            userId,
+            timezone: isValidTimeZone(args.timezone) ? args.timezone : "UTC",
+            draft: inferredDraft,
+            senderPhone,
+          });
+          if (created) {
+            approvalResolution = await ctx.runMutation(
+              internal.outreachAttempts.resolveApprovalFromMessage,
+              {
+                careCaseId,
+                approvedByUserId: userId,
+                messageBody,
+              },
+            ) as OutreachApprovalResolution;
+          }
+        }
+      }
       if (approvalResolution.action !== "none") {
         let executionResult: OutreachExecutionResult | undefined;
         if (approvalResolution.action === "approved") {
@@ -1121,6 +1423,7 @@ export const handleMessage = internalAction({
       }
     }
 
+    let outreachPendingCreated = false;
     if (parsed.outreachRequests?.length) {
       for (const request of parsed.outreachRequests) {
         const result = await ctx.runMutation(
@@ -1137,6 +1440,9 @@ export const handleMessage = internalAction({
             approvalPrompt: request.approvalPrompt,
           },
         );
+        if (result.status === "pending_approval") {
+          outreachPendingCreated = true;
+        }
         if (result.action === "skipped") {
           await ctx.runMutation(internal.mutations.logAudit, {
             careCaseId,
@@ -1152,6 +1458,30 @@ export const handleMessage = internalAction({
           });
         }
       }
+    }
+
+    if (!careContactReply && !outreachPendingCreated) {
+      const inferredDraft = inferOutreachDraftFromApprovalPrompt(
+        smsResponse,
+        recentMessages.map((message) => ({
+          direction: message.direction,
+          body: message.body,
+          timestamp: message.timestamp,
+        })),
+      );
+      if (inferredDraft) {
+        outreachPendingCreated = await createPendingOutreachFromInferredDraft(ctx, {
+          careCaseId,
+          userId,
+          timezone,
+          draft: inferredDraft,
+          senderPhone,
+        });
+      }
+    }
+    if (!outreachPendingCreated && doesReplyClaimOutreachExecution(smsResponse)) {
+      smsResponse =
+        "I can help with that, but I have not queued or sent any outreach yet. Send me the person's name, phone number, and the exact message, and I'll show it to you for approval before it goes out.";
     }
 
     if (parsed.medicationUpdates?.length) {

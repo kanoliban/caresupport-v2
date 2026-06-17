@@ -36,7 +36,7 @@ type CareContactReplyStatus =
   | "needs_clarification";
 
 const WRONG_NUMBER_RE =
-  /\b(wrong number|wrong person|you have the wrong|not (me|this person)|who is this)\b/i;
+  /\b(wrong number|wrong person|you have the wrong|not (me|this person))\b/i;
 const STOP_REQUEST_RE =
   /\b(stop texting|stop messaging|do not text|don't text|dont text|unsubscribe|remove me)\b/i;
 const DEFERRED_REPLY_RE =

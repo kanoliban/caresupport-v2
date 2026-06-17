@@ -6,12 +6,19 @@ import {
   buildEmptySmsRepairMessages,
   buildCareContactReplyMessage,
   calendarDayRangeIso,
+  careContactIdentityClarificationResponse,
   doesReplyClaimCalendarWrite,
   duplicateCalendarResponse,
   ensureFinalSmsResponse,
   ensureExplicitUserMemoryUpdate,
+  doesReplyClaimOutreachExecution,
   formatConversationLog,
+  hasApprovalAfterOutreachDraft,
   inferExplicitUserMemoryUpdate,
+  inferOutreachDraftFromApprovalPrompt,
+  inferOutreachDraftFromRecentApprovalContext,
+  isCareContactIdentityClarification,
+  isOutreachRetryRequest,
   isTestChat,
   isValidTimeZone,
   parseLesson,
@@ -21,6 +28,8 @@ import {
   stripMarkdown,
   summarizeRuntimeError,
 } from "./handler";
+import { classifyCareContactReply } from "./contactReplies";
+import { isOutreachApprovalMessage } from "./outreachAttempts";
 
 describe("isTestChat", () => {
   it("flags synthetic web-UI chat ids", () => {
@@ -231,6 +240,150 @@ describe("approvalResolutionResponse", () => {
 
     expect(response).toContain("no phone number saved");
     expect(response).toContain("I have not messaged them");
+  });
+});
+
+describe("outreach draft recovery", () => {
+  const recentMessages = [
+    {
+      direction: "inbound" as const,
+      body: "Kano",
+      timestamp: 1,
+    },
+    {
+      direction: "outbound" as const,
+      body: "Got it. What's Kano's phone number?",
+      timestamp: 2,
+    },
+    {
+      direction: "inbound" as const,
+      body: "+1 (651) 410-9609",
+      timestamp: 3,
+    },
+  ];
+
+  it("recovers a pending outreach draft when the model asks approval in plain text", () => {
+    const result = inferOutreachDraftFromApprovalPrompt(
+      [
+        "Here's what I'd send him:",
+        "",
+        "Hi Kano, I'm CareSupport, a care assistant helping Liban coordinate care for Degitu.",
+        "",
+        "Want me to send that?",
+      ].join("\n"),
+      recentMessages,
+    );
+
+    expect(result).toEqual({
+      contactName: "Kano",
+      phone: "+16514109609",
+      message:
+        "Hi Kano, I'm CareSupport, a care assistant helping Liban coordinate care for Degitu.",
+    });
+  });
+
+  it("finds the latest draft when the user approves with a thumbs up", () => {
+    const result = inferOutreachDraftFromRecentApprovalContext([
+      ...recentMessages,
+      {
+        direction: "outbound" as const,
+        body: [
+          "Here's what I'd send him:",
+          "",
+          "Hi Kano, is this a good number to reach you?",
+          "",
+          "Want me to send that?",
+        ].join("\n"),
+        timestamp: 4,
+      },
+      {
+        direction: "inbound" as const,
+        body: "👍🏾",
+        timestamp: 5,
+      },
+    ]);
+
+    expect(result).toMatchObject({
+      contactName: "Kano",
+      phone: "+16514109609",
+      message: "Hi Kano, is this a good number to reach you?",
+    });
+    expect(isOutreachApprovalMessage("👍🏾")).toBe(true);
+  });
+
+  it("recognizes a later retry request when the draft was already approved", () => {
+    const approvedDraftHistory = [
+      ...recentMessages,
+      {
+        direction: "outbound" as const,
+        body: [
+          "Here's what I'd send him:",
+          "",
+          "Hi Kano, is this a good number to reach you?",
+          "",
+          "Want me to send that?",
+        ].join("\n"),
+        timestamp: 4,
+      },
+      {
+        direction: "inbound" as const,
+        body: "👍🏾",
+        timestamp: 5,
+      },
+      {
+        direction: "outbound" as const,
+        body: "Outreach to Kano is queued. I'll let you know when he responds.",
+        timestamp: 6,
+      },
+      {
+        direction: "inbound" as const,
+        body: "Can you text my dad?",
+        timestamp: 7,
+      },
+    ];
+    const draft = inferOutreachDraftFromRecentApprovalContext(approvedDraftHistory);
+
+    expect(draft).toMatchObject({
+      contactName: "Kano",
+      phone: "+16514109609",
+      message: "Hi Kano, is this a good number to reach you?",
+      draftTimestamp: 4,
+    });
+    expect(hasApprovalAfterOutreachDraft(approvedDraftHistory, draft?.draftTimestamp)).toBe(true);
+    expect(isOutreachRetryRequest("Can you text my dad?")).toBe(true);
+  });
+
+  it("detects false execution claims but not approval prompts", () => {
+    expect(doesReplyClaimOutreachExecution("Outreach to Kano is queued.")).toBe(true);
+    expect(doesReplyClaimOutreachExecution("Trying to send to Kano again now.")).toBe(true);
+    expect(
+      doesReplyClaimOutreachExecution("Here's what I'd send him:\n\nHi Kano.\n\nWant me to send that?"),
+    ).toBe(false);
+  });
+});
+
+describe("care contact identity clarification", () => {
+  it("treats who-is-this replies as clarification, not wrong-number opt out", () => {
+    expect(classifyCareContactReply("Who is this?")).toBe("needs_clarification");
+    expect(classifyCareContactReply("wrong number")).toBe("wrong_number");
+  });
+
+  it("answers identity questions directly in the care contact thread", () => {
+    expect(isCareContactIdentityClarification("Who is this?")).toBe(true);
+    expect(isCareContactIdentityClarification("Are you stupid? You're talking about me")).toBe(true);
+
+    const response = careContactIdentityClarificationResponse({
+      contactName: "Kano",
+      requesterName: "Liban",
+      careRecipientName: "Degitu",
+    });
+
+    expect(response).toContain("Sorry for the confusion, Kano");
+    expect(response).toContain("I'm CareSupport");
+    expect(response).toContain("Liban asked me to reach out");
+    expect(response).toContain("coordinate care for Degitu");
+    expect(response).not.toContain("Do you want me to respond");
+    expect(response).not.toContain("approval");
   });
 });
 

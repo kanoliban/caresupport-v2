@@ -61,6 +61,7 @@ export interface DueCoordinationStatusUpdate {
 export function isOutreachApprovalMessage(message: string): boolean {
   const normalized = message.trim().toLowerCase();
   if (!normalized) return false;
+  if (normalized.startsWith("👍")) return true;
 
   return /^(yes|yep|yeah|sure|ok|okay|please do|go ahead|do it|send it|ask\b|text\b|message\b)/i
     .test(normalized);
