@@ -134,6 +134,41 @@ export interface CalendarUpdate {
   recurrence?: string;
 }
 
+export interface CareContactUpdate {
+  action: "add" | "update" | "remove";
+  name: string;
+  phone?: string;
+  relationship?: string;
+  contactType?: "family" | "professional_caregiver" | "agency" | "clinician" | "other";
+  agencyName?: string;
+  role?: string;
+  availabilityNotes?: string;
+  contactPriority?: number;
+  canReceiveTexts?: boolean;
+  consentToContact?: boolean;
+  notes?: string;
+}
+
+export interface CoordinationEventUpdate {
+  action: "add" | "update" | "remove";
+  title: string;
+  type?: "coverage_gap" | "schedule_change" | "handoff" | "task_followup" | "appointment" | "medication" | "outreach" | "other";
+  status?: "open" | "waiting" | "resolved" | "cancelled";
+  urgency?: "low" | "normal" | "high" | "urgent";
+  description?: string;
+  contactName?: string;
+  date?: string;
+  time?: string;
+}
+
+export interface OutreachRequest {
+  contactName: string;
+  purpose: string;
+  message: string;
+  coordinationEventTitle?: string;
+  approvalPrompt?: string;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
@@ -147,4 +182,7 @@ export interface AgentResponse {
   medicationUpdates?: MedicationUpdate[];
   scheduleUpdates?: ScheduleUpdate[];
   calendarUpdates?: CalendarUpdate[];
+  careContactUpdates?: CareContactUpdate[];
+  coordinationEventUpdates?: CoordinationEventUpdate[];
+  outreachRequests?: OutreachRequest[];
 }

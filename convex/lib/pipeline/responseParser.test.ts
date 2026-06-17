@@ -123,4 +123,54 @@ describe("normalizeResponse", () => {
 
     expect(result.calendarUpdates).toEqual([]);
   });
+
+  it("normalizes care coordination structured fields", () => {
+    const result = normalizeResponse({
+      sms_response: "I can help text your mom after you approve the message.",
+      care_contact_updates: [
+        {
+          action: "add",
+          name: "Mom",
+          phone: "+15551234567",
+          relationship: "mother",
+          contact_type: "family",
+          can_receive_texts: true,
+        },
+      ],
+      coordination_event_updates: [
+        {
+          action: "add",
+          title: "Ask Mom",
+          type: "outreach",
+          contact_name: "Mom",
+        },
+      ],
+      outreach_requests: [
+        {
+          contact_name: "Mom",
+          purpose: "Check in",
+          message_body: "Hi, can you check in today?",
+          coordination_event_title: "Ask Mom",
+          approval_prompt: "Want me to send this to Mom?",
+        },
+      ],
+    });
+
+    expect(result.careContactUpdates?.[0]).toMatchObject({
+      action: "add",
+      name: "Mom",
+      contactType: "family",
+      canReceiveTexts: true,
+    });
+    expect(result.coordinationEventUpdates?.[0]).toMatchObject({
+      action: "add",
+      title: "Ask Mom",
+      contactName: "Mom",
+    });
+    expect(result.outreachRequests?.[0]).toMatchObject({
+      contactName: "Mom",
+      message: "Hi, can you check in today?",
+      approvalPrompt: "Want me to send this to Mom?",
+    });
+  });
 });

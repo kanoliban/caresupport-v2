@@ -493,7 +493,7 @@ export const createPendingFromModel = internalMutation({
       args.careCaseId,
       args.request.contactName,
     );
-    const coordinationEvent = await findCoordinationEventByTitle(
+    let coordinationEvent = await findCoordinationEventByTitle(
       ctx,
       args.careCaseId,
       args.request.coordinationEventTitle,
@@ -503,7 +503,23 @@ export const createPendingFromModel = internalMutation({
       return { action: "skipped", reason: "contact_not_found" };
     }
     if (!coordinationEvent) {
-      return { action: "skipped", reason: "coordination_event_not_found" };
+      const now = Date.now();
+      const coordinationEventId = await ctx.db.insert("coordinationEvents", {
+        careCaseId: args.careCaseId,
+        type: "outreach",
+        title: args.request.coordinationEventTitle?.trim() || `Ask ${contact.name}`,
+        status: "open",
+        urgency: "normal",
+        description: args.request.purpose,
+        originalAssigneeContactId: contact._id,
+        createdByUserId: args.requestedByUserId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      coordinationEvent = await ctx.db.get(coordinationEventId);
+      if (!coordinationEvent) {
+        return { action: "skipped", reason: "coordination_event_not_found" };
+      }
     }
 
     const blockReason = blockReasonForContact(contact);

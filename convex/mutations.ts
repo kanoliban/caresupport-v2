@@ -1,11 +1,14 @@
 // 2026-06-17: Internal Convex mutations for CareSupport runtime; includes calendar account metadata and duplicate-write audit details.
 import { internalMutation, internalQuery } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
   validateIsoDate,
   validateRecurrence,
   validateTime24h,
 } from "./lib/dateValidation";
+import { zonedDateTimeToUtcMs } from "./lib/reminderTiming";
 import {
   buildCareCaseContext,
   buildUserContext,
@@ -176,6 +179,33 @@ const memoryUpdateValidator = v.object({
   category: memoryCategoryValidator,
   content: v.string(),
   source: v.optional(v.string()),
+});
+
+const careContactModelUpdateValidator = v.object({
+  action: modelUpdateActionValidator,
+  name: v.string(),
+  phone: v.optional(v.string()),
+  relationship: v.optional(v.string()),
+  contactType: v.optional(careContactTypeValidator),
+  agencyName: v.optional(v.string()),
+  role: v.optional(v.string()),
+  availabilityNotes: v.optional(v.string()),
+  contactPriority: v.optional(v.number()),
+  canReceiveTexts: v.optional(v.boolean()),
+  consentToContact: v.optional(v.boolean()),
+  notes: v.optional(v.string()),
+});
+
+const coordinationEventModelUpdateValidator = v.object({
+  action: modelUpdateActionValidator,
+  title: v.string(),
+  type: v.optional(coordinationEventTypeValidator),
+  status: v.optional(coordinationEventStatusValidator),
+  urgency: v.optional(coordinationUrgencyValidator),
+  description: v.optional(v.string()),
+  contactName: v.optional(v.string()),
+  date: v.optional(v.string()),
+  time: v.optional(v.string()),
 });
 
 // Backwards-compatible alias. Phone *and* email handles are accepted; the name
@@ -484,6 +514,193 @@ export const upsertMemoryEntries = internalMutation({
     }
 
     return { inserted: savedCategories.size, savedCategories: [...savedCategories] };
+  },
+});
+
+function normalizeLookup(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
+function inferContactType(update: { contactType?: "family" | "professional_caregiver" | "agency" | "clinician" | "other"; relationship?: string }) {
+  if (update.contactType) return update.contactType;
+  const relationship = update.relationship?.toLowerCase() ?? "";
+  if (/\b(mom|mother|dad|father|brother|sister|aunt|uncle|son|daughter|family|wife|husband|spouse)\b/.test(relationship)) {
+    return "family" as const;
+  }
+  return "other" as const;
+}
+
+async function findCareContactForModelUpdate(
+  ctx: Pick<MutationCtx, "db">,
+  careCaseId: Id<"careCases">,
+  name: string,
+  phone: string | undefined,
+) {
+  if (phone) {
+    const byPhone = await ctx.db
+      .query("careContacts")
+      .withIndex("by_care_case_phone", (q) =>
+        q.eq("careCaseId", careCaseId).eq("phone", phone),
+      )
+      .first();
+    if (byPhone) return byPhone;
+  }
+  const target = normalizeLookup(name);
+  if (!target) return null;
+  const contacts = await ctx.db
+    .query("careContacts")
+    .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
+    .collect();
+  return contacts.find((contact) => normalizeLookup(contact.name) === target) ?? null;
+}
+
+export const upsertCareContactFromModel = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    update: careContactModelUpdateValidator,
+  },
+  handler: async (ctx, args) => {
+    const name = args.update.name.trim();
+    if (!name) return { action: "skipped", reason: "missing_name" };
+    const phone = args.update.phone ? normalizeHandle(args.update.phone) ?? undefined : undefined;
+    const existing = await findCareContactForModelUpdate(ctx, args.careCaseId, name, phone);
+    const now = Date.now();
+
+    if (args.update.action === "remove") {
+      if (!existing) return { action: "skipped", reason: "not_found" };
+      await ctx.db.patch(existing._id, { active: false, updatedAt: now });
+      return { action: "removed", id: existing._id };
+    }
+
+    const patch: Partial<Doc<"careContacts">> & { name: string; active: boolean; updatedAt: number } = {
+      name,
+      active: true,
+      updatedAt: now,
+    };
+    if (phone !== undefined) patch.phone = phone;
+    if (args.update.relationship !== undefined) patch.relationship = args.update.relationship;
+    if (args.update.contactType !== undefined || args.update.relationship !== undefined) {
+      patch.contactType = inferContactType(args.update);
+    }
+    if (args.update.agencyName !== undefined) patch.agencyName = args.update.agencyName;
+    if (args.update.role !== undefined) patch.role = args.update.role;
+    if (args.update.availabilityNotes !== undefined) {
+      patch.availabilityNotes = args.update.availabilityNotes;
+    }
+    if (args.update.contactPriority !== undefined) {
+      patch.contactPriority = args.update.contactPriority;
+    }
+    if (args.update.canReceiveTexts !== undefined) {
+      patch.canReceiveTexts = args.update.canReceiveTexts;
+    } else if (phone) {
+      patch.canReceiveTexts = true;
+    }
+    if (args.update.consentToContact !== undefined) {
+      patch.consentToContact = args.update.consentToContact;
+    }
+    if (args.update.notes !== undefined) patch.notes = args.update.notes;
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+      return { action: "updated", id: existing._id };
+    }
+
+    const id = await ctx.db.insert("careContacts", {
+      careCaseId: args.careCaseId,
+      name,
+      phone,
+      relationship: args.update.relationship,
+      contactType: inferContactType(args.update),
+      agencyName: args.update.agencyName,
+      role: args.update.role,
+      availabilityNotes: args.update.availabilityNotes,
+      contactPriority: args.update.contactPriority,
+      canReceiveTexts: patch.canReceiveTexts ?? Boolean(phone),
+      consentToContact: args.update.consentToContact,
+      active: true,
+      notes: args.update.notes,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { action: "created", id };
+  },
+});
+
+async function findCoordinationEventByTitleForModelUpdate(
+  ctx: Pick<MutationCtx, "db">,
+  careCaseId: Id<"careCases">,
+  title: string,
+) {
+  const target = normalizeLookup(title);
+  if (!target) return null;
+  const events = await ctx.db
+    .query("coordinationEvents")
+    .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
+    .collect();
+  return events.find((event) => normalizeLookup(event.title) === target) ?? null;
+}
+
+export const upsertCoordinationEventFromModel = internalMutation({
+  args: {
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    timezone: v.string(),
+    update: coordinationEventModelUpdateValidator,
+  },
+  handler: async (ctx, args) => {
+    const title = args.update.title.trim();
+    if (!title) return { action: "skipped", reason: "missing_title" };
+    const existing = await findCoordinationEventByTitleForModelUpdate(ctx, args.careCaseId, title);
+    const now = Date.now();
+    const date = validateIsoDate(args.update.date);
+    const time = validateTime24h(args.update.time);
+    const startsAt = zonedDateTimeToUtcMs(date, time, args.timezone) ?? undefined;
+
+    if (args.update.action === "remove") {
+      if (!existing) return { action: "skipped", reason: "not_found" };
+      await ctx.db.patch(existing._id, {
+        status: "cancelled",
+        closedAt: existing.closedAt ?? now,
+        updatedAt: now,
+      });
+      return { action: "removed", id: existing._id };
+    }
+
+    const contact = args.update.contactName
+      ? await findCareContactForModelUpdate(ctx, args.careCaseId, args.update.contactName, undefined)
+      : null;
+    const patch: Partial<Doc<"coordinationEvents">> & { title: string; updatedAt: number } = {
+      title,
+      updatedAt: now,
+    };
+    if (args.update.type !== undefined || !existing) patch.type = args.update.type ?? "outreach";
+    if (args.update.status !== undefined || !existing) patch.status = args.update.status ?? "open";
+    if (args.update.urgency !== undefined || !existing) patch.urgency = args.update.urgency ?? "normal";
+    if (args.update.description !== undefined) patch.description = args.update.description;
+    if (startsAt !== undefined) patch.startsAt = startsAt;
+    if (contact?._id !== undefined) patch.originalAssigneeContactId = contact._id;
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+      return { action: "updated", id: existing._id };
+    }
+
+    const id = await ctx.db.insert("coordinationEvents", {
+      careCaseId: args.careCaseId,
+      type: args.update.type ?? "outreach",
+      title,
+      status: args.update.status ?? "open",
+      urgency: args.update.urgency ?? "normal",
+      description: args.update.description,
+      startsAt,
+      originalAssigneeContactId: contact?._id,
+      createdByUserId: args.userId,
+      createdAt: now,
+      updatedAt: now,
+      closedAt: args.update.status === "resolved" || args.update.status === "cancelled" ? now : undefined,
+    });
+    return { action: "created", id };
   },
 });
 

@@ -13,11 +13,9 @@ import {
   formatConversationLog,
   inferExplicitUserMemoryUpdate,
   isTestChat,
-  isUnsupportedCoordinationRequest,
   isValidTimeZone,
   parseLesson,
   runtimeFailureFallback,
-  shouldFireCoordinationBoundaryOverride,
   stripAssistantSpeakerPrefix,
   stripCalendarEventIdsFromSms,
   stripMarkdown,
@@ -173,84 +171,6 @@ describe("ensureExplicitUserMemoryUpdate", () => {
     );
 
     expect(updates).toEqual([]);
-  });
-});
-
-describe("isUnsupportedCoordinationRequest", () => {
-  it("detects add-another-person requests", () => {
-    expect(isUnsupportedCoordinationRequest("Please add my sister Maya to this plan.")).toBe(true);
-  });
-
-  it("does not flag ordinary care-management requests", () => {
-    expect(isUnsupportedCoordinationRequest("Please remind me about Sam's appointment tomorrow.")).toBe(false);
-  });
-});
-
-describe("shouldFireCoordinationBoundaryOverride", () => {
-  const boundaryReply = {
-    direction: "outbound" as const,
-    body: "I can't add them or message them for you yet.",
-  };
-  const ordinaryOutbound = {
-    direction: "outbound" as const,
-    body: "Got it — saved Sam's appointment for tomorrow.",
-  };
-
-  it("fires on the first boundary hit when recent outbound is clean", () => {
-    // #given the user asks to add someone for the first time
-    // #when no recent outbound contains the boundary marker
-    const recent = [
-      { direction: "inbound" as const, body: "Hi" },
-      ordinaryOutbound,
-    ];
-
-    // #then the override fires
-    expect(
-      shouldFireCoordinationBoundaryOverride("Add my sister Maya to this plan", recent),
-    ).toBe(true);
-  });
-
-  it("does not fire when the boundary was already explained in recent outbound", () => {
-    // #given the boundary was already explained in the last few outbound messages
-    const recent = [
-      { direction: "inbound" as const, body: "Add my brother" },
-      boundaryReply,
-      { direction: "inbound" as const, body: "Yes, draft something" },
-      { direction: "outbound" as const, body: "Here's a draft you can send..." },
-    ];
-
-    // #when the user asks again with similar phrasing
-    // #then the override does NOT fire — LLM handles naturally
-    expect(
-      shouldFireCoordinationBoundaryOverride("Text my sister too", recent),
-    ).toBe(false);
-  });
-
-  it("does not fire on messages that are not unsupported coordination requests", () => {
-    // #given a clean history
-    const recent = [ordinaryOutbound];
-
-    // #when the message is ordinary care content
-    // #then the override does NOT fire
-    expect(
-      shouldFireCoordinationBoundaryOverride(
-        "Sam takes Lipitor at bedtime",
-        recent,
-      ),
-    ).toBe(false);
-  });
-
-  it("only inspects the last 5 messages for the boundary marker", () => {
-    // #given the boundary was explained 6+ messages ago (out of the window)
-    const oldBoundary = { ...boundaryReply };
-    const padding = Array.from({ length: 5 }, () => ordinaryOutbound);
-    const recent = [oldBoundary, ...padding];
-
-    // #when the user makes a fresh unsupported coordination request
-    // #then the override fires again because the recent window is clean
-    expect(
-      shouldFireCoordinationBoundaryOverride("Add my aunt to the plan", recent),
-    ).toBe(true);
   });
 });
 

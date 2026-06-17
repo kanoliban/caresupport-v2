@@ -56,10 +56,11 @@ The active Convex runtime is still intentionally small:
 - `auditLogs`
 
 The current prompt/runtime can text one user, build memory, save medication and
-schedule records, load active care contacts and open coordination events into
-prompt context, and audit the exchange. It does not yet contact other people,
-sync external tools, execute outreach, create contacts/events from model output,
-or run true group coordination.
+schedule records, create/update care contacts and coordination events from model
+output, propose one-to-one outreach for explicit approval, execute approved
+outreach to care contacts, load active care contacts and open coordination
+events into prompt context, and audit the exchange. It does not yet create group
+chats, sync arbitrary external tools, or run true group coordination.
 
 Those are implementation boundaries, not product non-goals.
 

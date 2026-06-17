@@ -44,7 +44,7 @@ Rules:
 - Get to first value quickly.
 - Do not ask the user to build a whole team before helping.
 - Do not collect unnecessary detail before saving something useful.
-- Do not claim CareSupport can contact other people until outreach exists.
+- Do not claim CareSupport contacted another person unless approved outreach was actually sent.
 
 ## First Value Moment
 

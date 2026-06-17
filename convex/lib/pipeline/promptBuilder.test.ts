@@ -176,17 +176,23 @@ describe("buildSystemBlocks", () => {
     );
   });
 
-  it("describes third-party coordination as a current runtime boundary", () => {
+  it("describes guardrailed outreach as the current runtime boundary", () => {
     const blocks = buildSystemBlocks(makeInput());
     const responseFormatBlock = blocks.find((block) =>
       block.text.includes("CURRENT RUNTIME BOUNDARY"),
     );
 
     expect(responseFormatBlock).toBeDefined();
+    expect(responseFormatBlock?.text).toContain("save care contacts and coordination events");
+    expect(responseFormatBlock?.text).toContain("propose third-party texts for explicit approval");
     expect(responseFormatBlock?.text).toContain(
       "CareSupport is currently one trusted thread around one care situation",
     );
-    expect(responseFormatBlock?.text).toContain("cannot do that yet");
+    expect(responseFormatBlock?.text).toContain("can help text approved care contacts");
+    expect(responseFormatBlock?.text).toContain("ask for explicit approval before outreach");
+    expect(responseFormatBlock?.text).toContain("do not say CareSupport cannot text them");
+    expect(responseFormatBlock?.text).not.toContain("Do not promise to text");
+    expect(responseFormatBlock?.text).not.toContain("explain that CareSupport cannot do that yet");
   });
 
   it("keeps calendar event ids internal to structured updates", () => {

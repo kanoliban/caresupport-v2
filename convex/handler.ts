@@ -22,6 +22,7 @@ import type {
 import { normalizePhone } from "./mutations";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
+  createChat,
   sendMessage,
   sendMessageSequence,
   splitIntoBubbles,
@@ -68,12 +69,6 @@ const CALENDAR_WRITE_CLAIM_PATTERN =
 const CALENDAR_IMPLIED_WRITE_CLAIM_PATTERN =
   /\b(?:adding|creating|scheduling|booking|saving|updating|moving|removing|deleting|canceling|cancelling)\s+(?:it|that|this|the event|the appointment|the reminder)\s+(?:now|right now|for you|once)?\b/i;
 
-const COORDINATION_BOUNDARY_RESPONSE =
-  "I can't add them or message them for you yet. I can draft the message and keep track of the coordination issue here. Want me to put one together?";
-
-const COORDINATION_BOUNDARY_OUTBOUND_MARKER =
-  "I can't add them or message them for you yet";
-const COORDINATION_BOUNDARY_RECENT_HISTORY_WINDOW = 5;
 const ERROR_MESSAGE_MAX_LENGTH = 500;
 
 const PROFILE_SAVE_PATTERNS = [
@@ -82,9 +77,6 @@ const PROFILE_SAVE_PATTERNS = [
   /^\s*(?:please )?remember (?:this )?about me(?: for future messages)?[:\s,-]*(.+)$/i,
   /^\s*for future reference[:,]?\s*(.+)$/i,
 ];
-
-const COORDINATION_REQUEST_PATTERN =
-  /\b(add|invite|include|loop in|bring in|text|message|call|reach out to|contact)\b.*\b(sister|brother|mom|mother|dad|father|family|caregiver|doctor|provider|nurse|someone|team|friend|aunt|uncle)\b/i;
 
 const VALID_LESSON_CATEGORIES = new Set(["behavioral", "factual", "operational"]);
 
@@ -105,6 +97,13 @@ type OutreachExecutionResult = {
   contactName?: string;
   chatId?: string;
   messageId?: string;
+};
+
+type ApprovedOutreachForExecution = {
+  attempt: Doc<"outreachAttempts">;
+  contact: Doc<"careContacts">;
+  coordinationEvent: Doc<"coordinationEvents">;
+  requestedByUser: Doc<"users">;
 };
 
 export interface RuntimeErrorSummary {
@@ -287,25 +286,6 @@ export function ensureExplicitUserMemoryUpdate(
   return [...updates, inferred];
 }
 
-export function isUnsupportedCoordinationRequest(message: string): boolean {
-  return COORDINATION_REQUEST_PATTERN.test(message);
-}
-
-export function shouldFireCoordinationBoundaryOverride(
-  messageBody: string,
-  recentMessages: Array<{ direction: "inbound" | "outbound"; body: string }>,
-): boolean {
-  if (!isUnsupportedCoordinationRequest(messageBody)) return false;
-  const recentOutboundContainsBoundary = recentMessages
-    .slice(-COORDINATION_BOUNDARY_RECENT_HISTORY_WINDOW)
-    .some(
-      (message) =>
-        message.direction === "outbound" &&
-        message.body.includes(COORDINATION_BOUNDARY_OUTBOUND_MARKER),
-    );
-  return !recentOutboundContainsBoundary;
-}
-
 export function parseLesson(text: string): { category: string; cleanText: string } {
   const match = text.match(/^\[(behavioral|factual|operational)]\s*/i);
   if (match) {
@@ -346,6 +326,8 @@ function formatOutreachFailureReason(reason: string | undefined): string {
       return "the Linq sending credentials are not configured";
     case "not_approved_or_not_found":
       return "the approved outreach could not be found";
+    case "test_chat":
+      return "this test chat cannot send real texts";
     default:
       return reason;
   }
@@ -375,6 +357,67 @@ export function approvalResolutionResponse(
   }
 
   return `Got it. I have your approval to ask ${resolution.contactName}. I am preparing the send step now.`;
+}
+
+async function executeApprovedOutreach(
+  ctx: ActionCtx,
+  outreachAttemptId: Id<"outreachAttempts">,
+  envVars: { linqApiToken: string; linqPhoneNumber: string },
+): Promise<OutreachExecutionResult> {
+  const approved = await ctx.runQuery(
+    internal.outreachAttempts.getApprovedForExecution,
+    { outreachAttemptId },
+  ) as ApprovedOutreachForExecution | null;
+  if (!approved) {
+    return { sent: false, reason: "not_approved_or_not_found" };
+  }
+  const { attempt, contact } = approved;
+  if (!contact.phone) {
+    return { sent: false, reason: "no_phone", contactName: contact.name };
+  }
+  if (!envVars.linqApiToken || !envVars.linqPhoneNumber) {
+    await ctx.runMutation(internal.outreachAttempts.markFailed, {
+      outreachAttemptId,
+      failureReason: "linq_env_missing",
+    });
+    return { sent: false, reason: "linq_env_missing", contactName: contact.name };
+  }
+
+  const result = attempt.linqChatId || contact.linqChatId
+    ? await sendMessage(
+        attempt.linqChatId ?? contact.linqChatId ?? "",
+        attempt.messageBody,
+        envVars.linqApiToken,
+      )
+    : await createChat(
+        contact.phone,
+        attempt.messageBody,
+        envVars.linqPhoneNumber,
+        envVars.linqApiToken,
+      );
+  if (!result.success) {
+    const reason = JSON.stringify(result.error ?? "send_failed").slice(0, 500);
+    await ctx.runMutation(internal.outreachAttempts.markFailed, {
+      outreachAttemptId,
+      failureReason: reason,
+    });
+    return { sent: false, reason, contactName: contact.name };
+  }
+
+  const chatId = "chatId" in result && typeof result.chatId === "string"
+    ? result.chatId
+    : attempt.linqChatId ?? contact.linqChatId ?? "";
+  await ctx.runMutation(internal.outreachAttempts.markSent, {
+    outreachAttemptId,
+    linqChatId: chatId,
+    linqMessageId: result.messageId,
+  });
+  return {
+    sent: true,
+    contactName: contact.name,
+    chatId,
+    messageId: result.messageId,
+  };
 }
 
 export function summarizeRuntimeError(error: unknown): RuntimeErrorSummary {
@@ -691,6 +734,62 @@ export const handleMessage = internalAction({
       });
     }
 
+    if (!careContactReply) {
+      const approvalResolution = await ctx.runMutation(
+        internal.outreachAttempts.resolveApprovalFromMessage,
+        {
+          careCaseId,
+          approvedByUserId: userId,
+          messageBody,
+        },
+      ) as OutreachApprovalResolution;
+      if (approvalResolution.action !== "none") {
+        let executionResult: OutreachExecutionResult | undefined;
+        if (approvalResolution.action === "approved") {
+          if (isTestChat(chatId)) {
+            await ctx.runMutation(internal.outreachAttempts.markFailed, {
+              outreachAttemptId: approvalResolution.id,
+              failureReason: "test_chat",
+            });
+            executionResult = {
+              sent: false,
+              reason: "test_chat",
+              contactName: approvalResolution.contactName,
+            };
+          } else {
+            executionResult = await executeApprovedOutreach(
+              ctx,
+              approvalResolution.id,
+              envVarsEarly,
+            );
+          }
+        }
+        const reply = approvalResolutionResponse(approvalResolution, executionResult);
+        if (reply) {
+          const outboundMessageId = await logOutbound(
+            ctx,
+            careCaseId,
+            userId,
+            senderPhone,
+            activeUser.name,
+            reply,
+            now,
+            approvalResolution.action === "approved"
+              ? { outreachAttemptId: approvalResolution.id }
+              : null,
+          );
+          const linqMessageIds = await sendResponse(chatId, reply, envVarsEarly, startedAt);
+          if (linqMessageIds.length > 0) {
+            await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+              messageId: outboundMessageId,
+              linqMessageId: linqMessageIds[0],
+            });
+          }
+          return { success: executionResult?.sent ?? true, response: reply };
+        }
+      }
+    }
+
     const compiledContext = await ctx.runMutation(
       internal.mutations.getCompiledPromptContext,
       { userId, careCaseId },
@@ -894,20 +993,6 @@ export const handleMessage = internalAction({
     }
 
     let smsResponse = stripAssistantSpeakerPrefix(stripMarkdown(parsed.smsResponse));
-    const coordinationBoundaryBlocked = careContactReply
-      ? false
-      : shouldFireCoordinationBoundaryOverride(messageBody, recentMessages);
-    if (coordinationBoundaryBlocked) {
-      smsResponse = COORDINATION_BOUNDARY_RESPONSE;
-      parsed.userProfileUpdate = null;
-      parsed.careCaseProfileUpdate = null;
-      parsed.userMemoryUpdates = [];
-      parsed.careCaseMemoryUpdates = [];
-      parsed.medicationUpdates = [];
-      parsed.scheduleUpdates = [];
-      parsed.reactions = [];
-      parsed.effect = null;
-    }
 
     // In the test environment, mark the first-contact introduction so it's
     // unmistakable which environment is replying. Enforced mechanically rather
@@ -1013,6 +1098,59 @@ export const handleMessage = internalAction({
           updates: lessonUpdates,
         });
         memoriesSaved += result.inserted;
+      }
+    }
+
+    if (parsed.careContactUpdates?.length) {
+      for (const update of parsed.careContactUpdates) {
+        await ctx.runMutation(internal.mutations.upsertCareContactFromModel, {
+          careCaseId,
+          update,
+        });
+      }
+    }
+
+    if (parsed.coordinationEventUpdates?.length) {
+      for (const update of parsed.coordinationEventUpdates) {
+        await ctx.runMutation(internal.mutations.upsertCoordinationEventFromModel, {
+          careCaseId,
+          userId,
+          timezone,
+          update,
+        });
+      }
+    }
+
+    if (parsed.outreachRequests?.length) {
+      for (const request of parsed.outreachRequests) {
+        const result = await ctx.runMutation(
+          internal.outreachAttempts.createPendingFromModel,
+          {
+            careCaseId,
+            requestedByUserId: userId,
+            request: {
+              contactName: request.contactName,
+              purpose: request.purpose,
+              message: request.message,
+              coordinationEventTitle: request.coordinationEventTitle,
+            },
+            approvalPrompt: request.approvalPrompt,
+          },
+        );
+        if (result.action === "skipped") {
+          await ctx.runMutation(internal.mutations.logAudit, {
+            careCaseId,
+            userId,
+            event: "outreach_blocked",
+            phone: senderPhone,
+            details: {
+              messageBody: request.message.slice(0, 500),
+              status: "skipped",
+              reason: result.reason,
+            },
+            timestamp: Date.now(),
+          });
+        }
       }
     }
 
@@ -1366,7 +1504,6 @@ export const handleMessage = internalAction({
       routedIntent: intent,
       lessonsLearned: parsed.selfCorrections.length,
       memoriesSaved,
-      blocked: shouldFireCoordinationBoundaryOverride(messageBody, recentMessages),
     };
   },
 });

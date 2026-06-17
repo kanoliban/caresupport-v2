@@ -23,6 +23,9 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   medication_updates: "medicationUpdates",
   schedule_updates: "scheduleUpdates",
   calendar_updates: "calendarUpdates",
+  care_contact_updates: "careContactUpdates",
+  coordination_event_updates: "coordinationEventUpdates",
+  outreach_requests: "outreachRequests",
   target_message: "targetMessage",
 };
 
@@ -55,6 +58,46 @@ function str(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function oneOf<const T extends readonly string[]>(
+  value: string | undefined,
+  allowed: T,
+): T[number] | undefined {
+  return value && allowed.includes(value) ? value : undefined;
+}
+
+const CARE_CONTACT_TYPES = [
+  "family",
+  "professional_caregiver",
+  "agency",
+  "clinician",
+  "other",
+] as const;
+
+const COORDINATION_EVENT_TYPES = [
+  "coverage_gap",
+  "schedule_change",
+  "handoff",
+  "task_followup",
+  "appointment",
+  "medication",
+  "outreach",
+  "other",
+] as const;
+
+const COORDINATION_EVENT_STATUSES = [
+  "open",
+  "waiting",
+  "resolved",
+  "cancelled",
+] as const;
+
+const COORDINATION_URGENCIES = [
+  "low",
+  "normal",
+  "high",
+  "urgent",
+] as const;
+
 function normalizeCalendarUpdates(value: unknown): AgentResponse["calendarUpdates"] {
   if (!Array.isArray(value)) return undefined;
   const updates: NonNullable<AgentResponse["calendarUpdates"]> = [];
@@ -80,6 +123,100 @@ function normalizeCalendarUpdates(value: unknown): AgentResponse["calendarUpdate
     });
   }
   return updates;
+}
+
+function normalizeCareContactUpdates(value: unknown): AgentResponse["careContactUpdates"] {
+  if (!Array.isArray(value)) return undefined;
+  const updates: NonNullable<AgentResponse["careContactUpdates"]> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const r = entry as Record<string, unknown>;
+    const rawAction = str(r.action);
+    const action =
+      rawAction === "add" || rawAction === "update" || rawAction === "remove"
+        ? rawAction
+        : undefined;
+    const name = str(r.name);
+    if (!action || !name) continue;
+    updates.push({
+      action,
+      name,
+      phone: str(r.phone),
+      relationship: str(r.relationship),
+      contactType: oneOf(str(r.contactType) ?? str(r.contact_type), CARE_CONTACT_TYPES),
+      agencyName: str(r.agencyName) ?? str(r.agency_name),
+      role: str(r.role),
+      availabilityNotes: str(r.availabilityNotes) ?? str(r.availability_notes),
+      contactPriority: typeof r.contactPriority === "number"
+        ? r.contactPriority
+        : typeof r.contact_priority === "number"
+          ? r.contact_priority
+          : undefined,
+      canReceiveTexts: typeof r.canReceiveTexts === "boolean"
+        ? r.canReceiveTexts
+        : typeof r.can_receive_texts === "boolean"
+          ? r.can_receive_texts
+          : undefined,
+      consentToContact: typeof r.consentToContact === "boolean"
+        ? r.consentToContact
+        : typeof r.consent_to_contact === "boolean"
+          ? r.consent_to_contact
+          : undefined,
+      notes: str(r.notes),
+    });
+  }
+  return updates;
+}
+
+function normalizeCoordinationEventUpdates(
+  value: unknown,
+): AgentResponse["coordinationEventUpdates"] {
+  if (!Array.isArray(value)) return undefined;
+  const updates: NonNullable<AgentResponse["coordinationEventUpdates"]> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const r = entry as Record<string, unknown>;
+    const rawAction = str(r.action);
+    const action =
+      rawAction === "add" || rawAction === "update" || rawAction === "remove"
+        ? rawAction
+        : undefined;
+    const title = str(r.title);
+    if (!action || !title) continue;
+    updates.push({
+      action,
+      title,
+      type: oneOf(str(r.type), COORDINATION_EVENT_TYPES),
+      status: oneOf(str(r.status), COORDINATION_EVENT_STATUSES),
+      urgency: oneOf(str(r.urgency), COORDINATION_URGENCIES),
+      description: str(r.description),
+      contactName: str(r.contactName) ?? str(r.contact_name),
+      date: str(r.date),
+      time: str(r.time),
+    });
+  }
+  return updates;
+}
+
+function normalizeOutreachRequests(value: unknown): AgentResponse["outreachRequests"] {
+  if (!Array.isArray(value)) return undefined;
+  const requests: NonNullable<AgentResponse["outreachRequests"]> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const r = entry as Record<string, unknown>;
+    const contactName = str(r.contactName) ?? str(r.contact_name);
+    const purpose = str(r.purpose);
+    const message = str(r.message) ?? str(r.messageBody) ?? str(r.message_body);
+    if (!contactName || !purpose || !message) continue;
+    requests.push({
+      contactName,
+      purpose,
+      message,
+      coordinationEventTitle: str(r.coordinationEventTitle) ?? str(r.coordination_event_title),
+      approvalPrompt: str(r.approvalPrompt) ?? str(r.approval_prompt),
+    });
+  }
+  return requests;
 }
 
 export function normalizeResponse(parsed: Record<string, unknown>): AgentResponse {
@@ -114,6 +251,9 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
       ? (result.scheduleUpdates as AgentResponse["scheduleUpdates"])
       : undefined,
     calendarUpdates: normalizeCalendarUpdates(result.calendarUpdates),
+    careContactUpdates: normalizeCareContactUpdates(result.careContactUpdates),
+    coordinationEventUpdates: normalizeCoordinationEventUpdates(result.coordinationEventUpdates),
+    outreachRequests: normalizeOutreachRequests(result.outreachRequests),
   };
 }
 

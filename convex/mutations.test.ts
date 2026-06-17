@@ -260,6 +260,88 @@ describe("getCompiledPromptContext", () => {
   });
 });
 
+describe("model-driven care outreach updates", () => {
+  it("turns a new contact text request into a pending approval path", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      {
+        phone: "+16517030006",
+        chatId: "chat-mom",
+      },
+    );
+
+    await t.mutation(internal.mutations.upsertCareContactFromModel, {
+      careCaseId,
+      update: {
+        action: "add",
+        name: "Mom",
+        phone: "+15551234567",
+        relationship: "mother",
+        contactType: "family",
+        canReceiveTexts: true,
+      },
+    });
+    await t.mutation(internal.mutations.upsertCoordinationEventFromModel, {
+      careCaseId,
+      userId,
+      timezone: "America/Chicago",
+      update: {
+        action: "add",
+        title: "Text Mom",
+        type: "outreach",
+        status: "open",
+        contactName: "Mom",
+        description: "Ask Mom to check in.",
+      },
+    });
+
+    const requestResult = await t.mutation(
+      internal.outreachAttempts.createPendingFromModel,
+      {
+        careCaseId,
+        requestedByUserId: userId,
+        request: {
+          contactName: "Mom",
+          purpose: "Ask Mom to check in",
+          message: "Hi Mom, can you check in today?",
+          coordinationEventTitle: "Text Mom",
+        },
+        approvalPrompt: "Want me to send this to Mom?",
+      },
+    );
+
+    const contacts = await t.query(api.careContacts.listByCareCase, { careCaseId });
+    const events = await t.query(api.coordinationEvents.listByCareCase, { careCaseId });
+    const attempts = await t.query(api.outreachAttempts.listByCareCase, { careCaseId });
+
+    expect(requestResult).toMatchObject({
+      action: "created",
+      status: "pending_approval",
+    });
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]).toMatchObject({
+      name: "Mom",
+      phone: "+15551234567",
+      contactType: "family",
+      canReceiveTexts: true,
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      title: "Text Mom",
+      type: "outreach",
+      originalAssigneeContactId: contacts[0]._id,
+    });
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      careContactId: contacts[0]._id,
+      coordinationEventId: events[0]._id,
+      status: "pending_approval",
+      messageBody: "Hi Mom, can you check in today?",
+    });
+  });
+});
+
 describe("upsertScheduleItem validation", () => {
   it("rejects relative date words at the mutation boundary", async () => {
     // #given a care case
