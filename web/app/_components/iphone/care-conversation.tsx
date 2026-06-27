@@ -1,6 +1,12 @@
+/*
+  web/app/_components/iphone/care-conversation.tsx — Interactive iMessage-style CareSupport conversation demo.
+  Updated: 2026-06-27
+  Purpose: Keep the demo lint-clean while preserving the triggered signup transition
+           used by marketing pages.
+*/
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IPhoneFrame } from "./iphone-frame";
 import { IMessageHeader } from "./imessage-header";
 import { MessageBubble } from "./message-bubble";
@@ -82,11 +88,15 @@ export function CareConversation({
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (triggerSignup) {
+    if (!triggerSignup) return;
+
+    const timer = window.setTimeout(() => {
       setAnimateView(true);
       setView("signup");
       onSignupTriggered?.();
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [triggerSignup, onSignupTriggered]);
 
   useEffect(() => {

@@ -1,6 +1,13 @@
+/*
+  web/app/_components/site-nav.tsx — Floating site navigation for CareSupport web pages.
+  Updated: 2026-06-27
+  Purpose: Keep the reusable navigation lint-clean while supporting internal Next.js links
+           used by the new investor narrative page.
+*/
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import styles from "./site-nav.module.css";
 
@@ -104,13 +111,13 @@ export function SiteNav() {
                 <ul className={styles.menu}>
                   {MENU_ITEMS.map((item) => (
                     <li key={item.id}>
-                      <a
+                      <Link
                         href={item.href}
                         className={`${styles.menuLink} ${item.primary ? styles.menuLinkPrimary : ""}`}
                         onClick={close}
                       >
                         {item.label}
-                      </a>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -131,10 +138,10 @@ export function SiteNav() {
               <div className={styles.meta}>
                 <span>Care coordination in iMessage</span>
                 <span className={styles.metaCenter}>Private beta · cohort 1</span>
-                <a href="/#waitlist" className={styles.metaCta} onClick={close}>
+                <Link href="/#waitlist" className={styles.metaCta} onClick={close}>
                   <span className={styles.metaDot} aria-hidden />
                   Join the waitlist →
-                </a>
+                </Link>
               </div>
             </div>
           )}
