@@ -715,3 +715,4 @@ Read the last 2-3 entries before starting work.
 - Re-ran `npm run lint` and `npm run build`; both pass.
 - Reworked the first feature card again per user direction: light card treatment, first-letter-only contact avatars, `Liban` shortened from `Liban Kano`, random replacement names, and retained `Angela` / `Maya` for consistency.
 - Replaced the contact-grid memory visual with a light thread-memory detail card after the contact list read like an address book instead of demonstrating what the thread remembers; verified the real 390px mobile viewport has no horizontal overflow.
+- Removed the stale `web/vercel.json` install override after a CLI deploy to the wrong local `web` project failed because the remote build tried to run `npm install` from `/vercel/package.json`.
