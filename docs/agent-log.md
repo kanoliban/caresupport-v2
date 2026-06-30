@@ -680,3 +680,38 @@ Read the last 2-3 entries before starting work.
 ### Concerns
 - This was a synthetic Convex function smoke, not a real inbound Linq webhook/iMessage test.
 - Dev had to be cleared because stale data blocked schema validation. Treat prod separately; do not reset or deploy prod without an explicit production decision.
+
+---
+
+## 2026-06-30 — Codex
+
+### What I did
+- Replaced the old homepage “How it works” zigzag with a quieter Buoy-inspired CareSupport card section in `web/app/_components/feature-sections.tsx`.
+- Built four care-specific cards: thread memory, coverage gap, permissioned outreach, and short operational updates.
+- Kept the section responsive so the card rhythm collapses cleanly on mobile without the headline clipping seen in the Buoy reference.
+- Fixed stale footer anchors so “How it works” points to `/#how` and the second product link points to `/#waitlist`.
+- Removed emoji status copy from the interactive iPhone signup confirmation.
+- Made `getSignupCount()` tolerate a paused Convex deployment by falling back to the display offset, so the marketing page can render while the waitlist backend is unavailable.
+
+### State I'm leaving
+- The web dev server is running on `http://localhost:3003`.
+- `npm run lint` passes from `web/`.
+- `npm run build` passes from `web/`.
+- `curl -I http://127.0.0.1:3003/` returns `200 OK` when run outside the sandbox.
+- Verification screenshots were captured under `web/output/playwright/`.
+
+### What the next agent should know
+- Convex is currently paused, so live waitlist count reads fall back to `23`.
+- Waitlist POSTs still depend on Convex and should fail honestly while the deployment is paused.
+- The new card section is static/server-rendered; it no longer imports the iPhone `MessageBubble` client component.
+
+### Concerns
+- The visual pass only addressed the post-hero card section the user called out. Hero, nav, waitlist CTA, and footer are still mostly the previous design.
+- `web/output/` is untracked verification output and can be cleaned before committing if screenshots are not wanted in the branch.
+
+### Follow-up
+- Adjusted the new post-hero section to inherit the warm page/FAQ background instead of using a separate near-white band.
+- Reworked the first feature card into a dark iMessage-style icon grid with circular contact avatars and square app icons for CareSupport and Poke.
+- Re-ran `npm run lint` and `npm run build`; both pass.
+- Reworked the first feature card again per user direction: light card treatment, first-letter-only contact avatars, `Liban` shortened from `Liban Kano`, random replacement names, and retained `Angela` / `Maya` for consistency.
+- Replaced the contact-grid memory visual with a light thread-memory detail card after the contact list read like an address book instead of demonstrating what the thread remembers; verified the real 390px mobile viewport has no horizontal overflow.

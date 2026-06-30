@@ -9,8 +9,8 @@ import Link from "next/link";
 import styles from "./site-footer.module.css";
 
 const PRODUCT = [
-  { label: "How it works", href: "/#how-it-works" },
-  { label: "Why iMessage", href: "/#why-imessage" },
+  { label: "How it works", href: "/#how" },
+  { label: "Join waitlist", href: "/#waitlist" },
   { label: "FAQ", href: "/#faq" },
 ];
 

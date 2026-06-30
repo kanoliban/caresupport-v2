@@ -37,6 +37,14 @@ export async function submitSignup(input: SubmitInput): Promise<SubmitResult> {
 }
 
 export async function getSignupCount(): Promise<number> {
-  const count = await getClient().query(api.waitlist.getSignupCount, {});
-  return count + DISPLAY_OFFSET;
+  try {
+    const count = await getClient().query(api.waitlist.getSignupCount, {});
+    return count + DISPLAY_OFFSET;
+  } catch (err) {
+    console.warn(
+      "Unable to load live waitlist count; using display offset fallback.",
+      err,
+    );
+    return DISPLAY_OFFSET;
+  }
 }

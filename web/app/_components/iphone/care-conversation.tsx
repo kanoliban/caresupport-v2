@@ -236,14 +236,14 @@ export function CareConversation({
     const timestamp = Date.now();
     setMessages((prev) => [
       ...prev,
-      { id: `submit-${timestamp}`, text: "✅ Joined the waitlist", variant: "sent", showTail: true },
+      { id: `submit-${timestamp}`, text: "Joined the waitlist", variant: "sent", showTail: true },
     ]);
     setTimeout(() => setShowTyping(true), 400);
     setTimeout(() => {
       setShowTyping(false);
       setMessages((prev) => [
         ...prev,
-        { id: `c1-${timestamp}`, text: "You're on the list 🌿", variant: "received", showTail: false },
+        { id: `c1-${timestamp}`, text: "You're on the list", variant: "received", showTail: false },
         { id: `c2-${timestamp}`, text: "I'll text you when your family's spot opens up.", variant: "received", showTail: true },
       ]);
     }, 1500);
