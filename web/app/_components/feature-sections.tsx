@@ -1,41 +1,61 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { MessageBubble } from "./iphone/message-bubble";
 import styles from "./feature-sections.module.css";
 
-type FeatureVisual = "memory" | "coverage" | "permission" | "update";
+type Msg = { kind: "sent" | "received"; text: string };
 
-interface Feature {
+type Step = {
   id: string;
+  tag: string;
   title: string;
-  body: string;
-  visual: FeatureVisual;
-  reverse?: boolean;
-}
+  sub: string;
+  reverse: boolean;
+  messages: Msg[];
+};
 
-const FEATURES: Feature[] = [
+const STEPS: Step[] = [
   {
-    id: "memory",
-    title: "The thread remembers.",
-    body: "CareSupport turns the details families keep repeating into living memory: medications, appointments, routines, door codes, and who handles what.",
-    visual: "memory",
+    id: "step-1",
+    tag: "(1)",
+    title: "You text CareSupport.",
+    sub: "Getting started is just a message — no app, no setup for anyone.",
+    reverse: false,
+    messages: [
+      {
+        kind: "sent",
+        text: "Mom needs her Eliquis at 8am. Dad's on mornings, Jess has weekends.",
+      },
+      {
+        kind: "received",
+        text: "Got it. I'll keep Dad and Jess on track and check in with you.",
+      },
+    ],
   },
   {
-    id: "coverage",
-    title: "Coverage gaps stop hiding.",
-    body: "When something changes, CareSupport keeps the open loop visible until someone confirms the plan.",
-    visual: "coverage",
+    id: "step-2",
+    tag: "(2)",
+    title: "CareSupport texts them.",
+    sub: "It reaches your family and caregivers directly — you never have to chase anyone.",
     reverse: true,
+    messages: [
+      { kind: "received", text: "Morning, Dad — reminder: Mom's Eliquis at 8am 💊" },
+      { kind: "sent", text: "Done, 8:05 ✅" },
+      { kind: "received", text: "Thank you. I'll let the family know." },
+    ],
   },
   {
-    id: "permission",
-    title: "It asks before it acts.",
-    body: "Outreach is permissioned. CareSupport can draft the message, show who it is going to, and wait for approval before contacting anyone.",
-    visual: "permission",
-  },
-  {
-    id: "update",
-    title: "Everyone gets the smallest useful update.",
-    body: "Confirmations, declines, and pending replies come back as short operational updates, not another dashboard to check.",
-    visual: "update",
-    reverse: true,
+    id: "step-3",
+    tag: "(3)",
+    title: "Everyone stays in sync.",
+    sub: "Confirmations come back to you, gaps get caught — and the loop runs again tomorrow.",
+    reverse: false,
+    messages: [
+      { kind: "received", text: "Dad gave Mom's meds at 8:05. Jess confirmed Saturday." },
+      { kind: "received", text: "Nothing slipped — and I'll run it all again tomorrow." },
+      { kind: "sent", text: "Thank you 🙏" },
+    ],
   },
 ];
 
@@ -48,141 +68,84 @@ const FAQS = [
   { q: "How much does it cost?", a: "Free during the private beta." },
 ];
 
+function useInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return { ref, inView };
+}
+
 export function FeatureSections() {
   return (
-    <section id="how" className={styles.sections} aria-label="How CareSupport works">
-      <div className={styles.grid}>
-        {FEATURES.map((feature) => (
-          <FeatureRow key={feature.id} feature={feature} />
+    <div className={styles.sections}>
+      <section id="how" className={styles.intro}>
+        <span className={styles.introTag}>How it works</span>
+        <h2 className={styles.introHeadline}>Coordinating care, in three steps.</h2>
+        <p className={styles.introLede}>
+          Care is rarely one person&apos;s job. CareSupport runs the loop, so the
+          right people do the right things — right on time.
+        </p>
+      </section>
+
+      <div className={styles.steps}>
+        {STEPS.map((step) => (
+          <StepRow key={step.id} step={step} />
         ))}
       </div>
-    </section>
-  );
-}
-
-function FeatureRow({ feature }: { feature: Feature }) {
-  return (
-    <article className={`${styles.row} ${feature.reverse ? styles.reverse : ""}`}>
-      <div className={styles.copy}>
-        <h2 className={styles.title}>{feature.title}</h2>
-        <p className={styles.body}>{feature.body}</p>
-      </div>
-      <FeatureCard visual={feature.visual} />
-    </article>
-  );
-}
-
-function FeatureCard({ visual }: { visual: FeatureVisual }) {
-  return (
-    <div className={styles.card} aria-hidden="true">
-      {visual === "memory" && <MemoryCard />}
-      {visual === "coverage" && <CoverageCard />}
-      {visual === "permission" && <PermissionCard />}
-      {visual === "update" && <UpdateCard />}
     </div>
   );
 }
 
-function MemoryCard() {
-  const memoryItems = [
-    ["meds", "Medication", "Donepezil after breakfast"],
-    ["routine", "Routine", "Tea at 4, then a short walk"],
-    ["access", "Access", "Back door code saved"],
-    ["coverage", "Coverage", "Maya handles evenings"],
-  ];
+function StepRow({ step }: { step: Step }) {
+  const { ref, inView } = useInView<HTMLDivElement>();
 
   return (
-    <div className={styles.memoryStack}>
-      <div className={`${styles.bubble} ${styles.bubbleReceived}`}>
-        What should I remember for tonight?
-      </div>
-      <div className={styles.memoryPanel}>
-        <div className={styles.memoryTopline}>Thread memory</div>
-        <div className={styles.memoryItems}>
-          {memoryItems.map(([variant, label, value]) => (
-            <div key={label} className={styles.memoryItem}>
-              <span className={`${styles.memoryDot} ${styles[`memoryDot_${variant}`]}`} />
-              <span className={styles.memoryText}>
-                <span>{label}</span>
-                <span>{value}</span>
-              </span>
-            </div>
-          ))}
+    <div
+      ref={ref}
+      className={`${styles.step} ${step.reverse ? styles.reverse : ""}`}
+    >
+      <div className={styles.row}>
+        <div className={styles.copy}>
+          <span className={styles.tag}>{step.tag}</span>
+          <h3 className={styles.title}>{step.title}</h3>
+          <p className={styles.sub}>{step.sub}</p>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function CoverageCard() {
-  return (
-    <div className={styles.phoneStack}>
-      <div className={`${styles.bubble} ${styles.bubbleReceived}`}>
-        Angela cancelled tonight.
-      </div>
-      <div className={styles.coveragePanel}>
-        <div className={styles.panelTopline}>Open gap</div>
-        <div className={styles.panelTitle}>Tonight, 6-10 PM</div>
-        <div className={styles.panelMeta}>needs confirmed coverage</div>
-      </div>
-      <div className={styles.choiceList}>
-        <div className={styles.choiceRow}>
-          <span>Ask Maya first</span>
-          <span className={styles.choiceCircle} />
-        </div>
-        <div className={styles.choiceRow}>
-          <span>Ask the agency</span>
-          <span className={styles.choiceCircle} />
-        </div>
-        <div className={styles.choicePrompt}>Choose one path</div>
-      </div>
-    </div>
-  );
-}
-
-function PermissionCard() {
-  return (
-    <div className={styles.permissionStack}>
-      <div className={`${styles.bubble} ${styles.bubbleSent}`}>
-        Ask Maya if she can check in at 2:30.
-      </div>
-      <div className={styles.draftCard}>
-        <div className={styles.avatar}>M</div>
-        <div className={styles.draftText}>
-          <div className={styles.draftTopline}>
-            <span>Draft to Maya</span>
-            <span>Now</span>
+        <div className={styles.asset}>
+          <div className={`${styles.msgCard} ${inView ? styles.revealed : ""}`}>
+            {step.messages.map((m, i) => {
+              const next = step.messages[i + 1];
+              const tail = !next || next.kind !== m.kind;
+              return (
+                <div
+                  key={i}
+                  className={styles.msgReveal}
+                  style={{ transitionDelay: `${i * 220}ms` }}
+                >
+                  <MessageBubble variant={m.kind} showTail={tail}>
+                    {m.text}
+                  </MessageBubble>
+                </div>
+              );
+            })}
           </div>
-          <p>Can you check on Ruth around 2:30 today? Liban wants to make sure she is settled.</p>
         </div>
-      </div>
-      <div className={styles.choiceList}>
-        <div className={styles.choiceRow}>
-          <span>Send</span>
-          <span className={styles.choiceCircle} />
-        </div>
-        <div className={styles.choiceRow}>
-          <span>Edit first</span>
-          <span className={styles.choiceCircle} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function UpdateCard() {
-  return (
-    <div className={styles.updateStack}>
-      <div className={`${styles.bubble} ${styles.bubbleSent}`}>
-        What changed tonight?
-      </div>
-      <div className={`${styles.bubble} ${styles.bubbleReceived}`}>
-        Maya can cover 7-9. The agency is still pending.
-      </div>
-      <div className={styles.statusCard}>
-        <div className={styles.statusLabel}>still open</div>
-        <div className={styles.statusTitle}>9-10 PM coverage</div>
-        <div className={styles.statusFooter}>CareSupport will ask before the next outreach.</div>
       </div>
     </div>
   );
