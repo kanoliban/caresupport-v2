@@ -224,7 +224,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_phone", ["phone"])
-    .index("by_care_case", ["careCaseId"]),
+    .index("by_care_case", ["careCaseId"])
+    .index("by_chat_id", ["chatId"]),
 
   careCases: defineTable({
     title: v.string(),
@@ -469,6 +470,13 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user_provider", ["userId", "provider"]),
+
+  groupChats: defineTable({
+    chatId: v.string(),
+    displayName: v.optional(v.string()),
+    detectedAt: v.number(),
+    source: v.string(),
+  }).index("by_chat_id", ["chatId"]),
 
   waitlistSignups: defineTable({
     email: v.string(),

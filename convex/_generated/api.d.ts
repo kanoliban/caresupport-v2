@@ -17,6 +17,7 @@ import type * as careContacts from "../careContacts.js";
 import type * as contactReplies from "../contactReplies.js";
 import type * as coordinationEvents from "../coordinationEvents.js";
 import type * as crons from "../crons.js";
+import type * as groupChats from "../groupChats.js";
 import type * as handler from "../handler.js";
 import type * as http from "../http.js";
 import type * as lib_anthropicClient from "../lib/anthropicClient.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   contactReplies: typeof contactReplies;
   coordinationEvents: typeof coordinationEvents;
   crons: typeof crons;
+  groupChats: typeof groupChats;
   handler: typeof handler;
   http: typeof http;
   "lib/anthropicClient": typeof lib_anthropicClient;

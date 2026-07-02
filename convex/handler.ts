@@ -23,6 +23,7 @@ import { normalizePhone } from "./mutations";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
   createChat,
+  getChat,
   sendMessage,
   sendMessageSequence,
   splitIntoBubbles,
@@ -795,6 +796,37 @@ export const handleMessage = internalAction({
     const isTestEnv = process.env.APP_ENV === "test";
     const isNewUser = !user;
 
+    // Group-chat gate: the runtime only operates one-to-one threads. When a
+    // message arrives from a chat we can't tie to a known 1:1 relationship,
+    // verify the chat type with Linq before onboarding anyone or replying.
+    const chatIsFamiliar =
+      !chatId ||
+      isTestChat(chatId) ||
+      Boolean(careContactReply) ||
+      Boolean(user && user.chatId === chatId);
+    if (!chatIsFamiliar) {
+      const linqToken = process.env.LINQ_API_TOKEN;
+      if (linqToken) {
+        const chatInfo = await getChat(chatId, linqToken);
+        if (chatInfo.success && chatInfo.isGroup) {
+          await ctx.runMutation(internal.groupChats.registerGroupChat, {
+            chatId,
+            displayName: chatInfo.displayName,
+            source: "inbound_detection",
+          });
+          console.log("[handler] ignored group chat message", {
+            chatId,
+            senderPhone,
+          });
+          return {
+            success: false,
+            response: "",
+            error: "group_chat_ignored",
+          };
+        }
+      }
+    }
+
     if (!user && !careContactReply) {
       const result = await ctx.runMutation(
         internal.mutations.createOnboardingUserAndCareCase,
@@ -1279,6 +1311,26 @@ export const handleMessage = internalAction({
         },
         timestamp: Date.now(),
       });
+
+      // Failure budget: apologize once per thread per window, then go quiet.
+      // A chatty failure mode is worse than silence — repeated identical
+      // sends are the exact pattern that gets iMessage numbers flagged.
+      const FALLBACK_WINDOW_MS = 15 * 60 * 1000;
+      const recentlyApologized = await ctx.runQuery(
+        internal.groupChats.hasRecentFallback,
+        {
+          careCaseId,
+          since: Date.now() - FALLBACK_WINDOW_MS,
+          marker: "system issue on my side",
+        },
+      );
+      if (recentlyApologized) {
+        console.log("[handler] suppressed repeat failure fallback", {
+          careCaseId,
+          chatId,
+        });
+        return { success: false, response: "", error: errorMessage };
+      }
 
       const outboundMessageId = await logOutbound(
         ctx,
