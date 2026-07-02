@@ -852,6 +852,8 @@ export const handleMessage = internalAction({
         userId: result.userId,
         timestamp: now,
       });
+
+      await ctx.runMutation(internal.sentinel.checkUserBurst, {});
     }
 
     if (!user) {
@@ -1297,6 +1299,10 @@ export const handleMessage = internalAction({
       });
 
       const fallback = runtimeFailureFallback(replyDisplayName);
+      await ctx.scheduler.runAfter(0, internal.sentinel.sendAlert, {
+        alertType: "ai_failure",
+        message: `AI call failed: ${errorMessage.slice(0, 160)} — check API credits and Convex logs.`,
+      });
       await ctx.runMutation(internal.mutations.logAudit, {
         careCaseId,
         userId,

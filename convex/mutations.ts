@@ -1,6 +1,7 @@
 // 2026-06-17: Internal Convex mutations for CareSupport runtime; includes calendar account metadata and duplicate-write audit details.
 import { internalMutation, internalQuery } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
@@ -387,7 +388,29 @@ export const logMessage = internalMutation({
     outreachAttemptId: v.optional(v.id("outreachAttempts")),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("messages", args);
+    const messageId = await ctx.db.insert("messages", args);
+
+    if (args.direction === "outbound") {
+      const WINDOW_MS = 2 * 60 * 1000;
+      const THRESHOLD = 10;
+      const recent = await ctx.db
+        .query("messages")
+        .withIndex("by_timestamp", (q) =>
+          q.gte("timestamp", Date.now() - WINDOW_MS),
+        )
+        .collect();
+      const outboundCount = recent.filter(
+        (m) => m.direction === "outbound",
+      ).length;
+      if (outboundCount >= THRESHOLD) {
+        await ctx.scheduler.runAfter(0, internal.sentinel.sendAlert, {
+          alertType: "outbound_velocity",
+          message: `${outboundCount} outbound messages in 2 min (threshold ${THRESHOLD}). Possible loop or spam burst.`,
+        });
+      }
+    }
+
+    return messageId;
   },
 });
 

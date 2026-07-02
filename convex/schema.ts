@@ -225,7 +225,8 @@ export default defineSchema({
   })
     .index("by_phone", ["phone"])
     .index("by_care_case", ["careCaseId"])
-    .index("by_chat_id", ["chatId"]),
+    .index("by_chat_id", ["chatId"])
+    .index("by_created_at", ["createdAt"]),
 
   careCases: defineTable({
     title: v.string(),
@@ -261,6 +262,7 @@ export default defineSchema({
   })
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
+    .index("by_timestamp", ["timestamp"])
     .index("by_linq_message_id", ["linqMessageId"])
     .index("by_user", ["userId"])
     .index("by_sender_phone", ["senderPhone"])
@@ -470,6 +472,12 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user_provider", ["userId", "provider"]),
+
+  sentinelAlerts: defineTable({
+    alertType: v.string(),
+    firedAt: v.number(),
+    details: v.string(),
+  }).index("by_type_time", ["alertType", "firedAt"]),
 
   groupChats: defineTable({
     chatId: v.string(),
