@@ -1,0 +1,27 @@
+#!/bin/sh
+# Repo guard: main only moves by pull request. Direct pushes to main are
+# blocked for every local actor — humans, Claude, Codex, anyone.
+# Emergency bypass (production down, no time for a PR):
+#   BYPASS_MAIN_GUARD=1 git push origin main
+
+remote="$1"
+
+if [ "$BYPASS_MAIN_GUARD" = "1" ]; then
+  echo "[guard] BYPASS_MAIN_GUARD set — allowing push to main. Log why in docs/agent-log.md." >&2
+else
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$remote_ref" = "refs/heads/main" ]; then
+      echo "" >&2
+      echo "[guard] BLOCKED: direct push to main." >&2
+      echo "[guard] Process: branch -> push branch -> gh pr create -> CI green -> merge." >&2
+      echo "[guard] See CONTRIBUTING.md. Emergency: BYPASS_MAIN_GUARD=1 git push ..." >&2
+      echo "" >&2
+      exit 1
+    fi
+  done
+fi
+
+# Preserve git-lfs behavior (was the previous pre-push hook).
+if command -v git-lfs >/dev/null 2>&1; then
+  git lfs pre-push "$remote" "$2"
+fi

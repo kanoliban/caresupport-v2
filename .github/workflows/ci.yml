@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: Install (root)
+        run: npm ci
+
+      - name: Install (web)
+        run: npm ci
+        working-directory: web
+
+      - name: Typecheck (convex runtime)
+        run: npx tsc --noEmit
+
+      - name: Typecheck (web)
+        run: npx tsc --noEmit
+        working-directory: web
+
+      - name: Tests
+        run: npm test
+
+      - name: Build (web)
+        run: npx next build
+        working-directory: web
+        env:
+          NEXT_PUBLIC_CONVEX_URL: https://keen-raccoon-606.convex.cloud
