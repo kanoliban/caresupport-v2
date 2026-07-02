@@ -10,20 +10,19 @@ import styles from "./site-footer.module.css";
 
 const PRODUCT = [
   { label: "How it works", href: "/#how" },
-  { label: "Join waitlist", href: "/#waitlist" },
+  { label: "Start with a text", href: "/#waitlist" },
   { label: "FAQ", href: "/#faq" },
 ];
 
 const COMPANY = [
-  { label: "About", href: "#" },
   { label: "Contact", href: "mailto:hello@caresupport.com" },
-  { label: "Press", href: "#" },
+  { label: "Press", href: "mailto:hello@caresupport.com?subject=Press%20inquiry" },
 ];
 
 const FAMILIES = [
-  { label: "Aging parents", href: "#" },
-  { label: "Recovery at home", href: "#" },
-  { label: "Long-distance care", href: "#" },
+  { label: "Aging parents", href: "/#how" },
+  { label: "Recovery at home", href: "/#how" },
+  { label: "Long-distance care", href: "/#how" },
 ];
 
 export function SiteFooter() {
@@ -85,10 +84,10 @@ export function SiteFooter() {
 
         <div className={styles.authCol}>
           <Link href="/#waitlist" className={`${styles.btn} ${styles.btnPrimary}`}>
-            Join the waitlist
+            Start with a text
           </Link>
           <p className={styles.authNote}>
-            Free for the first cohort. We&rsquo;ll be in touch.
+            Free for the first cohort. No app to install.
           </p>
         </div>
       </div>

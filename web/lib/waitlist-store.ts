@@ -21,6 +21,12 @@ export interface SubmitInput {
   email: string;
   phone: string;
   userAgent?: string;
+  referrer?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  landingPath?: string;
 }
 
 export interface SubmitResult {
@@ -32,6 +38,12 @@ export async function submitSignup(input: SubmitInput): Promise<SubmitResult> {
     email: input.email,
     phone: input.phone,
     userAgent: input.userAgent,
+    referrer: input.referrer,
+    utmSource: input.utmSource,
+    utmMedium: input.utmMedium,
+    utmCampaign: input.utmCampaign,
+    utmContent: input.utmContent,
+    landingPath: input.landingPath,
   });
   return { count: result.count + DISPLAY_OFFSET };
 }

@@ -478,8 +478,17 @@ export default defineSchema({
     source: v.string(),
     userAgent: v.optional(v.string()),
     submittedAt: v.number(),
+    referrer: v.optional(v.string()),
+    utmSource: v.optional(v.string()),
+    utmMedium: v.optional(v.string()),
+    utmCampaign: v.optional(v.string()),
+    utmContent: v.optional(v.string()),
+    landingPath: v.optional(v.string()),
+    convertedUserId: v.optional(v.id("users")),
+    convertedAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
+    .index("by_phone", ["phone"])
     .index("by_source", ["source"])
     .index("by_submitted_at", ["submittedAt"]),
 });

@@ -10,6 +10,7 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "CareSupport",
   },
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
