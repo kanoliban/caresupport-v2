@@ -40,6 +40,10 @@ import {
 } from "./lib/promptContent";
 import { normalizeMemoryCategory } from "./lib/memory";
 import {
+  DOORMAN_SYSTEM_PROMPT,
+  parseDoormanResponse,
+} from "./lib/doorman";
+import {
   refreshAccessToken,
   fetchEventsForRange,
   createCalendarEvent,
@@ -825,6 +829,26 @@ export const handleMessage = internalAction({
           };
         }
       }
+    }
+
+    // Doorman: unknown senders are screened by a cheap first-contact agent
+    // (no tools, no PHI) instead of being minted straight into a care case.
+    // Graduation creates the user + care case; everything else stays cheap.
+    const doormanEnabled = process.env.DOORMAN_ENABLED === "true";
+    if (
+      !user &&
+      !careContactReply &&
+      doormanEnabled &&
+      !isTestChat(chatId) &&
+      !isTestEnv
+    ) {
+      return await runDoorman(ctx, {
+        senderPhone,
+        messageBody,
+        chatId,
+        startedAt,
+        now,
+      });
     }
 
     if (!user && !careContactReply) {
@@ -1950,6 +1974,179 @@ export function isValidTimeZone(tz: string | undefined): tz is string {
   } catch {
     return false;
   }
+}
+
+async function runDoorman(
+  ctx: ActionCtx,
+  input: {
+    senderPhone: string;
+    messageBody: string;
+    chatId: string;
+    startedAt: number;
+    now: number;
+  },
+): Promise<HandlerResult> {
+  const { senderPhone, messageBody, chatId, startedAt, now } = input;
+
+  const knownAgent = await ctx.runQuery(internal.doorman.getKnownAgent, {
+    phone: senderPhone,
+  });
+  if (knownAgent) {
+    console.log("[doorman] ignored known agent", { senderPhone });
+    return { success: false, response: "", error: "known_agent_ignored" };
+  }
+
+  const state = await ctx.runMutation(internal.doorman.touchStranger, {
+    phone: senderPhone,
+    chatId: chatId || undefined,
+    messageBody,
+  });
+
+  if (state.status === "agent") {
+    return { success: false, response: "", error: "agent_stranger_ignored" };
+  }
+
+  if (state.velocitySuspicious) {
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "agent",
+    });
+    await ctx.runMutation(internal.doorman.addKnownAgent, {
+      phone: senderPhone,
+      source: "velocity_heuristic",
+    });
+    await ctx.scheduler.runAfter(0, internal.sentinel.sendAlert, {
+      alertType: "user_burst",
+      message: `Doorman flagged ${senderPhone} as an agent (message velocity) and went quiet.`,
+    });
+    console.log("[doorman] velocity flag, going quiet", { senderPhone });
+    return { success: false, response: "", error: "agent_velocity_ignored" };
+  }
+
+  if (state.budgetExhausted) {
+    console.log("[doorman] daily reply budget exhausted", { senderPhone });
+    return { success: false, response: "", error: "doorman_budget_exhausted" };
+  }
+
+  const apiKey =
+    process.env.OPENROUTER_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return { success: false, response: "", error: "doorman_no_api_key" };
+  }
+
+  let verdictText = "";
+  try {
+    const result = await callAnthropic({
+      systemBlocks: [
+        { type: "text", text: DOORMAN_SYSTEM_PROMPT, cacheBreakpoint: true },
+      ],
+      messages: state.transcript.map((t) => ({
+        role: t.role,
+        content: t.content,
+      })),
+      model: "claude-haiku-4-5",
+      apiKey,
+      ...(process.env.OPENROUTER_API_KEY
+        ? { baseURL: "https://openrouter.ai/api" }
+        : {}),
+    });
+    verdictText = result.text;
+  } catch (error) {
+    console.error("[doorman] model call failed; staying quiet", {
+      senderPhone,
+      error: String(error).slice(0, 200),
+    });
+    return { success: false, response: "", error: "doorman_model_failed" };
+  }
+
+  const parsed = parseDoormanResponse(verdictText);
+
+  if (parsed.verdict === "agent") {
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "agent",
+    });
+    await ctx.runMutation(internal.doorman.addKnownAgent, {
+      phone: senderPhone,
+      name: parsed.name,
+      source: "doorman_verdict",
+    });
+    console.log("[doorman] verdict=agent, going quiet", { senderPhone });
+    return { success: false, response: "", error: "agent_verdict_ignored" };
+  }
+
+  if (parsed.verdict === "graduate") {
+    const created = await ctx.runMutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: senderPhone, chatId },
+    );
+    if (parsed.name) {
+      await ctx.runMutation(internal.mutations.updateUserProfile, {
+        userId: created.userId,
+        name: parsed.name,
+      });
+    }
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "graduated",
+      graduatedUserId: created.userId,
+    });
+    await ctx.runMutation(internal.mutations.logAudit, {
+      careCaseId: created.careCaseId,
+      userId: created.userId,
+      event: "user_created",
+      phone: senderPhone,
+      details: { triggerMessage: "doorman graduation" },
+      timestamp: now,
+    });
+    await ctx.runMutation(internal.waitlist.markConvertedByPhone, {
+      phone: senderPhone,
+      userId: created.userId,
+      timestamp: now,
+    });
+    await ctx.runMutation(internal.sentinel.checkUserBurst, {});
+    await ctx.runMutation(internal.mutations.logMessage, {
+      careCaseId: created.careCaseId,
+      userId: created.userId,
+      senderPhone,
+      actorType: "user",
+      direction: "inbound",
+      body: messageBody,
+      timestamp: now,
+    });
+    if (parsed.smsResponse) {
+      await ctx.runMutation(internal.mutations.logMessage, {
+        careCaseId: created.careCaseId,
+        userId: created.userId,
+        senderPhone,
+        actorType: "assistant",
+        direction: "outbound",
+        body: parsed.smsResponse,
+        timestamp: Date.now(),
+      });
+      await sendResponse(chatId, parsed.smsResponse, env(), startedAt);
+    }
+    console.log("[doorman] graduated stranger", {
+      senderPhone,
+      userId: created.userId,
+    });
+    return { success: true, response: parsed.smsResponse };
+  }
+
+  if (parsed.smsResponse) {
+    await ctx.runMutation(internal.doorman.recordDoormanReply, {
+      strangerId: state.strangerId,
+      reply: parsed.smsResponse,
+    });
+    await sendResponse(chatId, parsed.smsResponse, env(), startedAt);
+  }
+  if (parsed.verdict === "dismiss") {
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "dismissed",
+    });
+  }
+  return { success: true, response: parsed.smsResponse };
 }
 
 function env(): { linqApiToken: string; linqPhoneNumber: string } {

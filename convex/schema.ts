@@ -473,6 +473,37 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user_provider", ["userId", "provider"]),
 
+  strangers: defineTable({
+    phone: v.string(),
+    chatId: v.optional(v.string()),
+    status: v.union(
+      v.literal("screening"),
+      v.literal("graduated"),
+      v.literal("dismissed"),
+      v.literal("agent"),
+    ),
+    transcript: v.array(
+      v.object({
+        role: v.union(v.literal("user"), v.literal("assistant")),
+        content: v.string(),
+        at: v.number(),
+      }),
+    ),
+    inboundTimestamps: v.array(v.number()),
+    repliesToday: v.number(),
+    replyCountResetAt: v.number(),
+    firstContactAt: v.number(),
+    lastContactAt: v.number(),
+    graduatedUserId: v.optional(v.id("users")),
+  }).index("by_phone", ["phone"]),
+
+  knownAgents: defineTable({
+    phone: v.string(),
+    name: v.optional(v.string()),
+    source: v.string(),
+    addedAt: v.number(),
+  }).index("by_phone", ["phone"]),
+
   devFeedback: defineTable({
     careCaseId: v.id("careCases"),
     userId: v.id("users"),
