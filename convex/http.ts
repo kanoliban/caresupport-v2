@@ -73,6 +73,20 @@ http.route({
         return jsonResponse({ error: "missing_sender_or_message" }, 400);
       }
 
+      if (chatId) {
+        const isKnownGroup = await ctx.runQuery(
+          internal.groupChats.isGroupChat,
+          { chatId },
+        );
+        if (isKnownGroup) {
+          console.log("[webhook] dropped group chat message", {
+            chatId,
+            senderPhone,
+          });
+          return jsonResponse({ accepted: true, ignored: "group_chat" });
+        }
+      }
+
       await ctx.scheduler.runAfter(0, internal.handler.handleMessage, {
         senderPhone,
         messageBody,

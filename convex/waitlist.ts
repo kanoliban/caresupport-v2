@@ -23,6 +23,12 @@ export const submitSignup = mutation({
     email: v.string(),
     phone: v.string(),
     userAgent: v.optional(v.string()),
+    referrer: v.optional(v.string()),
+    utmSource: v.optional(v.string()),
+    utmMedium: v.optional(v.string()),
+    utmCampaign: v.optional(v.string()),
+    utmContent: v.optional(v.string()),
+    landingPath: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const email = normalizeEmail(args.email);
@@ -45,6 +51,12 @@ export const submitSignup = mutation({
         phone,
         userAgent: args.userAgent ?? existing.userAgent,
         submittedAt: now,
+        referrer: args.referrer ?? existing.referrer,
+        utmSource: args.utmSource ?? existing.utmSource,
+        utmMedium: args.utmMedium ?? existing.utmMedium,
+        utmCampaign: args.utmCampaign ?? existing.utmCampaign,
+        utmContent: args.utmContent ?? existing.utmContent,
+        landingPath: args.landingPath ?? existing.landingPath,
       });
     } else {
       await ctx.db.insert("waitlistSignups", {
@@ -53,11 +65,37 @@ export const submitSignup = mutation({
         source: "landing-2026-05",
         userAgent: args.userAgent,
         submittedAt: now,
+        referrer: args.referrer,
+        utmSource: args.utmSource,
+        utmMedium: args.utmMedium,
+        utmCampaign: args.utmCampaign,
+        utmContent: args.utmContent,
+        landingPath: args.landingPath,
       });
     }
 
     const rows = await ctx.db.query("waitlistSignups").collect();
     return { ok: true, count: rows.length };
+  },
+});
+
+export const markConvertedByPhone = internalMutation({
+  args: {
+    phone: v.string(),
+    userId: v.id("users"),
+    timestamp: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const signup = await ctx.db
+      .query("waitlistSignups")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .first();
+    if (!signup || signup.convertedUserId) return { matched: false };
+    await ctx.db.patch(signup._id, {
+      convertedUserId: args.userId,
+      convertedAt: args.timestamp,
+    });
+    return { matched: true };
   },
 });
 

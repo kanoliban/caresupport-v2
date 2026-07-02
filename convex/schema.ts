@@ -224,7 +224,9 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_phone", ["phone"])
-    .index("by_care_case", ["careCaseId"]),
+    .index("by_care_case", ["careCaseId"])
+    .index("by_chat_id", ["chatId"])
+    .index("by_created_at", ["createdAt"]),
 
   careCases: defineTable({
     title: v.string(),
@@ -260,6 +262,7 @@ export default defineSchema({
   })
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
+    .index("by_timestamp", ["timestamp"])
     .index("by_linq_message_id", ["linqMessageId"])
     .index("by_user", ["userId"])
     .index("by_sender_phone", ["senderPhone"])
@@ -470,6 +473,62 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user_provider", ["userId", "provider"]),
 
+  strangers: defineTable({
+    phone: v.string(),
+    chatId: v.optional(v.string()),
+    status: v.union(
+      v.literal("screening"),
+      v.literal("graduated"),
+      v.literal("dismissed"),
+      v.literal("agent"),
+    ),
+    transcript: v.array(
+      v.object({
+        role: v.union(v.literal("user"), v.literal("assistant")),
+        content: v.string(),
+        at: v.number(),
+      }),
+    ),
+    inboundTimestamps: v.array(v.number()),
+    repliesToday: v.number(),
+    replyCountResetAt: v.number(),
+    firstContactAt: v.number(),
+    lastContactAt: v.number(),
+    graduatedUserId: v.optional(v.id("users")),
+  }).index("by_phone", ["phone"]),
+
+  knownAgents: defineTable({
+    phone: v.string(),
+    name: v.optional(v.string()),
+    source: v.string(),
+    addedAt: v.number(),
+  }).index("by_phone", ["phone"]),
+
+  devFeedback: defineTable({
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    category: v.string(),
+    summary: v.string(),
+    quote: v.optional(v.string()),
+    sourceMessage: v.optional(v.string()),
+    githubIssueUrl: v.optional(v.string()),
+    githubIssueNumber: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_created_at", ["createdAt"]),
+
+  sentinelAlerts: defineTable({
+    alertType: v.string(),
+    firedAt: v.number(),
+    details: v.string(),
+  }).index("by_type_time", ["alertType", "firedAt"]),
+
+  groupChats: defineTable({
+    chatId: v.string(),
+    displayName: v.optional(v.string()),
+    detectedAt: v.number(),
+    source: v.string(),
+  }).index("by_chat_id", ["chatId"]),
+
   waitlistSignups: defineTable({
     email: v.string(),
     phone: v.optional(v.string()),
@@ -478,8 +537,17 @@ export default defineSchema({
     source: v.string(),
     userAgent: v.optional(v.string()),
     submittedAt: v.number(),
+    referrer: v.optional(v.string()),
+    utmSource: v.optional(v.string()),
+    utmMedium: v.optional(v.string()),
+    utmCampaign: v.optional(v.string()),
+    utmContent: v.optional(v.string()),
+    landingPath: v.optional(v.string()),
+    convertedUserId: v.optional(v.id("users")),
+    convertedAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
+    .index("by_phone", ["phone"])
     .index("by_source", ["source"])
     .index("by_submitted_at", ["submittedAt"]),
 });

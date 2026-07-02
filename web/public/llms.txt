@@ -1,0 +1,21 @@
+# CareSupport
+
+> CareSupport is a family care agent that lives in iMessage. Families text it like a trusted helper; it turns those messages into a shared care system — medication tracking, schedules, caregiver handoffs, and status summaries — with no app to install.
+
+CareSupport is built for the person who carries the coordination burden in a family care situation: adult children coordinating a parent's care, spouses managing caregivers and agencies, and the family members who share the load.
+
+## How it works
+
+- You text CareSupport like you'd text a person. There is no app, dashboard, or login.
+- It remembers the people, medications, schedules, and preferences in your care situation.
+- It can reach out to caregivers and care contacts on your behalf, with your permission, and report back.
+
+## Pages
+
+- [Home](https://caresupport.com): what CareSupport does and how to start
+- [Privacy](https://caresupport.com/privacy): privacy policy
+- [Terms](https://caresupport.com/terms): terms of service
+
+## Contact
+
+- Email: hello@caresupport.com

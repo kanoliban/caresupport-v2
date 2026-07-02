@@ -14,6 +14,7 @@ images__1_-removebg-preview.png
 *.png
 *.pdf
 !web/public/**
+!web/app/apple-icon.png
 
 # Convex source — only _generated/ is needed by the web build, not the full
 # function implementations. But shipping the full convex/ folder is small and

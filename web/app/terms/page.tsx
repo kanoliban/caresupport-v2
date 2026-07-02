@@ -70,8 +70,8 @@ export default function TermsPage() {
         <p>
           You must be at least 18 years old to use CareSupport. You agree to
           provide accurate information and keep your contact details current.
-          The service is currently a private beta and access may be limited,
-          waitlisted, or invitation-only.
+          The service is currently in open beta; access, capacity, and
+          availability may be limited while we scale.
         </p>
       </LegalSection>
 

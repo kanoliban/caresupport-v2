@@ -174,3 +174,67 @@ describe("normalizeResponse", () => {
     });
   });
 });
+
+describe("dev_feedback normalization", () => {
+  it("parses valid dev_feedback items", () => {
+    const result = extractJson(
+      JSON.stringify({
+        sms_response: "Logged to the dev queue.",
+        internal_notes: "Founder feedback",
+        user_profile_update: null,
+        care_case_profile_update: null,
+        user_memory_updates: [],
+        care_case_memory_updates: [],
+        self_corrections: [],
+        reactions: [],
+        effect: null,
+        dev_feedback: [
+          { category: "tone", summary: "Reminder copy is too chipper.", quote: "the tone of the reminder is too chipper" },
+        ],
+      }),
+    );
+    expect(result.devFeedback).toHaveLength(1);
+    expect(result.devFeedback?.[0].category).toBe("tone");
+    expect(result.devFeedback?.[0].summary).toBe("Reminder copy is too chipper.");
+  });
+
+  it("drops entries without a summary and defaults unknown categories", () => {
+    const result = extractJson(
+      JSON.stringify({
+        sms_response: "Noted.",
+        internal_notes: "",
+        user_profile_update: null,
+        care_case_profile_update: null,
+        user_memory_updates: [],
+        care_case_memory_updates: [],
+        self_corrections: [],
+        reactions: [],
+        effect: null,
+        dev_feedback: [
+          { category: "vibes", summary: "Make onboarding shorter." },
+          { category: "bug", summary: "   " },
+          "not-an-object",
+        ],
+      }),
+    );
+    expect(result.devFeedback).toHaveLength(1);
+    expect(result.devFeedback?.[0].category).toBe("feature");
+  });
+
+  it("returns undefined when dev_feedback is absent", () => {
+    const result = extractJson(
+      JSON.stringify({
+        sms_response: "Hi.",
+        internal_notes: "",
+        user_profile_update: null,
+        care_case_profile_update: null,
+        user_memory_updates: [],
+        care_case_memory_updates: [],
+        self_corrections: [],
+        reactions: [],
+        effect: null,
+      }),
+    );
+    expect(result.devFeedback).toBeUndefined();
+  });
+});

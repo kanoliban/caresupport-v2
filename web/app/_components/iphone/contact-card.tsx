@@ -91,7 +91,7 @@ export function ContactCard({
               onClick={onJoinWaitlist}
               className="w-full px-[16px] py-[14px] text-[17px] text-[#0a84ff] text-left active:opacity-60"
             >
-              Join the waitlist
+              Start with a text
             </button>
           </div>
         </div>
@@ -320,7 +320,7 @@ export function ContactCard({
             onClick={onJoinWaitlist}
             className="w-full px-[16px] py-[14px] text-[16px] text-[#0a84ff] text-left active:opacity-60"
           >
-            Join the waitlist
+            Start with a text
           </button>
         </Section>
 

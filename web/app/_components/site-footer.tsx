@@ -1,22 +1,28 @@
+/*
+  web/app/_components/site-footer.tsx — Shared footer for CareSupport web pages.
+  Updated: 2026-06-27
+  Purpose: Keep footer navigation reusable and lint-clean for the marketing site and
+           investor narrative page by using Next.js internal links where appropriate.
+*/
 import Image from "next/image";
+import Link from "next/link";
 import styles from "./site-footer.module.css";
 
 const PRODUCT = [
-  { label: "How it works", href: "/#how-it-works" },
-  { label: "Why iMessage", href: "/#why-imessage" },
+  { label: "How it works", href: "/#how" },
+  { label: "Start with a text", href: "/#waitlist" },
   { label: "FAQ", href: "/#faq" },
 ];
 
 const COMPANY = [
-  { label: "About", href: "#" },
   { label: "Contact", href: "mailto:hello@caresupport.com" },
-  { label: "Press", href: "#" },
+  { label: "Press", href: "mailto:hello@caresupport.com?subject=Press%20inquiry" },
 ];
 
 const FAMILIES = [
-  { label: "Aging parents", href: "#" },
-  { label: "Recovery at home", href: "#" },
-  { label: "Long-distance care", href: "#" },
+  { label: "Aging parents", href: "/#how" },
+  { label: "Recovery at home", href: "/#how" },
+  { label: "Long-distance care", href: "/#how" },
 ];
 
 export function SiteFooter() {
@@ -48,7 +54,7 @@ export function SiteFooter() {
           <ul className={styles.navList}>
             {PRODUCT.map((i) => (
               <li key={i.label}>
-                <a href={i.href}>{i.label}</a>
+                <Link href={i.href}>{i.label}</Link>
               </li>
             ))}
           </ul>
@@ -59,7 +65,7 @@ export function SiteFooter() {
           <ul className={styles.navList}>
             {FAMILIES.map((i) => (
               <li key={i.label}>
-                <a href={i.href}>{i.label}</a>
+                <Link href={i.href}>{i.label}</Link>
               </li>
             ))}
           </ul>
@@ -70,18 +76,18 @@ export function SiteFooter() {
           <ul className={styles.navList}>
             {COMPANY.map((i) => (
               <li key={i.label}>
-                <a href={i.href}>{i.label}</a>
+                <Link href={i.href}>{i.label}</Link>
               </li>
             ))}
           </ul>
         </nav>
 
         <div className={styles.authCol}>
-          <a href="/#waitlist" className={`${styles.btn} ${styles.btnPrimary}`}>
-            Join the waitlist
-          </a>
+          <Link href="/#waitlist" className={`${styles.btn} ${styles.btnPrimary}`}>
+            Start with a text
+          </Link>
           <p className={styles.authNote}>
-            Free for the first cohort. We&rsquo;ll be in touch.
+            Free for the first cohort. No app to install.
           </p>
         </div>
       </div>
@@ -89,9 +95,9 @@ export function SiteFooter() {
       <div className={styles.legalStrip}>
         <span>© {year} CareSupport. Coordination, not clinical advice.</span>
         <div>
-          <a href="/privacy">Privacy</a>
+          <Link href="/privacy">Privacy</Link>
           <span className={styles.legalSep}>·</span>
-          <a href="/terms">Terms</a>
+          <Link href="/terms">Terms</Link>
         </div>
       </div>
     </footer>

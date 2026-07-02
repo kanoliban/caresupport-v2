@@ -241,6 +241,32 @@ export async function shareContactCard(
   return { success: status === 204 };
 }
 
+export interface LinqChatInfo {
+  success: boolean;
+  isGroup?: boolean;
+  displayName?: string;
+  error?: unknown;
+}
+
+export async function getChat(
+  chatId: string,
+  apiToken: string,
+): Promise<LinqChatInfo> {
+  const { status, data } = await linqRequest(
+    "GET",
+    `/chats/${chatId}`,
+    apiToken,
+  );
+  if (status >= 200 && status < 300) {
+    return {
+      success: true,
+      isGroup: Boolean(data.is_group),
+      displayName: (data.display_name as string | null) ?? undefined,
+    };
+  }
+  return { success: false, error: data };
+}
+
 export async function addParticipant(
   chatId: string,
   handle: string,

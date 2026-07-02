@@ -1,6 +1,12 @@
+/*
+  web/app/_components/iphone/care-conversation.tsx — Interactive iMessage-style CareSupport conversation demo.
+  Updated: 2026-06-27
+  Purpose: Keep the demo lint-clean while preserving the triggered signup transition
+           used by marketing pages.
+*/
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IPhoneFrame } from "./iphone-frame";
 import { IMessageHeader } from "./imessage-header";
 import { MessageBubble } from "./message-bubble";
@@ -82,11 +88,15 @@ export function CareConversation({
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (triggerSignup) {
+    if (!triggerSignup) return;
+
+    const timer = window.setTimeout(() => {
       setAnimateView(true);
       setView("signup");
       onSignupTriggered?.();
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [triggerSignup, onSignupTriggered]);
 
   useEffect(() => {
@@ -226,15 +236,15 @@ export function CareConversation({
     const timestamp = Date.now();
     setMessages((prev) => [
       ...prev,
-      { id: `submit-${timestamp}`, text: "✅ Joined the waitlist", variant: "sent", showTail: true },
+      { id: `submit-${timestamp}`, text: "I'm ready to get started", variant: "sent", showTail: true },
     ]);
     setTimeout(() => setShowTyping(true), 400);
     setTimeout(() => {
       setShowTyping(false);
       setMessages((prev) => [
         ...prev,
-        { id: `c1-${timestamp}`, text: "You're on the list 🌿", variant: "received", showTail: false },
-        { id: `c2-${timestamp}`, text: "I'll text you when your family's spot opens up.", variant: "received", showTail: true },
+        { id: `c1-${timestamp}`, text: "You're in", variant: "received", showTail: false },
+        { id: `c2-${timestamp}`, text: "Say hi from your phone and we'll set up your family's thread.", variant: "received", showTail: true },
       ]);
     }, 1500);
   }
@@ -294,7 +304,7 @@ export function CareConversation({
                     className="w-full py-[14px] rounded-[12px] text-[17px] font-semibold bg-[#ff5b1f] text-white transition-all duration-200 hover:opacity-90 active:scale-[0.98]"
                     style={FONT_STYLE}
                   >
-                    Join the waitlist
+                    Start with a text
                   </button>
                 </div>
               )}

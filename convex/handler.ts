@@ -23,6 +23,7 @@ import { normalizePhone } from "./mutations";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
   createChat,
+  getChat,
   sendMessage,
   sendMessageSequence,
   splitIntoBubbles,
@@ -38,6 +39,10 @@ import {
   SKILLS_CONTENT,
 } from "./lib/promptContent";
 import { normalizeMemoryCategory } from "./lib/memory";
+import {
+  DOORMAN_SYSTEM_PROMPT,
+  parseDoormanResponse,
+} from "./lib/doorman";
 import {
   refreshAccessToken,
   fetchEventsForRange,
@@ -795,6 +800,57 @@ export const handleMessage = internalAction({
     const isTestEnv = process.env.APP_ENV === "test";
     const isNewUser = !user;
 
+    // Group-chat gate: the runtime only operates one-to-one threads. When a
+    // message arrives from a chat we can't tie to a known 1:1 relationship,
+    // verify the chat type with Linq before onboarding anyone or replying.
+    const chatIsFamiliar =
+      !chatId ||
+      isTestChat(chatId) ||
+      Boolean(careContactReply) ||
+      Boolean(user && user.chatId === chatId);
+    if (!chatIsFamiliar) {
+      const linqToken = process.env.LINQ_API_TOKEN;
+      if (linqToken) {
+        const chatInfo = await getChat(chatId, linqToken);
+        if (chatInfo.success && chatInfo.isGroup) {
+          await ctx.runMutation(internal.groupChats.registerGroupChat, {
+            chatId,
+            displayName: chatInfo.displayName,
+            source: "inbound_detection",
+          });
+          console.log("[handler] ignored group chat message", {
+            chatId,
+            senderPhone,
+          });
+          return {
+            success: false,
+            response: "",
+            error: "group_chat_ignored",
+          };
+        }
+      }
+    }
+
+    // Doorman: unknown senders are screened by a cheap first-contact agent
+    // (no tools, no PHI) instead of being minted straight into a care case.
+    // Graduation creates the user + care case; everything else stays cheap.
+    const doormanEnabled = process.env.DOORMAN_ENABLED === "true";
+    if (
+      !user &&
+      !careContactReply &&
+      doormanEnabled &&
+      !isTestChat(chatId) &&
+      !isTestEnv
+    ) {
+      return await runDoorman(ctx, {
+        senderPhone,
+        messageBody,
+        chatId,
+        startedAt,
+        now,
+      });
+    }
+
     if (!user && !careContactReply) {
       const result = await ctx.runMutation(
         internal.mutations.createOnboardingUserAndCareCase,
@@ -814,6 +870,14 @@ export const handleMessage = internalAction({
         details: { triggerMessage: "self-service onboarding" },
         timestamp: now,
       });
+
+      await ctx.runMutation(internal.waitlist.markConvertedByPhone, {
+        phone: senderPhone,
+        userId: result.userId,
+        timestamp: now,
+      });
+
+      await ctx.runMutation(internal.sentinel.checkUserBurst, {});
     }
 
     if (!user) {
@@ -1179,6 +1243,12 @@ export const handleMessage = internalAction({
 
     const calendarContext = await loadCalendarContext(ctx, userId, timezone, nowDate);
 
+    const founderPhone =
+      process.env.FOUNDER_PHONE ?? process.env.SENTINEL_ALERT_PHONE;
+    const isFounder = Boolean(
+      founderPhone && senderPhone === founderPhone && !careContactReply,
+    );
+
     const systemBlocks = buildSystemBlocks({
       soulContent: SOUL_CONTENT,
       routingContent: ROUTING_CONTENT,
@@ -1209,6 +1279,7 @@ export const handleMessage = internalAction({
       timezoneConfirmed,
       calendarContext: calendarContext ?? undefined,
       isTestEnv: process.env.APP_ENV === "test",
+      isFounder,
     });
     const messages = buildMessages(messageForModel, conversationLog);
 
@@ -1259,6 +1330,10 @@ export const handleMessage = internalAction({
       });
 
       const fallback = runtimeFailureFallback(replyDisplayName);
+      await ctx.scheduler.runAfter(0, internal.sentinel.sendAlert, {
+        alertType: "ai_failure",
+        message: `AI call failed: ${errorMessage.slice(0, 160)} — check API credits and Convex logs.`,
+      });
       await ctx.runMutation(internal.mutations.logAudit, {
         careCaseId,
         userId,
@@ -1273,6 +1348,26 @@ export const handleMessage = internalAction({
         },
         timestamp: Date.now(),
       });
+
+      // Failure budget: apologize once per thread per window, then go quiet.
+      // A chatty failure mode is worse than silence — repeated identical
+      // sends are the exact pattern that gets iMessage numbers flagged.
+      const FALLBACK_WINDOW_MS = 15 * 60 * 1000;
+      const recentlyApologized = await ctx.runQuery(
+        internal.groupChats.hasRecentFallback,
+        {
+          careCaseId,
+          since: Date.now() - FALLBACK_WINDOW_MS,
+          marker: "system issue on my side",
+        },
+      );
+      if (recentlyApologized) {
+        console.log("[handler] suppressed repeat failure fallback", {
+          careCaseId,
+          chatId,
+        });
+        return { success: false, response: "", error: errorMessage };
+      }
 
       const outboundMessageId = await logOutbound(
         ctx,
@@ -1400,6 +1495,29 @@ export const handleMessage = internalAction({
           updates: lessonUpdates,
         });
         memoriesSaved += result.inserted;
+      }
+    }
+
+    if (isFounder && parsed.devFeedback?.length) {
+      for (const item of parsed.devFeedback) {
+        const feedbackId = await ctx.runMutation(
+          internal.devFeedback.recordFeedback,
+          {
+            careCaseId,
+            userId,
+            category: item.category,
+            summary: item.summary,
+            quote: item.quote,
+            sourceMessage: messageBody.slice(0, 1000),
+          },
+        );
+        await ctx.scheduler.runAfter(0, internal.devFeedback.createGithubIssue, {
+          feedbackId,
+          category: item.category,
+          summary: item.summary,
+          quote: item.quote,
+          sourceMessage: messageBody.slice(0, 1000),
+        });
       }
     }
 
@@ -1856,6 +1974,179 @@ export function isValidTimeZone(tz: string | undefined): tz is string {
   } catch {
     return false;
   }
+}
+
+async function runDoorman(
+  ctx: ActionCtx,
+  input: {
+    senderPhone: string;
+    messageBody: string;
+    chatId: string;
+    startedAt: number;
+    now: number;
+  },
+): Promise<HandlerResult> {
+  const { senderPhone, messageBody, chatId, startedAt, now } = input;
+
+  const knownAgent = await ctx.runQuery(internal.doorman.getKnownAgent, {
+    phone: senderPhone,
+  });
+  if (knownAgent) {
+    console.log("[doorman] ignored known agent", { senderPhone });
+    return { success: false, response: "", error: "known_agent_ignored" };
+  }
+
+  const state = await ctx.runMutation(internal.doorman.touchStranger, {
+    phone: senderPhone,
+    chatId: chatId || undefined,
+    messageBody,
+  });
+
+  if (state.status === "agent") {
+    return { success: false, response: "", error: "agent_stranger_ignored" };
+  }
+
+  if (state.velocitySuspicious) {
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "agent",
+    });
+    await ctx.runMutation(internal.doorman.addKnownAgent, {
+      phone: senderPhone,
+      source: "velocity_heuristic",
+    });
+    await ctx.scheduler.runAfter(0, internal.sentinel.sendAlert, {
+      alertType: "user_burst",
+      message: `Doorman flagged ${senderPhone} as an agent (message velocity) and went quiet.`,
+    });
+    console.log("[doorman] velocity flag, going quiet", { senderPhone });
+    return { success: false, response: "", error: "agent_velocity_ignored" };
+  }
+
+  if (state.budgetExhausted) {
+    console.log("[doorman] daily reply budget exhausted", { senderPhone });
+    return { success: false, response: "", error: "doorman_budget_exhausted" };
+  }
+
+  const apiKey =
+    process.env.OPENROUTER_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return { success: false, response: "", error: "doorman_no_api_key" };
+  }
+
+  let verdictText = "";
+  try {
+    const result = await callAnthropic({
+      systemBlocks: [
+        { type: "text", text: DOORMAN_SYSTEM_PROMPT, cacheBreakpoint: true },
+      ],
+      messages: state.transcript.map((t) => ({
+        role: t.role,
+        content: t.content,
+      })),
+      model: "claude-haiku-4-5",
+      apiKey,
+      ...(process.env.OPENROUTER_API_KEY
+        ? { baseURL: "https://openrouter.ai/api" }
+        : {}),
+    });
+    verdictText = result.text;
+  } catch (error) {
+    console.error("[doorman] model call failed; staying quiet", {
+      senderPhone,
+      error: String(error).slice(0, 200),
+    });
+    return { success: false, response: "", error: "doorman_model_failed" };
+  }
+
+  const parsed = parseDoormanResponse(verdictText);
+
+  if (parsed.verdict === "agent") {
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "agent",
+    });
+    await ctx.runMutation(internal.doorman.addKnownAgent, {
+      phone: senderPhone,
+      name: parsed.name,
+      source: "doorman_verdict",
+    });
+    console.log("[doorman] verdict=agent, going quiet", { senderPhone });
+    return { success: false, response: "", error: "agent_verdict_ignored" };
+  }
+
+  if (parsed.verdict === "graduate") {
+    const created = await ctx.runMutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: senderPhone, chatId },
+    );
+    if (parsed.name) {
+      await ctx.runMutation(internal.mutations.updateUserProfile, {
+        userId: created.userId,
+        name: parsed.name,
+      });
+    }
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "graduated",
+      graduatedUserId: created.userId,
+    });
+    await ctx.runMutation(internal.mutations.logAudit, {
+      careCaseId: created.careCaseId,
+      userId: created.userId,
+      event: "user_created",
+      phone: senderPhone,
+      details: { triggerMessage: "doorman graduation" },
+      timestamp: now,
+    });
+    await ctx.runMutation(internal.waitlist.markConvertedByPhone, {
+      phone: senderPhone,
+      userId: created.userId,
+      timestamp: now,
+    });
+    await ctx.runMutation(internal.sentinel.checkUserBurst, {});
+    await ctx.runMutation(internal.mutations.logMessage, {
+      careCaseId: created.careCaseId,
+      userId: created.userId,
+      senderPhone,
+      actorType: "user",
+      direction: "inbound",
+      body: messageBody,
+      timestamp: now,
+    });
+    if (parsed.smsResponse) {
+      await ctx.runMutation(internal.mutations.logMessage, {
+        careCaseId: created.careCaseId,
+        userId: created.userId,
+        senderPhone,
+        actorType: "assistant",
+        direction: "outbound",
+        body: parsed.smsResponse,
+        timestamp: Date.now(),
+      });
+      await sendResponse(chatId, parsed.smsResponse, env(), startedAt);
+    }
+    console.log("[doorman] graduated stranger", {
+      senderPhone,
+      userId: created.userId,
+    });
+    return { success: true, response: parsed.smsResponse };
+  }
+
+  if (parsed.smsResponse) {
+    await ctx.runMutation(internal.doorman.recordDoormanReply, {
+      strangerId: state.strangerId,
+      reply: parsed.smsResponse,
+    });
+    await sendResponse(chatId, parsed.smsResponse, env(), startedAt);
+  }
+  if (parsed.verdict === "dismiss") {
+    await ctx.runMutation(internal.doorman.setStrangerStatus, {
+      strangerId: state.strangerId,
+      status: "dismissed",
+    });
+  }
+  return { success: true, response: parsed.smsResponse };
 }
 
 function env(): { linqApiToken: string; linqPhoneNumber: string } {
