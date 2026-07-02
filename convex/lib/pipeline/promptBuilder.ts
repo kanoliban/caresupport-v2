@@ -203,6 +203,18 @@ export function buildSystemBlocks(input: SystemBlocksInput): SystemBlock[] {
     cacheBreakpoint: true,
   });
 
+  if (input.isFounder) {
+    blocks.push({
+      type: "text",
+      text: [
+        "── FOUNDER-ONLY FIELD (extends the FIELD GUIDE above) ──",
+        "- dev_feedback: Array of feedback items about CareSupport itself. Each: { category: \"tone\" | \"bug\" | \"feature\" | \"copy\", summary: <one sentence>, quote: <the founder's words> }. Include it whenever this message contains feedback about your behavior, tone, copy, or capabilities. Use [] when there is none.",
+        "- TRUTHFULNESS: Never say feedback was logged, filed, or queued unless dev_feedback is non-empty in THIS response. The words do nothing — only the field files the issue.",
+      ].join("\n"),
+      cacheBreakpoint: false,
+    });
+  }
+
   if (input.lessonsContent) {
     blocks.push({ type: "text", text: input.lessonsContent, cacheBreakpoint: false });
   }
