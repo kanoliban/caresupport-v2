@@ -10,6 +10,10 @@
 | 2026-03-06 | self | Assumed `npm run seed` would target prod after deploy. | Override `CONVEX_URL` explicitly when seeding prod; `.env.local` still points at dev. |
 | 2026-03-06 | user | Framed the weak smoke-test answer as a bug in this PR. | Response quality is expected until structured table data is loaded into the prompt; do not treat that as a blocker for this schema PR. |
 
+| 2026-07-02 | user | Called Tomo "Series' AI companion" — they are two separate companies (tomo.ai vs series.so). | Verify company/product relationships with a web search before asserting; the founder knows this landscape. |
+| 2026-07-02 | self | Based a new branch on origin/main; production actually deploys from feature branches via `vercel --prod` (main is stale). | Check which branch the LIVE site serves (probe a route only on the feature branch) before choosing a base. |
+| 2026-07-02 | self | web/app/apple-icon.png silently missing from Vercel deploy. | Root .vercelignore blocks `*.png` except web/public/**; any image outside web/public needs an explicit `!` entry. |
+
 ## User Preferences
 - Keep `docs/agent-log.md` current in `~/caresupport-v2`; the user uses it as shift-change state across agents.
 - For throwaway seed data, do not write migration scripts. Clear the old data and reseed.
@@ -47,3 +51,8 @@
 - Family-scoped data must be queried with `familyId`; phone-only lookups are only for member resolution and specific Linq callback paths called out in repo docs.
 - Approval routing should resolve approvers from family coordinators (`members.by_family` + `isCoordinator`), not from the requester phone.
 - A live dev repro now exists for the approval trust-break: deployed handler acknowledges `YES` with `Change applied` while leaving the approval row `pending`. Treat that as a deployment-state problem until proven otherwise.
+- Deploy order for schema-touching changes: `npx convex deploy` FIRST, then web deploy — mutation args must exist before clients send them.
+- The runtime treats every inbound phone as a 1:1 human by default; the doorman (convex/lib/doorman.ts + runDoorman in handler.ts, DOORMAN_ENABLED env) now screens unknown senders. Group chats are hard-gated via the groupChats registry + Linq is_group check.
+- Founder feedback: Liban texts CareSupport (FOUNDER_PHONE); dev_feedback field files GitHub issues labeled founder-feedback. Sweep them at session start (see CLAUDE.md).
+- Sentinel (convex/sentinel.ts) texts the founder on ai_failure / user_burst / outbound_velocity; thresholds live at the top of that file and mutations.ts logMessage.
+- Incident context for all of the above: docs/incidents/2026-07-02-group-chat.md.
