@@ -79,6 +79,26 @@ export const submitSignup = mutation({
   },
 });
 
+export const markConvertedByPhone = internalMutation({
+  args: {
+    phone: v.string(),
+    userId: v.id("users"),
+    timestamp: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const signup = await ctx.db
+      .query("waitlistSignups")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .first();
+    if (!signup || signup.convertedUserId) return { matched: false };
+    await ctx.db.patch(signup._id, {
+      convertedUserId: args.userId,
+      convertedAt: args.timestamp,
+    });
+    return { matched: true };
+  },
+});
+
 export const getSignupCount = query({
   args: {},
   handler: async (ctx) => {

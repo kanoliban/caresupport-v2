@@ -814,6 +814,12 @@ export const handleMessage = internalAction({
         details: { triggerMessage: "self-service onboarding" },
         timestamp: now,
       });
+
+      await ctx.runMutation(internal.waitlist.markConvertedByPhone, {
+        phone: senderPhone,
+        userId: result.userId,
+        timestamp: now,
+      });
     }
 
     if (!user) {

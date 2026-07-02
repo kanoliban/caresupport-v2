@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
-import { getSignupCount, submitSignup } from "@/lib/waitlist-store";
+import { submitSignup } from "@/lib/waitlist-store";
 
 export const dynamic = "force-dynamic";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-export async function GET() {
-  const count = await getSignupCount();
-  return NextResponse.json({ count });
-}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -53,7 +48,7 @@ export async function POST(request: Request) {
   };
 
   try {
-    const { count } = await submitSignup({
+    await submitSignup({
       email,
       phone,
       userAgent,
@@ -64,7 +59,7 @@ export async function POST(request: Request) {
       utmContent: readField("utmContent", 100),
       landingPath: readField("landingPath", 200),
     });
-    return NextResponse.json({ ok: true, count });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Could not save signup.";

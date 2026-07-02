@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { track } from "@vercel/analytics";
+import { getAttribution } from "@/lib/attribution";
+import { openMessages } from "@/lib/text-cta";
 
 const FONT_STYLE = {
   fontFamily:
@@ -25,10 +28,11 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
     setStatus("loading");
     setError("");
     try {
+      const attribution = getAttribution();
       const response = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, phone }),
+        body: JSON.stringify({ email, phone, ...attribution }),
       });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as {
@@ -36,7 +40,14 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
         };
         throw new Error(data.error ?? "Something went wrong.");
       }
+      track("signup_submitted", {
+        utmSource: attribution.utmSource ?? null,
+        placement: "hero-phone",
+      });
       onSuccess(email);
+      if (openMessages()) {
+        track("text_cta_clicked", { placement: "hero-phone" });
+      }
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Please try again.");
@@ -57,7 +68,7 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
         >
           ← Back
         </button>
-        <h2 className="text-[17px] font-semibold text-black">Join waitlist</h2>
+        <h2 className="text-[17px] font-semibold text-black">Get started</h2>
         <span className="w-[48px]" />
       </div>
 
@@ -68,8 +79,8 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
             Get early access
           </h3>
           <p className="text-[15px] text-[#3c3c43] leading-[20px] mb-[20px]">
-            Drop your email and number. We&rsquo;ll reach out when CareSupport is
-            ready for your family.
+            Drop your email and number, then say hi over text. Onboarding
+            happens right in the thread.
           </p>
 
           <form onSubmit={handleSubmit} noValidate className="space-y-[12px]">
@@ -116,7 +127,7 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
               disabled={status === "loading"}
               className="w-full py-[14px] rounded-[12px] bg-[#ff5b1f] text-white text-[17px] font-semibold active:scale-[0.98] disabled:opacity-60"
             >
-              {status === "loading" ? "Joining…" : "Join waitlist"}
+              {status === "loading" ? "One sec…" : "Start with a text"}
             </button>
           </form>
         </div>

@@ -42,7 +42,6 @@ import type * as mutations from "../mutations.js";
 import type * as outreachAttempts from "../outreachAttempts.js";
 import type * as reminders from "../reminders.js";
 import type * as scheduleItems from "../scheduleItems.js";
-import type * as seed from "../seed.js";
 import type * as testChat from "../testChat.js";
 import type * as users from "../users.js";
 import type * as waitlist from "../waitlist.js";
@@ -88,7 +87,6 @@ declare const fullApi: ApiFromModules<{
   outreachAttempts: typeof outreachAttempts;
   reminders: typeof reminders;
   scheduleItems: typeof scheduleItems;
-  seed: typeof seed;
   testChat: typeof testChat;
   users: typeof users;
   waitlist: typeof waitlist;

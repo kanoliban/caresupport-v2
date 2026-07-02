@@ -1,44 +1,55 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { track } from "@vercel/analytics";
+import { getAttribution } from "@/lib/attribution";
+import { CARESUPPORT_PHONE, canOpenMessages, smsHref } from "@/lib/text-cta";
 import styles from "./waitlist-cta.module.css";
 
 type Status = "idle" | "loading" | "success" | "error";
 
-interface WaitlistCtaProps {
-  initialCount: number;
-}
-
-export function WaitlistCta({ initialCount }: WaitlistCtaProps) {
+export function WaitlistCta() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
-  const [count, setCount] = useState(initialCount);
+  const [showTextFallback, setShowTextFallback] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (status === "loading") return;
     setStatus("loading");
     setMessage("");
+    const attribution = getAttribution();
     try {
       const response = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, phone }),
+        body: JSON.stringify({ email, phone, ...attribution }),
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
-        count?: number;
       };
       if (!response.ok) {
         throw new Error(data.error ?? "Something went wrong.");
       }
-      if (typeof data.count === "number") setCount(data.count);
+      track("signup_submitted", {
+        utmSource: attribution.utmSource ?? null,
+        referrer: attribution.referrer ?? null,
+      });
       setStatus("success");
-      setMessage("You're on the list. We'll text you when it's ready.");
       setEmail("");
       setPhone("");
+      if (CARESUPPORT_PHONE && canOpenMessages()) {
+        setMessage("Check Messages — say hi and we'll take it from there.");
+        track("text_cta_clicked", { utmSource: attribution.utmSource ?? null });
+        window.location.href = smsHref(CARESUPPORT_PHONE);
+      } else if (CARESUPPORT_PHONE) {
+        setMessage("You're in. Text us from your phone to get started:");
+        setShowTextFallback(true);
+      } else {
+        setMessage("You're on the list. We'll text you when it's ready.");
+      }
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "Please try again.");
@@ -46,7 +57,7 @@ export function WaitlistCta({ initialCount }: WaitlistCtaProps) {
   }
 
   return (
-    <section id="waitlist" className={styles.cta} aria-label="Join the waitlist">
+    <section id="waitlist" className={styles.cta} aria-label="Start with a text">
       <p className={styles.line}>For the one who carries the care.</p>
       <p className={styles.lineMuted}>And the family who shares it.</p>
 
@@ -81,13 +92,19 @@ export function WaitlistCta({ initialCount }: WaitlistCtaProps) {
             className={styles.submit}
             disabled={status === "loading"}
           >
-            {status === "loading" ? "Joining…" : "Join waitlist"}
+            {status === "loading" ? "One sec…" : "Start with a text"}
           </button>
         </div>
 
         {status === "success" && (
           <p className={styles.success} role="status">
             {message}
+            {showTextFallback && CARESUPPORT_PHONE && (
+              <>
+                {" "}
+                <a href={smsHref(CARESUPPORT_PHONE)}>{CARESUPPORT_PHONE}</a>
+              </>
+            )}
           </p>
         )}
         {status === "error" && (
@@ -97,14 +114,7 @@ export function WaitlistCta({ initialCount }: WaitlistCtaProps) {
         )}
         {status !== "success" && status !== "error" && (
           <p className={styles.trust} aria-live="polite">
-            {count === 0 ? (
-              "Be the first to join."
-            ) : (
-              <>
-                <span className={styles.count}>{count.toLocaleString()}</span>{" "}
-                {count === 1 ? "person has joined." : "people have joined."}
-              </>
-            )}
+            No app. No dashboard. Onboarding happens in the thread.
           </p>
         )}
       </form>

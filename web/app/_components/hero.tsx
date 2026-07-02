@@ -16,7 +16,7 @@ export function Hero() {
 
         <div className={styles.actions}>
           <a href="#waitlist" className={styles.btnPrimary}>
-            Join the waitlist
+            Start with a text
           </a>
           <a href="#how" className={styles.btnGhost}>
             See how it works
