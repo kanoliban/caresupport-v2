@@ -58,6 +58,7 @@ export interface SystemBlocksInput {
   timezoneConfirmed?: boolean;
   calendarContext?: string;
   isTestEnv?: boolean;
+  isFounder?: boolean;
 }
 
 export interface MemoryUpdate {
@@ -169,6 +170,14 @@ export interface OutreachRequest {
   approvalPrompt?: string;
 }
 
+export type DevFeedbackCategory = "tone" | "bug" | "feature" | "copy";
+
+export interface DevFeedbackItem {
+  category: DevFeedbackCategory;
+  summary: string;
+  quote?: string;
+}
+
 export interface AgentResponse {
   smsResponse: string;
   internalNotes: string;
@@ -185,4 +194,5 @@ export interface AgentResponse {
   careContactUpdates?: CareContactUpdate[];
   coordinationEventUpdates?: CoordinationEventUpdate[];
   outreachRequests?: OutreachRequest[];
+  devFeedback?: DevFeedbackItem[];
 }

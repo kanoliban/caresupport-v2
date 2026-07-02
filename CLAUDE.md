@@ -145,6 +145,23 @@ Avoid as product identity:
 - care journal
 - generic personal assistant
 
+## Founder Feedback Loop
+
+Liban texts feedback directly to CareSupport (founder mode: his number is
+`FOUNDER_PHONE` in Convex env). The runtime captures it via the
+`dev_feedback` structured field and files each item as a GitHub issue
+labeled `founder-feedback`.
+
+**At the start of every session in this repo, sweep the queue:**
+
+```bash
+gh issue list --repo kanoliban/caresupport-v2 --label founder-feedback --state open
+```
+
+Triage anything open: propose fixes, turn them into PRs, and close issues
+with the commits that resolve them. These issues are the founder's direct
+voice — treat them as the top of the backlog.
+
 ## Verification
 
 Common checks:

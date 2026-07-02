@@ -1219,6 +1219,12 @@ export const handleMessage = internalAction({
 
     const calendarContext = await loadCalendarContext(ctx, userId, timezone, nowDate);
 
+    const founderPhone =
+      process.env.FOUNDER_PHONE ?? process.env.SENTINEL_ALERT_PHONE;
+    const isFounder = Boolean(
+      founderPhone && senderPhone === founderPhone && !careContactReply,
+    );
+
     const systemBlocks = buildSystemBlocks({
       soulContent: SOUL_CONTENT,
       routingContent: ROUTING_CONTENT,
@@ -1249,6 +1255,7 @@ export const handleMessage = internalAction({
       timezoneConfirmed,
       calendarContext: calendarContext ?? undefined,
       isTestEnv: process.env.APP_ENV === "test",
+      isFounder,
     });
     const messages = buildMessages(messageForModel, conversationLog);
 
@@ -1464,6 +1471,29 @@ export const handleMessage = internalAction({
           updates: lessonUpdates,
         });
         memoriesSaved += result.inserted;
+      }
+    }
+
+    if (isFounder && parsed.devFeedback?.length) {
+      for (const item of parsed.devFeedback) {
+        const feedbackId = await ctx.runMutation(
+          internal.devFeedback.recordFeedback,
+          {
+            careCaseId,
+            userId,
+            category: item.category,
+            summary: item.summary,
+            quote: item.quote,
+            sourceMessage: messageBody.slice(0, 1000),
+          },
+        );
+        await ctx.scheduler.runAfter(0, internal.devFeedback.createGithubIssue, {
+          feedbackId,
+          category: item.category,
+          summary: item.summary,
+          quote: item.quote,
+          sourceMessage: messageBody.slice(0, 1000),
+        });
       }
     }
 

@@ -473,6 +473,18 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user_provider", ["userId", "provider"]),
 
+  devFeedback: defineTable({
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    category: v.string(),
+    summary: v.string(),
+    quote: v.optional(v.string()),
+    sourceMessage: v.optional(v.string()),
+    githubIssueUrl: v.optional(v.string()),
+    githubIssueNumber: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_created_at", ["createdAt"]),
+
   sentinelAlerts: defineTable({
     alertType: v.string(),
     firedAt: v.number(),

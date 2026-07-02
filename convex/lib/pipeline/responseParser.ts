@@ -27,7 +27,33 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   coordination_event_updates: "coordinationEventUpdates",
   outreach_requests: "outreachRequests",
   target_message: "targetMessage",
+  dev_feedback: "devFeedback",
 };
+
+const DEV_FEEDBACK_CATEGORIES = new Set(["tone", "bug", "feature", "copy"]);
+
+function normalizeDevFeedback(value: unknown): AgentResponse["devFeedback"] {
+  if (!Array.isArray(value)) return undefined;
+  const items: NonNullable<AgentResponse["devFeedback"]> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const summary = String(record.summary ?? "").trim();
+    if (!summary) continue;
+    const rawCategory = String(record.category ?? "").trim().toLowerCase();
+    items.push({
+      category: (DEV_FEEDBACK_CATEGORIES.has(rawCategory)
+        ? rawCategory
+        : "feature") as NonNullable<AgentResponse["devFeedback"]>[number]["category"],
+      summary,
+      quote:
+        typeof record.quote === "string" && record.quote.trim()
+          ? record.quote.trim()
+          : undefined,
+    });
+  }
+  return items.length > 0 ? items : undefined;
+}
 
 function normalizeMemoryUpdates(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -254,6 +280,7 @@ export function normalizeResponse(parsed: Record<string, unknown>): AgentRespons
     careContactUpdates: normalizeCareContactUpdates(result.careContactUpdates),
     coordinationEventUpdates: normalizeCoordinationEventUpdates(result.coordinationEventUpdates),
     outreachRequests: normalizeOutreachRequests(result.outreachRequests),
+    devFeedback: normalizeDevFeedback(result.devFeedback),
   };
 }
 

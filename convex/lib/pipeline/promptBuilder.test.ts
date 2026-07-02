@@ -218,3 +218,19 @@ describe("systemBlocksToString", () => {
     ).toBe("Block 1\n\nBlock 2");
   });
 });
+
+describe("founder mode", () => {
+  it("includes the founder block when isFounder is true", () => {
+    const blocks = buildSystemBlocks(makeInput({ isFounder: true }));
+    const text = systemBlocksToString(blocks);
+    expect(text).toContain("── FOUNDER MODE ──");
+    expect(text).toContain("dev_feedback");
+  });
+
+  it("omits the founder block by default", () => {
+    const blocks = buildSystemBlocks(makeInput());
+    const text = systemBlocksToString(blocks);
+    expect(text).not.toContain("FOUNDER MODE");
+    expect(text).not.toContain("dev_feedback");
+  });
+});
