@@ -14,6 +14,8 @@
 | 2026-07-02 | self | Based a new branch on origin/main; production actually deploys from feature branches via `vercel --prod` (main is stale). | Check which branch the LIVE site serves (probe a route only on the feature branch) before choosing a base. |
 | 2026-07-02 | self | web/app/apple-icon.png silently missing from Vercel deploy. | Root .vercelignore blocks `*.png` except web/public/**; any image outside web/public needs an explicit `!` entry. |
 
+| 2026-07-02 | incident | CLI `vercel --prod` deploys were silently replaced when the founder pushed a docs commit to main (Vercel productionBranch=main built stale code). | main is the ONLY deploy path: git push origin main. Never `vercel deploy --prod`. Ignored-build-step skips docs-only commits. |
+
 ## User Preferences
 - Keep `docs/agent-log.md` current in `~/caresupport-v2`; the user uses it as shift-change state across agents.
 - For throwaway seed data, do not write migration scripts. Clear the old data and reseed.

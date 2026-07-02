@@ -162,6 +162,14 @@ Triage anything open: propose fixes, turn them into PRs, and close issues
 with the commits that resolve them. These issues are the founder's direct
 voice — treat them as the top of the backlog.
 
+## Deploying
+
+**`main` is the single source of truth. Production deploys ONLY via `git push origin main`** (Vercel git integration, project `caresupport`, root `web/`). Never use `vercel deploy --prod` — CLI deploys get silently clobbered by the next git push to main (this caused the 2026-07-02 rollback).
+
+- Convex schema/function changes: `npx convex deploy -y` BEFORE pushing web code that depends on them.
+- Docs-only commits to main do not trigger site rebuilds (Vercel ignored-build-step: `git diff --quiet HEAD^ HEAD -- . ../convex`).
+- Feature branches are fine for development, but land them in main to ship — do not leave production running from an unmerged branch.
+
 ## Verification
 
 Common checks:
