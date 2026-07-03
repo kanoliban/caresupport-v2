@@ -50,6 +50,7 @@ import type * as sentinel from "../sentinel.js";
 import type * as testChat from "../testChat.js";
 import type * as users from "../users.js";
 import type * as waitlist from "../waitlist.js";
+import type * as welcome from "../welcome.js";
 
 import type {
   ApiFromModules,
@@ -100,6 +101,7 @@ declare const fullApi: ApiFromModules<{
   testChat: typeof testChat;
   users: typeof users;
   waitlist: typeof waitlist;
+  welcome: typeof welcome;
 }>;
 
 /**
