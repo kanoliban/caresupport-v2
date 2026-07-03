@@ -545,6 +545,7 @@ export default defineSchema({
     landingPath: v.optional(v.string()),
     convertedUserId: v.optional(v.id("users")),
     convertedAt: v.optional(v.number()),
+    welcomedAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_phone", ["phone"])
