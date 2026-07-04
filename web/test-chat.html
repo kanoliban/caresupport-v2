@@ -149,7 +149,12 @@
     }
 
     function subscribe() {
-      if (unsubscribe) unsubscribe();
+      // Null out after tearing down — Convex's unsubscribe isn't idempotent,
+      // and calling a stale one again throws "numSubscribers" of undefined.
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
       if (!careCaseId) return;
       unsubscribe = client.onUpdate(listFn, { careCaseId }, render);
     }
