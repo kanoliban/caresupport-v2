@@ -22,6 +22,11 @@ import type {
 import { normalizePhone } from "./mutations";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
+  flushTracing,
+  scoreTrace,
+  type CareTraceContext,
+} from "./lib/observability";
+import {
   createChat,
   getChat,
   sendMessage,
@@ -775,6 +780,10 @@ export const handleMessage = internalAction({
     timezone: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<HandlerResult> => {
+    // Guaranteed Langfuse flush on every exit path — Convex freezes the Node
+    // action between invocations, so buffered spans must be force-flushed here
+    // or they are lost. No-op when tracing is disabled.
+    try {
     const startedAt = Date.now();
     const now = startedAt;
     const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
@@ -1291,7 +1300,25 @@ export const handleMessage = internalAction({
       );
     }
 
+    // Langfuse trace context: groups by careCaseId (session) and attributes to
+    // the coordinator (user). Input is the raw inbound message only.
+    const careTrace: CareTraceContext = {
+      name: "care-response",
+      userId,
+      sessionId: careCaseId,
+      tags: [
+        `intent:${intent}`,
+        `tier:${routeResult.tier}`,
+        careContactReply ? "contact-reply" : "coordinator",
+        ...(isFounder ? ["founder"] : []),
+      ],
+      input: messageBody,
+    };
+
     let parsed: AgentResponse;
+    // Langfuse trace id for the main response — used to attach founder-feedback
+    // scores to the exact trace that captured the feedback.
+    let careResponseTraceId: string | undefined;
     try {
       const aiResult = await callAnthropic({
         systemBlocks,
@@ -1299,7 +1326,10 @@ export const handleMessage = internalAction({
         model: routeResult.model,
         apiKey,
         ...(openRouterKey ? { baseURL: "https://openrouter.ai/api" } : {}),
+        trace: careTrace,
+        observationName: "care-response",
       });
+      careResponseTraceId = aiResult.langfuseTraceId;
       if (/calendar_updates/.test(aiResult.text)) {
         console.log("[calendar] RAW model text:", aiResult.text.slice(0, 900));
       }
@@ -1317,6 +1347,8 @@ export const handleMessage = internalAction({
           model: routeResult.model,
           apiKey,
           ...(openRouterKey ? { baseURL: "https://openrouter.ai/api" } : {}),
+          trace: { ...careTrace, name: "care-response-repair", tags: [...careTrace.tags ?? [], "repair"] },
+          observationName: "care-response-repair",
         });
         parsed = extractJson(repairResult.text);
       }
@@ -1518,6 +1550,18 @@ export const handleMessage = internalAction({
           quote: item.quote,
           sourceMessage: messageBody.slice(0, 1000),
         });
+        // Also record the founder's feedback as a score on this trace, so it
+        // shows up as filterable quality data linked to the model call that
+        // prompted it (categorical by feedback type). Guarded; never throws.
+        if (careResponseTraceId) {
+          await scoreTrace({
+            traceId: careResponseTraceId,
+            name: "founder-feedback",
+            value: item.category,
+            dataType: "CATEGORICAL",
+            comment: item.summary,
+          });
+        }
       }
     }
 
@@ -1953,6 +1997,9 @@ export const handleMessage = internalAction({
       lessonsLearned: parsed.selfCorrections.length,
       memoriesSaved,
     };
+    } finally {
+      await flushTracing();
+    }
   },
 });
 
@@ -2049,6 +2096,15 @@ async function runDoorman(
       ...(process.env.OPENROUTER_API_KEY
         ? { baseURL: "https://openrouter.ai/api" }
         : {}),
+      // Stranger screening — session keyed on the (non-PII) stranger id, not
+      // the phone number, so masking doesn't collapse all strangers together.
+      trace: {
+        name: "doorman-check",
+        sessionId: `stranger:${state.strangerId}`,
+        tags: ["feature:doorman"],
+        input: messageBody,
+      },
+      observationName: "doorman-check",
     });
     verdictText = result.text;
   } catch (error) {

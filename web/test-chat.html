@@ -48,6 +48,9 @@
     <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:4px;cursor:pointer" title="Send no timezone, like an iMessage user — lets you test the ask-for-location flow">
       <input type="checkbox" id="simSms" /> simulate iMessage (no tz)
     </label>
+    <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:4px;cursor:pointer" title="Send as the founder (sessionId = FOUNDER_PHONE), so dev_feedback + founder-feedback scores fire">
+      <input type="checkbox" id="founderMode" /> 👑 founder
+    </label>
     <button id="resetBtn" title="Start a fresh synthetic user">New session</button>
   </header>
   <div id="log"><div class="empty">Say hi to start a new care thread on the dev deployment.</div></div>
@@ -81,16 +84,36 @@
 
     const client = new ConvexClient(CONVEX_URL);
 
+    // Founder mode sends as FOUNDER_PHONE so the handler's isFounder gate trips
+    // and dev_feedback / founder-feedback scoring fire. The client can't read
+    // the server env var, so the value is configurable (?founder= or
+    // window.FOUNDER_PHONE from convex-config.js) and defaults to the dev
+    // synthetic number. Keep this in sync with FOUNDER_PHONE on the deployment.
+    const FOUNDER_PHONE =
+      new URLSearchParams(location.search).get("founder") ||
+      window.FOUNDER_PHONE ||
+      "+15550000001";
+
     // Stable synthetic "phone" per browser session.
     function newSession() {
       return "+1555" + Math.floor(1000000 + Math.random() * 8999999);
     }
-    let sessionId = localStorage.getItem("cs_test_session");
-    if (!sessionId) {
-      sessionId = newSession();
-      localStorage.setItem("cs_test_session", sessionId);
+
+    let founderMode = localStorage.getItem("cs_test_founder") === "1";
+    // Separate storage per mode so the founder thread and a normal test user
+    // don't clobber each other's session / care case.
+    const sessionKey = () => (founderMode ? "cs_test_session_founder" : "cs_test_session");
+    const careCaseKey = () => (founderMode ? "cs_test_carecase_founder" : "cs_test_carecase");
+
+    let sessionId, careCaseId;
+    function loadSession() {
+      sessionId = founderMode
+        ? FOUNDER_PHONE
+        : localStorage.getItem(sessionKey()) || newSession();
+      localStorage.setItem(sessionKey(), sessionId);
+      careCaseId = localStorage.getItem(careCaseKey()) || null;
     }
-    let careCaseId = localStorage.getItem("cs_test_carecase") || null;
+    loadSession();
 
     const logEl = document.getElementById("log");
     const inputEl = document.getElementById("input");
@@ -163,7 +186,7 @@
         const res = await client.action(sendFn, payload);
         if (res.careCaseId && res.careCaseId !== careCaseId) {
           careCaseId = res.careCaseId;
-          localStorage.setItem("cs_test_carecase", careCaseId);
+          localStorage.setItem(careCaseKey(), careCaseId);
           subscribe();
         }
       } catch (err) {
@@ -176,9 +199,36 @@
     });
 
     document.getElementById("resetBtn").addEventListener("click", () => {
-      localStorage.removeItem("cs_test_session");
-      localStorage.removeItem("cs_test_carecase");
+      // Only reset the active mode's thread.
+      localStorage.removeItem(sessionKey());
+      localStorage.removeItem(careCaseKey());
       location.reload();
+    });
+
+    // Founder-mode toggle: switch which synthetic sender we send as, swap to
+    // that mode's thread, and make the state obvious in the header.
+    const founderEl = document.getElementById("founderMode");
+    function updateFounderChip() {
+      const chip = document.getElementById("envChip");
+      chip.textContent = `test chat · dev · ${TIMEZONE}` + (founderMode ? " · 👑 FOUNDER" : "");
+      chip.style.background = founderMode ? "#ffd7d7" : "#ffefc2";
+      chip.style.color = founderMode ? "#8a1c1c" : "#7a5c00";
+    }
+    founderEl.checked = founderMode;
+    updateFounderChip();
+    founderEl.addEventListener("change", () => {
+      founderMode = founderEl.checked;
+      localStorage.setItem("cs_test_founder", founderMode ? "1" : "0");
+      loadSession();
+      updateFounderChip();
+      logEl.innerHTML =
+        '<div class="empty">' +
+        (founderMode
+          ? "Founder mode — send feedback about CareSupport (tone/bug/feature/copy) to trigger dev_feedback + a founder-feedback score."
+          : "Say hi to start a new care thread on the dev deployment.") +
+        "</div>";
+      subscribe();
+      inputEl.focus();
     });
   </script>
 </body>
