@@ -22,7 +22,7 @@ export function WaitlistCta() {
     setMessage("");
     const attribution = getAttribution();
     try {
-      const response = await fetch("/api/waitlist", {
+      const response = await fetch("/api/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, phone, ...attribution }),

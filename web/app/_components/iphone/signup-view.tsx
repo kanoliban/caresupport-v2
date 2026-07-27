@@ -29,7 +29,7 @@ export function SignupView({ onBack, onSuccess, animate = false }: SignupViewPro
     setError("");
     try {
       const attribution = getAttribution();
-      const response = await fetch("/api/waitlist", {
+      const response = await fetch("/api/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, phone, ...attribution }),
