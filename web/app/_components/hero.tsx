@@ -15,7 +15,7 @@ export function Hero() {
         </p>
 
         <div className={styles.actions}>
-          <a href="#waitlist" className={styles.btnPrimary}>
+          <a href="#start" className={styles.btnPrimary}>
             Start with a text
           </a>
           <a href="#how" className={styles.btnGhost}>
