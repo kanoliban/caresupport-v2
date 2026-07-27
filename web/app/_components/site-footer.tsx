@@ -10,7 +10,7 @@ import styles from "./site-footer.module.css";
 
 const PRODUCT = [
   { label: "How it works", href: "/#how" },
-  { label: "Start with a text", href: "/#waitlist" },
+  { label: "Start with a text", href: "/#start" },
   { label: "FAQ", href: "/#faq" },
 ];
 
@@ -83,7 +83,7 @@ export function SiteFooter() {
         </nav>
 
         <div className={styles.authCol}>
-          <Link href="/#waitlist" className={`${styles.btn} ${styles.btnPrimary}`}>
+          <Link href="/#start" className={`${styles.btn} ${styles.btnPrimary}`}>
             Start with a text
           </Link>
           <p className={styles.authNote}>

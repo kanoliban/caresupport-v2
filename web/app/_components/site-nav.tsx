@@ -14,7 +14,7 @@ import styles from "./site-nav.module.css";
 const MENU_ITEMS: { id: string; label: string; href: string; primary?: boolean }[] = [
   { id: "how", label: "How it works", href: "/#how" },
   { id: "faq", label: "FAQ", href: "/#faq" },
-  { id: "join", label: "Start with a text", href: "/#waitlist", primary: true },
+  { id: "join", label: "Start with a text", href: "/#start", primary: true },
 ];
 
 export function SiteNav() {
@@ -138,7 +138,7 @@ export function SiteNav() {
               <div className={styles.meta}>
                 <span>Care coordination in iMessage</span>
                 <span className={styles.metaCenter}>Private beta · cohort 1</span>
-                <Link href="/#waitlist" className={styles.metaCta} onClick={close}>
+                <Link href="/#start" className={styles.metaCta} onClick={close}>
                   <span className={styles.metaDot} aria-hidden />
                   Start with a text →
                 </Link>

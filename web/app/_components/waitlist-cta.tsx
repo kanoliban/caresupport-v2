@@ -57,7 +57,7 @@ export function WaitlistCta() {
   }
 
   return (
-    <section id="waitlist" className={styles.cta} aria-label="Start with a text">
+    <section id="start" className={styles.cta} aria-label="Start with a text">
       <p className={styles.line}>For the one who carries the care.</p>
       <p className={styles.lineMuted}>And the family who shares it.</p>
 
