@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
     // Pinning to web/ alone made `@convex/*` aliases unresolvable.
     root: path.join(__dirname, ".."),
   },
+  async redirects() {
+    return [
+      // 307, not 308: docs/VISION.md intends /start to become a real
+      // onboarding page. A permanent redirect would be cached by browsers
+      // and search engines and would outlive this anchor.
+      { source: "/start", destination: "/#start", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

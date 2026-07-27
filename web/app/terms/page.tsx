@@ -27,7 +27,7 @@ export default function TermsPage() {
     >
       <LegalSection index="01" title="Agreement">
         <p>
-          By joining the waitlist, texting with CareSupport, or otherwise using
+          By signing up, texting with CareSupport, or otherwise using
           the service, you agree to these Terms of Service and our{" "}
           <a href="/privacy">Privacy Policy</a>. If you do not agree, please do
           not use the service.

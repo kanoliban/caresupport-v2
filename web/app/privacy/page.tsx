@@ -39,9 +39,8 @@ export default function PrivacyPage() {
         <ul>
           <li>
             <span>
-              <strong>Waitlist and contact details.</strong> When you join the
-              waitlist or sign up, we collect your name, email address, and
-              phone number.
+              <strong>Signup and contact details.</strong> When you sign up, we
+              collect your name, email address, and phone number.
             </span>
           </li>
           <li>
