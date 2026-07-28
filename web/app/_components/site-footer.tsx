@@ -14,15 +14,13 @@ const PRODUCT = [
   { label: "FAQ", href: "/#faq" },
 ];
 
-const COMPANY = [
-  { label: "Contact", href: "mailto:hello@caresupport.com" },
-  { label: "Press", href: "mailto:hello@caresupport.com?subject=Press%20inquiry" },
-];
+const CONTACT_EMAIL = "liban@caresupport.com";
 
-const FAMILIES = [
-  { label: "Aging parents", href: "/#how" },
-  { label: "Recovery at home", href: "/#how" },
-  { label: "Long-distance care", href: "/#how" },
+const COMPANY = [
+  {
+    label: "Press",
+    href: `mailto:${CONTACT_EMAIL}?subject=Press%20inquiry`,
+  },
 ];
 
 export function SiteFooter() {
@@ -60,23 +58,12 @@ export function SiteFooter() {
           </ul>
         </nav>
 
-        <nav className={styles.navCol} aria-label="For families">
-          <h3 className={styles.navTitle}>For families</h3>
-          <ul className={styles.navList}>
-            {FAMILIES.map((i) => (
-              <li key={i.label}>
-                <Link href={i.href}>{i.label}</Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
         <nav className={styles.navCol} aria-label="Company">
           <h3 className={styles.navTitle}>Company</h3>
           <ul className={styles.navList}>
             {COMPANY.map((i) => (
               <li key={i.label}>
-                <Link href={i.href}>{i.label}</Link>
+                <a href={i.href}>{i.label}</a>
               </li>
             ))}
           </ul>
@@ -86,6 +73,12 @@ export function SiteFooter() {
           <Link href="/#start" className={`${styles.btn} ${styles.btnPrimary}`}>
             Start with a text
           </Link>
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            className={`${styles.btn} ${styles.btnGhost}`}
+          >
+            Email us
+          </a>
           <p className={styles.authNote}>
             Free for the first cohort. No app to install.
           </p>
