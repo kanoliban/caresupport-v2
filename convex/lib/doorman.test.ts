@@ -46,6 +46,21 @@ describe("parseDoormanResponse", () => {
     );
     expect(result.verdict).toBe("continue");
   });
+
+  it("parses a flag verdict with a name", () => {
+    const result = parseDoormanResponse(
+      '{"sms_response": "The team will see this and follow up.", "verdict": "flag", "name": "Jeanette"}',
+    );
+    expect(result.verdict).toBe("flag");
+    expect(result.name).toBe("Jeanette");
+  });
+
+  it("maps the retired dismiss verdict to continue", () => {
+    const result = parseDoormanResponse(
+      '{"sms_response": "Take care!", "verdict": "dismiss"}',
+    );
+    expect(result.verdict).toBe("continue");
+  });
 });
 
 describe("isVelocitySuspicious", () => {
@@ -69,5 +84,20 @@ describe("doorman prompt", () => {
   it("keeps first contact toolless and honest", () => {
     expect(DOORMAN_SYSTEM_PROMPT).toContain("NO access to care records");
     expect(DOORMAN_SYSTEM_PROMPT).toContain("verdict");
+  });
+
+  it("can flag a human to the team but never dismiss one", () => {
+    expect(DOORMAN_SYSTEM_PROMPT).toContain('"flag"');
+    expect(DOORMAN_SYSTEM_PROMPT).not.toContain('"dismiss"');
+  });
+
+  it("graduates on clear intent without another screening question", () => {
+    expect(DOORMAN_SYSTEM_PROMPT).toContain("THIS turn");
+  });
+
+  it("only promises a handoff on the flag verdict", () => {
+    expect(DOORMAN_SYSTEM_PROMPT).toContain(
+      "Never promise a handoff on any other verdict",
+    );
   });
 });

@@ -2034,12 +2034,23 @@ async function runDoorman(
     return { success: false, response: "", error: "doorman_no_api_key" };
   }
 
+  const systemBlocks: { type: "text"; text: string; cacheBreakpoint: boolean }[] =
+    [{ type: "text", text: DOORMAN_SYSTEM_PROMPT, cacheBreakpoint: true }];
+  if (state.signup) {
+    const signedUp = new Date(state.signup.submittedAt).toISOString().slice(0, 10);
+    systemBlocks.push({
+      type: "text",
+      text: `EXPECTED GUEST: this number matches a caresupport.com signup${
+        state.signup.fullName ? ` from ${state.signup.fullName}` : ""
+      } (${signedUp}). They already asked to be here — treat them as invited and graduate on any confirmed intent.`,
+      cacheBreakpoint: false,
+    });
+  }
+
   let verdictText = "";
   try {
     const result = await callAnthropic({
-      systemBlocks: [
-        { type: "text", text: DOORMAN_SYSTEM_PROMPT, cacheBreakpoint: true },
-      ],
+      systemBlocks,
       messages: state.transcript.map((t) => ({
         role: t.role,
         content: t.content,
@@ -2140,11 +2151,19 @@ async function runDoorman(
     });
     await sendResponse(chatId, parsed.smsResponse, env(), startedAt);
   }
-  if (parsed.verdict === "dismiss") {
+  if (parsed.verdict === "flag") {
     await ctx.runMutation(internal.doorman.setStrangerStatus, {
       strangerId: state.strangerId,
-      status: "dismissed",
+      status: "flagged",
     });
+    if (state.status !== "flagged") {
+      const who = parsed.name ? `${parsed.name} (${senderPhone})` : senderPhone;
+      await ctx.scheduler.runAfter(0, internal.sentinel.sendAlert, {
+        alertType: "doorman_flag",
+        message: `Doorman flagged ${who} for you: "${messageBody.slice(0, 300)}" — they were told the team will follow up. Reply at ${senderPhone}.`,
+      });
+      console.log("[doorman] verdict=flag, founder alerted", { senderPhone });
+    }
   }
   return { success: true, response: parsed.smsResponse };
 }

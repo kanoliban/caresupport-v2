@@ -9,6 +9,10 @@ const COOLDOWNS_MS: Record<string, number> = {
   ai_failure: 30 * 60 * 1000,
   user_burst: 60 * 60 * 1000,
   outbound_velocity: 30 * 60 * 1000,
+  // Zero cooldown: each flag/digest concerns a different person or day, so
+  // type-level dedupe would swallow legitimate alerts.
+  doorman_flag: 0,
+  doorman_digest: 0,
   test: 0,
 };
 

@@ -19,6 +19,7 @@ import type * as coordinationEvents from "../coordinationEvents.js";
 import type * as crons from "../crons.js";
 import type * as devFeedback from "../devFeedback.js";
 import type * as doorman from "../doorman.js";
+import type * as doormanSweep from "../doormanSweep.js";
 import type * as groupChats from "../groupChats.js";
 import type * as handler from "../handler.js";
 import type * as http from "../http.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   devFeedback: typeof devFeedback;
   doorman: typeof doorman;
+  doormanSweep: typeof doormanSweep;
   groupChats: typeof groupChats;
   handler: typeof handler;
   http: typeof http;

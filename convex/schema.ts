@@ -479,7 +479,10 @@ export default defineSchema({
     status: v.union(
       v.literal("screening"),
       v.literal("graduated"),
+      // "dismissed" is retired — the runtime no longer produces it, but
+      // pre-2026-07 rows still carry it and must keep validating.
       v.literal("dismissed"),
+      v.literal("flagged"),
       v.literal("agent"),
     ),
     transcript: v.array(
@@ -494,8 +497,11 @@ export default defineSchema({
     replyCountResetAt: v.number(),
     firstContactAt: v.number(),
     lastContactAt: v.number(),
+    nudgedAt: v.optional(v.number()),
     graduatedUserId: v.optional(v.id("users")),
-  }).index("by_phone", ["phone"]),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_status_last_contact", ["status", "lastContactAt"]),
 
   knownAgents: defineTable({
     phone: v.string(),
