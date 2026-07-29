@@ -2447,6 +2447,122 @@ export const resetRobScenarioDryRunState = internalMutation({
   },
 });
 
+const USER_CASCADE_BATCH = 1000;
+
+const USER_CASCADE_TABLES = [
+  "messages",
+  "medications",
+  "scheduleItems",
+  "memoryEntries",
+  "careClaims",
+  "careContacts",
+  "coordinationEvents",
+  "outreachAttempts",
+  "auditLogs",
+] as const;
+
+export const deleteUserCascadeBatch = internalMutation({
+  args: { phone: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ done: boolean; deleted: Record<string, number> }> => {
+    const deleted: Record<string, number> = {};
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .first();
+    if (!user) return { done: true, deleted };
+
+    let budget = USER_CASCADE_BATCH;
+    const careCaseId = user.careCaseId;
+    if (careCaseId) {
+      for (const table of USER_CASCADE_TABLES) {
+        if (budget <= 0) return { done: false, deleted };
+        const rows = await ctx.db
+          .query(table)
+          .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
+          .take(budget);
+        for (const row of rows) {
+          await ctx.db.delete(row._id);
+        }
+        if (rows.length > 0) deleted[table] = rows.length;
+        budget -= rows.length;
+      }
+      if (budget <= 0) return { done: false, deleted };
+    }
+
+    const accounts = await ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_user_provider", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const row of accounts) {
+      await ctx.db.delete(row._id);
+    }
+    if (accounts.length > 0) deleted.connectedAccounts = accounts.length;
+
+    const strangers = await ctx.db
+      .query("strangers")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .collect();
+    for (const row of strangers) {
+      await ctx.db.delete(row._id);
+    }
+    if (strangers.length > 0) deleted.strangers = strangers.length;
+
+    const signups = await ctx.db
+      .query("waitlistSignups")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .collect();
+    for (const row of signups) {
+      await ctx.db.delete(row._id);
+    }
+    if (signups.length > 0) deleted.waitlistSignups = signups.length;
+
+    if (careCaseId) {
+      const careCase = await ctx.db.get(careCaseId);
+      if (careCase) {
+        await ctx.db.delete(careCaseId);
+        deleted.careCases = 1;
+      }
+    }
+    await ctx.db.delete(user._id);
+    deleted.users = 1;
+    return { done: true, deleted };
+  },
+});
+
+/**
+ * Full account reset by phone: user, care case, every case-scoped record,
+ * connected accounts, stranger/doorman state, and waitlist signups. Batched
+ * so months of messages don't blow the per-transaction write limit. Built
+ * for founder full-cycle testing; back up first — this is irreversible.
+ */
+export const resetUserByPhone = internalAction({
+  args: { phone: v.string(), confirm: v.literal("DELETE") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ passes: number; deleted: Record<string, number> }> => {
+    const totals: Record<string, number> = {};
+    let passes = 0;
+    for (;;) {
+      passes += 1;
+      const result: { done: boolean; deleted: Record<string, number> } =
+        await ctx.runMutation(internal.admin.deleteUserCascadeBatch, {
+          phone: args.phone,
+        });
+      for (const [table, count] of Object.entries(result.deleted)) {
+        totals[table] = (totals[table] ?? 0) + count;
+      }
+      if (result.done) return { passes, deleted: totals };
+      if (passes > 100) {
+        throw new Error("deleteUserCascadeBatch did not converge");
+      }
+    }
+  },
+});
+
 export const clearAppData = internalMutation({
   args: {},
   handler: async (ctx) => {
