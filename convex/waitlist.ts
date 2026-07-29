@@ -1,5 +1,7 @@
 import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { AUTO_WELCOME_DELAY_MS } from "./welcome";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -73,6 +75,15 @@ export const submitSignup = mutation({
         landingPath: args.landingPath,
       });
     }
+
+    // If they never send the "Start with a text" message themselves,
+    // CareSupport reaches out first. autoWelcome's guards make this a no-op
+    // for anyone who converted, was welcomed, or is already texting.
+    await ctx.scheduler.runAfter(
+      AUTO_WELCOME_DELAY_MS,
+      internal.welcome.autoWelcome,
+      { email },
+    );
 
     const rows = await ctx.db.query("waitlistSignups").collect();
     return { ok: true, count: rows.length };
