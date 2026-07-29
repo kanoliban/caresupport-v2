@@ -1,18 +1,32 @@
-import { internalAction, internalMutation } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { createChat } from "./lib/linqClient";
 import { DOORMAN_TRANSCRIPT_CAP } from "./lib/doorman";
 
+export const AUTO_WELCOME_DELAY_MS = 30 * 60 * 1000;
+
+export function buildWelcomeOpener(fullName?: string): string {
+  const first = fullName?.trim().split(/\s+/)[0];
+  return `Hi${first ? ` ${first}` : ""} — it's CareSupport. You left your number on caresupport.com, and since that first text never made it my way, I thought I'd reach out myself. Families text me to keep care coordinated — meds, schedules, the handoffs in between. No app, just this thread. What's the care situation you're carrying these days?`;
+}
+
 /**
  * Welcome outreach: CareSupport texts a web signup who never sent the
- * "Start with a text" message. Founder-triggered per signup — never
- * automatic. The opener is seeded into the stranger transcript so the
- * doorman continues the same conversation when they reply.
+ * "Start with a text" message. Fires automatically ~30 min after signup
+ * (autoWelcome, scheduled by waitlist.submitSignup) or founder-triggered
+ * with custom copy (sendWelcome). The opener is seeded into the stranger
+ * transcript so the doorman continues the same conversation when they reply.
  */
 export const prepareWelcome = internalMutation({
   args: { email: v.string(), opener: v.string() },
   handler: async (ctx, args): Promise<{ phone: string }> => {
+    // Every guard below throws: callers treat a throw as "do not text this
+    // person" — autoWelcome logs and skips, the founder CLI surfaces it.
     const email = args.email.trim().toLowerCase();
     const signup = await ctx.db
       .query("waitlistSignups")
@@ -41,6 +55,12 @@ export const prepareWelcome = internalMutation({
       .withIndex("by_phone", (q) => q.eq("phone", signup.phone!))
       .unique();
     if (existingStranger) {
+      const alreadyTexting =
+        existingStranger.inboundTimestamps.length > 0 ||
+        existingStranger.transcript.some((t) => t.role === "user");
+      if (alreadyTexting) {
+        throw new Error(`${signup.phone} is already texting with the doorman`);
+      }
       await ctx.db.patch(existingStranger._id, {
         transcript: [
           ...existingStranger.transcript,
@@ -98,5 +118,67 @@ export const sendWelcome = internalAction({
       chatId: result.chatId,
     });
     return { sent: true, phone, chatId: result.chatId };
+  },
+});
+
+export const getSignupForWelcome = internalQuery({
+  args: { email: v.string() },
+  handler: async (ctx, args): Promise<{ fullName: string | null } | null> => {
+    const signup = await ctx.db
+      .query("waitlistSignups")
+      .withIndex("by_email", (q) =>
+        q.eq("email", args.email.trim().toLowerCase()),
+      )
+      .unique();
+    return signup ? { fullName: signup.fullName ?? null } : null;
+  },
+});
+
+export const autoWelcome = internalAction({
+  args: { email: v.string() },
+  handler: async (ctx, args): Promise<{ sent: boolean; reason?: string }> => {
+    if (process.env.DOORMAN_ENABLED !== "true") {
+      return { sent: false, reason: "doorman_disabled" };
+    }
+    const token = process.env.LINQ_API_TOKEN;
+    const fromPhone = process.env.LINQ_PHONE_NUMBER;
+    if (!token || !fromPhone) {
+      return { sent: false, reason: "env_missing" };
+    }
+
+    const signup = await ctx.runQuery(internal.welcome.getSignupForWelcome, {
+      email: args.email,
+    });
+    if (!signup) return { sent: false, reason: "no_signup" };
+    const opener = buildWelcomeOpener(signup.fullName ?? undefined);
+
+    let phone: string;
+    try {
+      const prepared = await ctx.runMutation(internal.welcome.prepareWelcome, {
+        email: args.email,
+        opener,
+      });
+      phone = prepared.phone;
+    } catch (error) {
+      console.log("[welcome] auto-welcome skipped", {
+        email: args.email,
+        reason: String(error).slice(0, 120),
+      });
+      return { sent: false, reason: "guard" };
+    }
+
+    const result = await createChat(phone, opener, fromPhone, token);
+    if (!result.success) {
+      console.error("[welcome] auto-welcome createChat failed", {
+        phone,
+        error: result.error,
+      });
+      return { sent: false, reason: "delivery_failed" };
+    }
+    console.log("[welcome] auto-welcome sent", {
+      phone,
+      chatId: result.chatId,
+    });
+    return { sent: true };
   },
 });

@@ -45,10 +45,12 @@ export function WaitlistCta() {
         track("text_cta_clicked", { utmSource: attribution.utmSource ?? null });
         window.location.href = smsHref(CARESUPPORT_PHONE);
       } else if (CARESUPPORT_PHONE) {
-        setMessage("You're in. Text us from your phone to get started:");
+        setMessage(
+          "You're in. Text us from your phone — or we'll text you shortly:",
+        );
         setShowTextFallback(true);
       } else {
-        setMessage("You're on the list. We'll text you when it's ready.");
+        setMessage("You're in. CareSupport will text you shortly.");
       }
     } catch (err) {
       setStatus("error");
