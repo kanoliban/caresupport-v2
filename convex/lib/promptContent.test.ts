@@ -169,26 +169,33 @@ describe("SOUL_CONTENT", () => {
     expect(SKILLS_CONTENT).toContain("wrong number, stop texting, unsubscribe");
   });
 
-  it("instructs the model to extract all onboarding slots from one message when possible", () => {
+  it("frames onboarding as friendship with the caregiver, not intake", () => {
     // #given the SKILLS_CONTENT Onboarding block
-    // #then it tells the model to extract multiple slots at once
-    expect(SKILLS_CONTENT).toContain(
-      "EXTRACT ALL THREE FROM A SINGLE MESSAGE WHEN POSSIBLE",
-    );
-    expect(SKILLS_CONTENT).toContain(
-      "Do not re-ask for slots the user already gave",
-    );
+    // #then it centers the person and forbids the intake register
+    expect(SKILLS_CONTENT).toContain("be interested in THEM");
+    expect(SKILLS_CONTENT).toContain("Follow their frame");
+    expect(SKILLS_CONTENT).toContain("How are you holding up");
+    expect(SKILLS_CONTENT).not.toContain("EXTRACT ALL THREE");
   });
 
-  it("tells the model to flip care case status to active once onboarding slots are filled", () => {
+  it("completes onboarding on two noticed facts with no required first task", () => {
     // #given the prompt contents
-    // #then both ROUTING and SKILLS reflect the slot→active transition
+    // #then only name + care recipient gate the active transition
+    expect(SKILLS_CONTENT).toContain("Two facts complete onboarding");
+    expect(SKILLS_CONTENT).toContain(
+      "There is no required first care task",
+    );
     expect(SKILLS_CONTENT).toContain(
       'set care_case_profile_update.status = "active"',
     );
     expect(SKILLS_CONTENT).toContain(
       "do not ask onboarding-style questions again",
     );
+    expect(SKILLS_CONTENT).toContain(
+      "Do not re-ask for slots the user already gave",
+    );
+    expect(ROUTING_CONTENT).toContain("not an intake");
+    expect(ROUTING_CONTENT).not.toContain("first care task to track");
   });
 
   it("excludes the 'New User' placeholder from being treated as a real name in routing", () => {
