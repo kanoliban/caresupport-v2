@@ -91,12 +91,25 @@ export const touchStranger = internalMutation({
     }
 
     if (!stranger) throw new Error("stranger record vanished");
+
+    const signup = await ctx.db
+      .query("waitlistSignups")
+      .withIndex("by_phone", (q) => q.eq("phone", args.phone))
+      .first();
+
     return {
       strangerId: stranger._id,
       status: stranger.status,
       transcript: stranger.transcript,
       velocitySuspicious: isVelocitySuspicious(stranger.inboundTimestamps, now),
       budgetExhausted: stranger.repliesToday >= DOORMAN_MAX_REPLIES_PER_DAY,
+      signup: signup
+        ? {
+            fullName: signup.fullName,
+            submittedAt: signup.submittedAt,
+            source: signup.source,
+          }
+        : null,
     };
   },
 });
@@ -119,13 +132,36 @@ export const recordDoormanReply = internalMutation({
   },
 });
 
+export const recordNudge = internalMutation({
+  args: {
+    strangerId: v.id("strangers"),
+    nudge: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const stranger = await ctx.db.get(args.strangerId);
+    if (!stranger) return;
+    const now = Date.now();
+    await ctx.db.patch(args.strangerId, {
+      transcript: [
+        ...stranger.transcript,
+        { role: "assistant" as const, content: args.nudge.slice(0, 1000), at: now },
+      ].slice(-DOORMAN_TRANSCRIPT_CAP),
+      repliesToday: stranger.repliesToday + 1,
+      nudgedAt: now,
+      lastContactAt: now,
+    });
+  },
+});
+
 export const setStrangerStatus = internalMutation({
   args: {
     strangerId: v.id("strangers"),
+    // "dismissed" is deliberately absent: the runtime can no longer close the
+    // door on a human. Only "agent" ends a conversation.
     status: v.union(
       v.literal("screening"),
       v.literal("graduated"),
-      v.literal("dismissed"),
+      v.literal("flagged"),
       v.literal("agent"),
     ),
     graduatedUserId: v.optional(v.id("users")),

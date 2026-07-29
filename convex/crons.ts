@@ -25,4 +25,13 @@ crons.interval(
   {},
 );
 
+// Lobby sweep at 14:00 UTC (~9 AM CT): nudge stalled screening conversations
+// once, then digest the lobby state to the founder.
+crons.daily(
+  "doorman-lobby-sweep",
+  { hourUTC: 14, minuteUTC: 0 },
+  internal.doormanSweep.run,
+  {},
+);
+
 export default crons;
