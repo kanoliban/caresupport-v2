@@ -197,3 +197,131 @@ describe("getCareCaseDigestData", () => {
     expect(result.recentDigestAudits).toHaveLength(1);
   });
 });
+
+describe("resetUserByPhone", () => {
+  it("deletes the user, care case, all case-scoped rows, and signup state", async () => {
+    // #given a user with messages, memories, a stranger row, and a signup
+    const t = convexTest(schema, modules);
+    const phone = "+16515552001";
+    const { careCaseId, userId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone, chatId: "chat-reset-target" },
+    );
+    await t.mutation(internal.mutations.logMessage, {
+      careCaseId,
+      userId,
+      senderPhone: phone,
+      actorType: "user",
+      direction: "inbound",
+      body: "hello",
+      timestamp: Date.now(),
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("memoryEntries", {
+        careCaseId,
+        userId,
+        scope: "care_case",
+        category: "care_note",
+        content: "test memory",
+        active: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      await ctx.db.insert("strangers", {
+        phone,
+        status: "graduated",
+        transcript: [],
+        inboundTimestamps: [],
+        repliesToday: 0,
+        replyCountResetAt: Date.now(),
+        firstContactAt: Date.now(),
+        lastContactAt: Date.now(),
+        graduatedUserId: userId,
+      });
+      await ctx.db.insert("waitlistSignups", {
+        email: "reset-me@example.com",
+        phone,
+        source: "landing-2026-05",
+        submittedAt: Date.now(),
+        convertedUserId: userId,
+      });
+    });
+
+    // #when the founder resets the account
+    const result = await t.action(internal.admin.resetUserByPhone, {
+      phone,
+      confirm: "DELETE",
+    });
+
+    // #then every trace of the account is gone
+    expect(result.deleted.users).toBe(1);
+    expect(result.deleted.careCases).toBe(1);
+    const leftovers = await t.run(async (ctx) => ({
+      user: await ctx.db
+        .query("users")
+        .withIndex("by_phone", (q) => q.eq("phone", phone))
+        .first(),
+      careCase: await ctx.db.get(careCaseId),
+      messages: await ctx.db
+        .query("messages")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
+        .collect(),
+      memories: await ctx.db
+        .query("memoryEntries")
+        .withIndex("by_care_case", (q) => q.eq("careCaseId", careCaseId))
+        .collect(),
+      stranger: await ctx.db
+        .query("strangers")
+        .withIndex("by_phone", (q) => q.eq("phone", phone))
+        .first(),
+      signup: await ctx.db
+        .query("waitlistSignups")
+        .withIndex("by_phone", (q) => q.eq("phone", phone))
+        .first(),
+    }));
+    expect(leftovers).toEqual({
+      user: null,
+      careCase: null,
+      messages: [],
+      memories: [],
+      stranger: null,
+      signup: null,
+    });
+  });
+
+  it("leaves other users untouched", async () => {
+    // #given two users
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.mutations.createOnboardingUserAndCareCase, {
+      phone: "+16515552002",
+      chatId: "chat-reset-a",
+    });
+    const other = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16515552003", chatId: "chat-keep-b" },
+    );
+
+    // #when one is reset
+    await t.action(internal.admin.resetUserByPhone, {
+      phone: "+16515552002",
+      confirm: "DELETE",
+    });
+
+    // #then the other survives with its care case
+    const kept = await t.run(async (ctx) => ({
+      user: await ctx.db.get(other.userId),
+      careCase: await ctx.db.get(other.careCaseId),
+    }));
+    expect(kept.user).not.toBeNull();
+    expect(kept.careCase).not.toBeNull();
+  });
+
+  it("is a no-op for an unknown phone", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.action(internal.admin.resetUserByPhone, {
+      phone: "+19999999999",
+      confirm: "DELETE",
+    });
+    expect(result.deleted).toEqual({});
+  });
+});
