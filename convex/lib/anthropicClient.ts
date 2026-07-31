@@ -1,3 +1,5 @@
+"use node";
+
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   MessageParam,
@@ -5,6 +7,7 @@ import type {
   ThinkingConfigParam,
 } from "@anthropic-ai/sdk/resources/messages/messages";
 import type { SystemBlock } from "./pipeline/types";
+import { traceModelCall, type CareTraceContext } from "./observability";
 
 const MAX_TOKENS = 16_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -23,6 +26,11 @@ export interface AnthropicInput {
   /** Anthropic-compatible gateway base URL (e.g. OpenRouter). When set, the
    * key is sent as a bearer token instead of an x-api-key header. */
   baseURL?: string;
+  /** Langfuse trace context for this call (user/session/tags). When omitted or
+   * when tracing is disabled, the call runs untraced. */
+  trace?: CareTraceContext;
+  /** Name for the Langfuse generation observation. Defaults to the model. */
+  observationName?: string;
 }
 
 export interface AnthropicResult {
@@ -31,6 +39,9 @@ export interface AnthropicResult {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** Populated when Langfuse tracing is active — the trace id for this call,
+   * so callers can attach scores (e.g. founder feedback) to it. */
+  langfuseTraceId?: string;
 }
 
 function buildSystemParam(blocks: SystemBlock[]): TextBlockParam[] {
@@ -116,6 +127,24 @@ function isAbortError(error: unknown): boolean {
 }
 
 export async function callAnthropic(
+  input: AnthropicInput,
+): Promise<AnthropicResult> {
+  const requestedModel = input.model ?? MODEL_FALLBACK_CHAIN[0];
+  return traceModelCall(
+    {
+      trace: input.trace,
+      generationName: input.observationName ?? requestedModel,
+      requestedModel,
+      modelParameters: { max_tokens: MAX_TOKENS },
+      // Only the conversation messages — not the (large, static) system
+      // prompt blocks or the API key that live on the input object.
+      input: input.messages,
+    },
+    () => runAnthropic(input),
+  );
+}
+
+async function runAnthropic(
   input: AnthropicInput,
 ): Promise<AnthropicResult> {
   const client = input.baseURL

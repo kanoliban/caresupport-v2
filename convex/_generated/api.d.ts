@@ -31,6 +31,7 @@ import type * as lib_handles from "../lib/handles.js";
 import type * as lib_knowledge_retrieveCareContext from "../lib/knowledge/retrieveCareContext.js";
 import type * as lib_linqClient from "../lib/linqClient.js";
 import type * as lib_memory from "../lib/memory.js";
+import type * as lib_observability from "../lib/observability.js";
 import type * as lib_pipeline_careRouter from "../lib/pipeline/careRouter.js";
 import type * as lib_pipeline_index from "../lib/pipeline/index.js";
 import type * as lib_pipeline_promptBuilder from "../lib/pipeline/promptBuilder.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   "lib/knowledge/retrieveCareContext": typeof lib_knowledge_retrieveCareContext;
   "lib/linqClient": typeof lib_linqClient;
   "lib/memory": typeof lib_memory;
+  "lib/observability": typeof lib_observability;
   "lib/pipeline/careRouter": typeof lib_pipeline_careRouter;
   "lib/pipeline/index": typeof lib_pipeline_index;
   "lib/pipeline/promptBuilder": typeof lib_pipeline_promptBuilder;
