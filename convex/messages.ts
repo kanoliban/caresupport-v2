@@ -15,10 +15,11 @@ const actorTypeValidator = v.union(
 export const listByCareCase = query({
   args: { careCaseId: v.id("careCases") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const messages = await ctx.db
       .query("messages")
       .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
       .collect();
+    return messages.map(({ internalNotes, ...visible }) => visible);
   },
 });
 

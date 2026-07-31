@@ -183,6 +183,7 @@ const auditEvent = v.union(
 
 const auditDetails = v.object({
   sectionsLoaded: v.optional(v.array(v.string())),
+  historyMessageCount: v.optional(v.number()),
   triggerMessage: v.optional(v.string()),
   responseLength: v.optional(v.number()),
   leakageCheckPassed: v.optional(v.boolean()),

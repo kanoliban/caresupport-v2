@@ -5,6 +5,7 @@ export {
   buildSystemBlocks,
   channelGuidance,
   systemBlocksToString,
+  PRIVATE_NOTE_MARKER,
   RESPONSE_FORMAT,
 } from "./promptBuilder";
 

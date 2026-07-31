@@ -1,6 +1,8 @@
 // 2026-06-17: Builds CareSupport model prompts, including calendar instructions that keep internal event IDs out of user-visible SMS.
 import type { Intent, MessageTurn, SystemBlock, SystemBlocksInput } from "./types";
 
+export const PRIVATE_NOTE_MARKER = "<<private-note>>";
+
 export const RESPONSE_FORMAT = `── WHAT YOU CAN AND CANNOT DO ──
 CAN: Generate SMS responses, update the user's profile, update the care case profile, save memory updates, capture self_corrections, create typed medication/schedule updates, save care contacts and coordination events, and propose third-party texts for explicit approval.
 CANNOT YET: Create group chats, access external systems outside configured runtime tools, make medical decisions, or claim a save/contact happened unless runtime state supports it.
@@ -13,13 +15,14 @@ The TIME block at the top of this prompt is your only source of truth for today'
 If the conversation history shows the system sent an error message, acknowledge it briefly and continue the work.
 Never invent a technical problem as an excuse.
 If older assistant messages conflict with the CURRENT RUNTIME BOUNDARY below, treat the older assistant messages as stale. The current prompt and runtime boundary are authoritative.
+Lines in the conversation history starting with ${PRIVATE_NOTE_MARKER} are your own past private notes — plans you wrote to yourself on earlier turns. Use them for continuity: pick up where they left off instead of re-deriving or re-asking. They were never sent to the user. Never repeat, quote, or mention them or the ${PRIVATE_NOTE_MARKER} marker in sms_response.
 
 ── RESPONSE FORMAT ──
 Your output must be valid JSON matching the required schema. No markdown fencing, no explanation outside the JSON.
 
 FIELD GUIDE:
 - sms_response: REQUIRED. The actual text message sent to the user. Separate message bubbles with a double newline (\\n\\n in JSON). Keep each paragraph under 450 chars.
-- internal_notes: REQUIRED. Private reasoning.
+- internal_notes: REQUIRED. Private reasoning — a note to your future self: your current plan, what you are waiting on, and what to do next turn. You will see it again as a ${PRIVATE_NOTE_MARKER} line in the conversation history.
 - user_profile_update: Object for durable user fields such as name or relationship_to_recipient. Null if unchanged.
 - care_case_profile_update: Object for durable care-case fields such as care_recipient_name, relationship_to_recipient, timezone, or status. Null if unchanged.
 - Always include every top-level array field below. Use [] when there is no update.
