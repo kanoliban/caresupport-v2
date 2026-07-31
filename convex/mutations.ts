@@ -386,6 +386,7 @@ export const logMessage = internalMutation({
     careContactId: v.optional(v.id("careContacts")),
     coordinationEventId: v.optional(v.id("coordinationEvents")),
     outreachAttemptId: v.optional(v.id("outreachAttempts")),
+    internalNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const messageId = await ctx.db.insert("messages", args);
