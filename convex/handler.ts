@@ -12,6 +12,7 @@ import {
   buildSystemBlocks,
   buildMessages,
   extractJson,
+  PRIVATE_NOTE_MARKER,
 } from "./lib/pipeline";
 import type {
   AgentResponse,
@@ -237,15 +238,16 @@ function getInitialResponseDelayMs(bubbleCount: number): number {
   );
 }
 
-export function formatConversationLog(
-  records: Array<{
-    direction: "inbound" | "outbound";
-    body: string;
-    timestamp: number;
-    displayName?: string;
-    senderPhone?: string;
-  }>,
-): string {
+export interface ConversationLogRecord {
+  direction: "inbound" | "outbound";
+  body: string;
+  timestamp: number;
+  displayName?: string;
+  senderPhone?: string;
+  internalNotes?: string;
+}
+
+export function formatConversationLog(records: ConversationLogRecord[]): string {
   if (records.length === 0) return "[No conversation history]";
   return records
     .map((record) => {
@@ -254,9 +256,43 @@ export function formatConversationLog(
       const attribution = record.direction === "inbound"
         ? `INBOUND from ${record.displayName ?? record.senderPhone ?? "unknown"}`
         : `OUTBOUND to ${record.displayName ?? record.senderPhone ?? "unknown"}`;
-      return `[${ts}] [${attribution}] ${record.body}`;
+      const line = `[${ts}] [${attribution}] ${record.body}`;
+      // The marker line must not start with "[" so buildMessages folds it into
+      // this entry as a continuation instead of parsing it as a new turn.
+      return record.direction === "outbound" && record.internalNotes
+        ? `${line}\n${PRIVATE_NOTE_MARKER} ${record.internalNotes}`
+        : line;
     })
     .join("\n");
+}
+
+export const NOTES_TURNS = 10;
+
+export function limitInternalNotesToRecentTurns(
+  records: ConversationLogRecord[],
+  maxTurns: number = NOTES_TURNS,
+): ConversationLogRecord[] {
+  let remaining = maxTurns;
+  const result = [...records];
+  for (let i = result.length - 1; i >= 0; i--) {
+    const record = result[i];
+    if (record.direction !== "outbound" || !record.internalNotes) continue;
+    if (remaining > 0) {
+      remaining -= 1;
+    } else {
+      result[i] = { ...record, internalNotes: undefined };
+    }
+  }
+  return result;
+}
+
+export function stripPrivateNoteLeak(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith(PRIVATE_NOTE_MARKER))
+    .join("\n")
+    .replaceAll(PRIVATE_NOTE_MARKER, "")
+    .trim();
 }
 
 const INTERNAL_NOTES_MAX_CHARS = 500;
@@ -1180,15 +1216,18 @@ export const handleMessage = internalAction({
       { careCaseId, limit: 80 },
     );
     const conversationLog = formatConversationLog(
-      recentMessages
-        .reverse()
-        .map((message) => ({
-          direction: message.direction,
-          body: message.body,
-          timestamp: message.timestamp,
-          displayName: message.displayName ?? undefined,
-          senderPhone: message.senderPhone ?? undefined,
-        })),
+      limitInternalNotesToRecentTurns(
+        recentMessages
+          .reverse()
+          .map((message) => ({
+            direction: message.direction,
+            body: message.body,
+            timestamp: message.timestamp,
+            displayName: message.displayName ?? undefined,
+            senderPhone: message.senderPhone ?? undefined,
+            internalNotes: message.internalNotes ?? undefined,
+          })),
+      ),
     );
 
     await ctx.runMutation(internal.mutations.logAudit, {
@@ -1199,6 +1238,7 @@ export const handleMessage = internalAction({
       details: {
         sectionsLoaded: compiledContext.contextSections,
         triggerMessage: messageBody.slice(0, 200),
+        historyMessageCount: recentMessages.length,
       },
       timestamp: now,
     });
@@ -1883,6 +1923,7 @@ export const handleMessage = internalAction({
         : "I'm not connected to your Google Calendar yet, so I couldn't do that. Text \"connect my calendar\" to link it — or I can keep track of it here in the meantime.";
     }
 
+    smsResponse = stripPrivateNoteLeak(smsResponse);
     const hadEmptySmsResponse = !smsResponse.trim();
     smsResponse = ensureFinalSmsResponse(smsResponse, {
       replyDisplayName,

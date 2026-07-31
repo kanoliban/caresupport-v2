@@ -1,6 +1,8 @@
 // 2026-06-17: Unit coverage for chat runtime helpers, including empty-response repair, calendar guards, and event ID stripping.
 import { describe, expect, it } from "vitest";
 import type { Id } from "./_generated/dataModel";
+import { buildMessages, PRIVATE_NOTE_MARKER } from "./lib/pipeline";
+import type { ConversationLogRecord } from "./handler";
 import {
   approvalResolutionResponse,
   buildEmptySmsRepairMessages,
@@ -21,9 +23,11 @@ import {
   isOutreachRetryRequest,
   isTestChat,
   isValidTimeZone,
+  limitInternalNotesToRecentTurns,
   parseLesson,
   runtimeFailureFallback,
   sanitizeInternalNotes,
+  stripPrivateNoteLeak,
   stripAssistantSpeakerPrefix,
   stripCalendarEventIdsFromSms,
   stripMarkdown,
@@ -120,6 +124,113 @@ describe("formatConversationLog", () => {
 
     expect(result).toContain("[INBOUND from Alex]");
     expect(result).toContain("[OUTBOUND to Alex]");
+  });
+
+  it("emits a private-note continuation line under outbound records that carry notes", () => {
+    const result = formatConversationLog([
+      {
+        direction: "outbound",
+        body: "I'll check with Rob.",
+        timestamp: new Date("2026-04-13T10:00:05Z").getTime(),
+        displayName: "Alex",
+        internalNotes: "Waiting on Rob to confirm Tuesday coverage.",
+      },
+    ]);
+
+    expect(result).toBe(
+      "[2026-04-13 10:00:05 UTC] [OUTBOUND to Alex] I'll check with Rob.\n" +
+        `${PRIVATE_NOTE_MARKER} Waiting on Rob to confirm Tuesday coverage.`,
+    );
+  });
+
+  it("never emits notes on inbound records", () => {
+    const result = formatConversationLog([
+      {
+        direction: "inbound",
+        body: "Hi",
+        timestamp: new Date("2026-04-13T10:00:00Z").getTime(),
+        displayName: "Alex",
+        internalNotes: "should not appear",
+      },
+    ]);
+
+    expect(result).not.toContain(PRIVATE_NOTE_MARKER);
+  });
+});
+
+describe("private notes round trip into model messages", () => {
+  it("folds the note line into the same assistant turn instead of a new entry", () => {
+    const log = formatConversationLog([
+      {
+        direction: "inbound",
+        body: "Can you set up Tuesday?",
+        timestamp: new Date("2026-04-13T10:00:00Z").getTime(),
+        displayName: "Alex",
+      },
+      {
+        direction: "outbound",
+        body: "On it — checking with Rob.",
+        timestamp: new Date("2026-04-13T10:00:05Z").getTime(),
+        displayName: "Alex",
+        internalNotes: "Ask Rob about Tuesday, then confirm back.",
+      },
+    ]);
+
+    const turns = buildMessages("Any update?", log);
+
+    expect(turns).toHaveLength(3);
+    expect(turns[1].role).toBe("assistant");
+    expect(turns[1].content).toBe(
+      "On it — checking with Rob.\n" +
+        `${PRIVATE_NOTE_MARKER} Ask Rob about Tuesday, then confirm back.`,
+    );
+    expect(turns[2]).toEqual({ role: "user", content: "Any update?" });
+  });
+});
+
+describe("limitInternalNotesToRecentTurns", () => {
+  const outbound = (i: number): ConversationLogRecord => ({
+    direction: "outbound",
+    body: `reply ${i}`,
+    timestamp: i,
+    internalNotes: `note ${i}`,
+  });
+
+  it("keeps notes on only the newest K outbound records", () => {
+    const records = Array.from({ length: 15 }, (_, i) => outbound(i));
+
+    const limited = limitInternalNotesToRecentTurns(records, 10);
+
+    expect(limited.slice(0, 5).every((r) => r.internalNotes === undefined)).toBe(true);
+    expect(limited.slice(5).every((r) => r.internalNotes !== undefined)).toBe(true);
+  });
+
+  it("ignores inbound records when counting turns", () => {
+    const records: ConversationLogRecord[] = [
+      outbound(1),
+      { direction: "inbound", body: "hi", timestamp: 2 },
+      outbound(3),
+    ];
+
+    const limited = limitInternalNotesToRecentTurns(records, 2);
+
+    expect(limited[0].internalNotes).toBe("note 1");
+    expect(limited[2].internalNotes).toBe("note 3");
+  });
+});
+
+describe("stripPrivateNoteLeak", () => {
+  it("removes leaked note lines and inline markers from the SMS", () => {
+    const leaked =
+      "Happy to help!\n" +
+      `${PRIVATE_NOTE_MARKER} secret plan\n` +
+      `Also ${PRIVATE_NOTE_MARKER} inline`;
+
+    expect(stripPrivateNoteLeak(leaked)).toBe("Happy to help!\nAlso  inline");
+  });
+
+  it("leaves clean text unchanged", () => {
+    expect(stripPrivateNoteLeak("See you Tuesday!")).toBe("See you Tuesday!");
   });
 });
 
