@@ -259,6 +259,16 @@ export function formatConversationLog(
     .join("\n");
 }
 
+const INTERNAL_NOTES_MAX_CHARS = 500;
+
+// Newlines are flattened so a stored note can never mimic a conversation-log
+// line when replayed into a later prompt's history.
+export function sanitizeInternalNotes(notes: string): string | undefined {
+  const flattened = notes.replace(/\s*\n+\s*/g, " ").trim();
+  if (!flattened) return undefined;
+  return flattened.slice(0, INTERNAL_NOTES_MAX_CHARS);
+}
+
 export function inferExplicitUserMemoryUpdate(message: string): MemoryUpdate | null {
   for (const pattern of PROFILE_SAVE_PATTERNS) {
     const match = pattern.exec(message);
@@ -1920,6 +1930,8 @@ export const handleMessage = internalAction({
       compiledContext.user.name,
       smsResponse,
       now,
+      null,
+      sanitizeInternalNotes(parsed.internalNotes),
     );
     const linqMessageIds = await sendResponse(chatId, smsResponse, env(), startedAt, effectForSend);
     if (linqMessageIds.length > 0) {
@@ -2188,6 +2200,7 @@ async function logOutbound(
     coordinationEventId?: Id<"coordinationEvents">;
     outreachAttemptId?: Id<"outreachAttempts">;
   } | null,
+  internalNotes?: string,
 ): Promise<Id<"messages">> {
   return await ctx.runMutation(internal.mutations.logMessage, {
     careCaseId,
@@ -2201,6 +2214,7 @@ async function logOutbound(
     careContactId: context?.careContactId,
     coordinationEventId: context?.coordinationEventId,
     outreachAttemptId: context?.outreachAttemptId,
+    internalNotes,
   });
 }
 

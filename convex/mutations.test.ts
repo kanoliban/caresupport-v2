@@ -413,3 +413,52 @@ describe("upsertScheduleItem validation", () => {
     expect(compiled?.careCaseContext).toContain("Morning meds");
   });
 });
+
+describe("logMessage", () => {
+  it("stores internalNotes on outbound messages when provided", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16517030002", chatId: "chat-notes" },
+    );
+
+    const messageId = await t.mutation(internal.mutations.logMessage, {
+      careCaseId,
+      userId,
+      senderPhone: "+16517030002",
+      actorType: "assistant",
+      direction: "outbound",
+      displayName: "Alex",
+      body: "Got it — I'll check with Rob about Tuesday.",
+      timestamp: Date.now(),
+      internalNotes: "Waiting on Rob to confirm Tuesday coverage.",
+    });
+
+    const stored = await t.run(async (ctx) => ctx.db.get(messageId));
+    expect(stored?.internalNotes).toBe(
+      "Waiting on Rob to confirm Tuesday coverage.",
+    );
+  });
+
+  it("omits internalNotes when not provided", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16517030003", chatId: "chat-no-notes" },
+    );
+
+    const messageId = await t.mutation(internal.mutations.logMessage, {
+      careCaseId,
+      userId,
+      senderPhone: "+16517030003",
+      actorType: "user",
+      direction: "inbound",
+      displayName: "Alex",
+      body: "Hi",
+      timestamp: Date.now(),
+    });
+
+    const stored = await t.run(async (ctx) => ctx.db.get(messageId));
+    expect(stored?.internalNotes).toBeUndefined();
+  });
+});

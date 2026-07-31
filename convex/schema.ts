@@ -259,6 +259,7 @@ export default defineSchema({
     careContactId: v.optional(v.id("careContacts")),
     coordinationEventId: v.optional(v.id("coordinationEvents")),
     outreachAttemptId: v.optional(v.id("outreachAttempts")),
+    internalNotes: v.optional(v.string()),
   })
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
