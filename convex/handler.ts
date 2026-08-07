@@ -23,6 +23,11 @@ import type {
 import { normalizePhone } from "./mutations";
 import { callAnthropic } from "./lib/anthropicClient";
 import {
+  startTurn,
+  CARE_AGENT_NAME,
+  DOORMAN_AGENT_NAME,
+} from "./lib/agnost";
+import {
   createChat,
   getChat,
   sendMessage,
@@ -825,6 +830,12 @@ export const handleMessage = internalAction({
     const now = startedAt;
     const { senderPhone, messageBody, chatId, service, replyToMessageId } = args;
 
+    const turn = startTurn({
+      agentName: CARE_AGENT_NAME,
+      input: messageBody,
+      startedAt,
+    });
+
     // Identity resolution: a reply from a known care contact maps back to the
     // existing care case/user rather than creating a new onboarding user.
     const careContactReply = await ctx.runMutation(
@@ -934,6 +945,17 @@ export const handleMessage = internalAction({
     const careCaseId = careContactReply?.careCaseId ?? activeUser.careCaseId;
     const userId = activeUser._id;
 
+    turn.identify(
+      { userId, conversationId: careCaseId },
+      {
+        service,
+        chatId,
+        isNewUser,
+        isCareContactReply: Boolean(careContactReply),
+        careContactId: careContactReply?.careContactId,
+      },
+    );
+
     if (!careContactReply && !activeUser.chatId && chatId) {
       await ctx.runMutation(internal.mutations.updateUserChatId, {
         userId,
@@ -965,14 +987,16 @@ export const handleMessage = internalAction({
         const reply = "Google Calendar isn't configured yet — check back soon!";
         await logOutbound(ctx, careCaseId, userId, senderPhone, activeUser.name, reply, now);
         await sendResponse(chatId, reply, envVarsEarly);
-        return { success: true, response: reply };
+        turn.setProperties({ path: "calendar_connect_unconfigured" });
+        return await turn.finish({ success: true, response: reply });
       }
       const oauthUrl = `${process.env.CONVEX_SITE_URL}/oauth/google/start?u=${userId}`;
       await logInbound(ctx, careCaseId, userId, senderPhone, activeUser.name, messageBody, now, args.sourceMessageId);
       const reply = `Tap this link to connect your Google Calendar:\n\n${oauthUrl}\n\nYou'll be redirected back here once it's done.`;
       await logOutbound(ctx, careCaseId, userId, senderPhone, activeUser.name, reply, now);
       await sendResponse(chatId, reply, envVarsEarly);
-      return { success: true, response: reply };
+      turn.setProperties({ path: "calendar_connect_link" });
+      return await turn.finish({ success: true, response: reply });
     }
 
     const inboundMessageId = await ctx.runMutation(internal.mutations.logMessage, {
@@ -1065,7 +1089,8 @@ export const handleMessage = internalAction({
           linqMessageId: linqMessageIds[0],
         });
       }
-      return { success: true, response: reply };
+      turn.setProperties({ path: "care_contact_identity_clarification" });
+      return await turn.finish({ success: true, response: reply });
     }
 
     if (!careContactReply) {
@@ -1197,7 +1222,17 @@ export const handleMessage = internalAction({
               linqMessageId: linqMessageIds[0],
             });
           }
-          return { success: executionResult?.sent ?? true, response: reply };
+          turn.setProperties({
+            path: "outreach_approval",
+            approvalAction: approvalResolution.action,
+            ...(executionResult
+              ? { tool: "care_contact_outreach", toolSucceeded: executionResult.sent }
+              : {}),
+          });
+          return await turn.finish({
+            success: executionResult?.sent ?? true,
+            response: reply,
+          });
         }
       }
     }
@@ -1416,7 +1451,12 @@ export const handleMessage = internalAction({
           careCaseId,
           chatId,
         });
-        return { success: false, response: "", error: errorMessage };
+        turn.setProperties({ path: "ai_failed_fallback_suppressed" });
+        return await turn.finish({
+          success: false,
+          response: "",
+          error: errorMessage,
+        });
       }
 
       const outboundMessageId = await logOutbound(
@@ -1436,7 +1476,12 @@ export const handleMessage = internalAction({
           linqMessageId: linqMessageIds[0],
         });
       }
-      return { success: false, response: fallback, error: errorMessage };
+      turn.setProperties({ path: "ai_failed_fallback_sent" });
+      return await turn.finish({
+        success: false,
+        response: fallback,
+        error: errorMessage,
+      });
     }
 
     let smsResponse = stripAssistantSpeakerPrefix(stripMarkdown(parsed.smsResponse));
@@ -1998,14 +2043,23 @@ export const handleMessage = internalAction({
       }
     }
 
-    return {
+    turn.setProperties({
+      path: "model_turn",
+      model: routeResult.model,
+      routedTier: routeResult.tier,
+      routedIntent: intent,
+      lessonsLearned: parsed.selfCorrections.length,
+      memoriesSaved,
+      hadEmptySmsResponse,
+    });
+    return await turn.finish({
       success: true,
       response: smsResponse,
       routedTier: routeResult.tier,
       routedIntent: intent,
       lessonsLearned: parsed.selfCorrections.length,
       memoriesSaved,
-    };
+    });
   },
 });
 
@@ -2040,6 +2094,12 @@ async function runDoorman(
   },
 ): Promise<HandlerResult> {
   const { senderPhone, messageBody, chatId, startedAt, now } = input;
+
+  const turn = startTurn({
+    agentName: DOORMAN_AGENT_NAME,
+    input: messageBody,
+    startedAt,
+  });
 
   const knownAgent = await ctx.runQuery(internal.doorman.getKnownAgent, {
     phone: senderPhone,
@@ -2087,6 +2147,17 @@ async function runDoorman(
     return { success: false, response: "", error: "doorman_no_api_key" };
   }
 
+  // The stranger record is the only stable identity a screened sender has —
+  // no user, no care case, and never the phone number.
+  turn.identify(
+    { userId: state.strangerId, conversationId: state.strangerId },
+    {
+      chatId: chatId || undefined,
+      strangerStatus: state.status,
+      expectedGuest: Boolean(state.signup),
+    },
+  );
+
   const systemBlocks: { type: "text"; text: string; cacheBreakpoint: boolean }[] =
     [{ type: "text", text: DOORMAN_SYSTEM_PROMPT, cacheBreakpoint: true }];
   if (state.signup) {
@@ -2120,10 +2191,15 @@ async function runDoorman(
       senderPhone,
       error: String(error).slice(0, 200),
     });
-    return { success: false, response: "", error: "doorman_model_failed" };
+    return await turn.finish({
+      success: false,
+      response: "",
+      error: "doorman_model_failed",
+    });
   }
 
   const parsed = parseDoormanResponse(verdictText);
+  turn.setProperties({ verdict: parsed.verdict });
 
   if (parsed.verdict === "agent") {
     await ctx.runMutation(internal.doorman.setStrangerStatus, {
@@ -2136,7 +2212,11 @@ async function runDoorman(
       source: "doorman_verdict",
     });
     console.log("[doorman] verdict=agent, going quiet", { senderPhone });
-    return { success: false, response: "", error: "agent_verdict_ignored" };
+    return await turn.finish({
+      success: false,
+      response: "",
+      error: "agent_verdict_ignored",
+    });
   }
 
   if (parsed.verdict === "graduate") {
@@ -2194,7 +2274,11 @@ async function runDoorman(
       senderPhone,
       userId: created.userId,
     });
-    return { success: true, response: parsed.smsResponse };
+    turn.setProperties({
+      graduatedUserId: created.userId,
+      graduatedCareCaseId: created.careCaseId,
+    });
+    return await turn.finish({ success: true, response: parsed.smsResponse });
   }
 
   if (parsed.smsResponse) {
@@ -2218,7 +2302,7 @@ async function runDoorman(
       console.log("[doorman] verdict=flag, founder alerted", { senderPhone });
     }
   }
-  return { success: true, response: parsed.smsResponse };
+  return await turn.finish({ success: true, response: parsed.smsResponse });
 }
 
 function env(): { linqApiToken: string; linqPhoneNumber: string } {

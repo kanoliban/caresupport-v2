@@ -19,6 +19,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@convex-dev/stripe": "^0.1.4",
+    "agnostai": "^0.2.0",
     "convex": "^1.32.0",
     "zod": "^3.24.0"
   },

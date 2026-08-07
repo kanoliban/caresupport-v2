@@ -23,6 +23,7 @@ import type * as doormanSweep from "../doormanSweep.js";
 import type * as groupChats from "../groupChats.js";
 import type * as handler from "../handler.js";
 import type * as http from "../http.js";
+import type * as lib_agnost from "../lib/agnost.js";
 import type * as lib_anthropicClient from "../lib/anthropicClient.js";
 import type * as lib_dateValidation from "../lib/dateValidation.js";
 import type * as lib_digestComposer from "../lib/digestComposer.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   groupChats: typeof groupChats;
   handler: typeof handler;
   http: typeof http;
+  "lib/agnost": typeof lib_agnost;
   "lib/anthropicClient": typeof lib_anthropicClient;
   "lib/dateValidation": typeof lib_dateValidation;
   "lib/digestComposer": typeof lib_digestComposer;
