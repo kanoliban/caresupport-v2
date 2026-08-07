@@ -1,111 +1,58 @@
-# Handle Normalization — International Numbers & Email Contacts
+# Agnost analytics integration
 
-**Bug:** New CareSupport users with international phone numbers or email-based iMessage handles cannot use the agent. International numbers without a leading `+` are silently dropped; email handles are stripped to empty strings and dropped.
-
-**Impact:** Any non-US user, plus any iMessage user reaching the agent from an Apple ID email, is silently rejected at the persistence layer even though the Linq Partner API natively supports both formats.
-
----
-
-## Root cause
-
-Duplicated phone normalizers, each with identical buggy logic:
-
-| File:line | Function | Used for |
-|-----------|----------|----------|
-| `convex/careContacts.ts:35` | `normalizeOptionalPhone` | Contacts the user adds via the agent |
-| `convex/mutations.ts:107` | `normalizePhone` | Inbound webhook → user/care_case creation |
-
-> Note: the planned `convex/waitlist.ts` normalizer does not exist in this repo;
-> only the two above were present.
-
-All three:
-
-```ts
-const stripped = raw.replace(/[^\d+]/g, "");
-const digits = stripped.replace(/\+/g, "");
-if (digits.length < 7) return undefined;
-if (stripped.startsWith("+")) return `+${digits}`;
-if (digits.length === 10) return `+1${digits}`;
-if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-return undefined;   // ← all international without `+` + all emails fall here
-```
-
-**Failure 1:** `447911123456` (UK without `+`) → falls through to `undefined`, contact saved with `phone: undefined`.
-
-**Failure 2:** `joe@example.com` → letters and `@` stripped → empty string → `undefined`. Linq API supports email handles for iMessage (per docs: handles are E.164 phones *or* email addresses).
-
-The Linq webhook payload already passes through whatever handle Linq sends (E.164 or email) via `extractSenderPhone` in `convex/lib/linqClient.ts`. The break is only at the normalize/persist layer.
-
----
+Org: `ecc7ed31-c985-436d-b062-5ba9388f516b`
+Route: `agnostai` conversation SDK (TypeScript), per `.agents/skills/agnost-ai`.
 
 ## Plan
+- [x] Add `agnostai` dependency
+- [x] `convex/lib/agnost.ts` — deferred-identity turn recorder that no-ops
+      without `AGNOST_ORG_ID`, never throws into the care runtime, and flushes
+      before the serverless action returns
+- [x] Wire `handleMessage` (agent `care-coordinator`) — identity, input,
+      output, success, per-turn properties
+- [x] Wire `runDoorman` (agent `doorman`) — stranger-scoped identity, no PII
+- [x] Unit tests for the recorder (11 tests)
+- [x] `npx tsc --noEmit` clean + `npm test` 412/412
+- [x] Confirm `agnostai` bundles into the Node action (pushed clean)
+- [ ] Ship to prod `keen-raccoon-606` via the CONTRIBUTING.md gate:
+      PR → CI green → `npx convex env set` (prod) → `npx convex deploy -y`
+      → merge
+- [ ] Drive one real turn: `testChat:send` is disabled under
+      `APP_ENV=production`, so verification is a real iMessage to the live
+      number, which sends a real reply.
 
-- [x] 1. Create shared `convex/lib/handles.ts` with `normalizeHandle(raw): string | null`
-  - Email branch: trim, lowercase, validate with a conservative regex
-  - Phone branch: strip non-digit non-`+`; accept anything 8–15 digits as international E.164 (prepend `+` if missing); preserve existing US-default for bare 10/11-digit input
-  - Return `null` on truly invalid input only
-- [x] 2. Replace `normalizeOptionalPhone` in `convex/careContacts.ts` with import from `lib/handles.ts`
-- [x] 3. Replace `normalizePhone` in `convex/mutations.ts` with delegating wrapper (kept the export name; `handler.ts` and `mutations.test.ts` still import it)
-- [~] 4. ~~Replace `normalizePhone` in `convex/waitlist.ts`~~ — file does not exist; nothing to change
-- [x] 5. Add unit tests in `convex/lib/handles.test.ts` covering the matrix below
-- [x] 6. Reviewed `convex/mutations.test.ts` — existing `698-4328 → null` still holds (min 8 digits); no change needed. `convex/careContacts.test.ts` does not exist.
-- [ ] 7. `npx tsc --noEmit` + `npm test` clean — **BLOCKED**: `node_modules` not installed and disk is full (~195 MB free), so `npm install` fails with ENOSPC. Needs disk space freed, then `npm install` + `npx convex dev` (for `_generated/`) before checks can run.
-- [ ] 8. Smoke test on `dev` Convex deployment: send a webhook payload with an email sender; add a UK contact via the agent — **BLOCKED** on same.
+## Notes
+- Convex Node actions are serverless: the SDK's 100ms background drain is not
+  reliable, so every recorded turn awaits `flush()` before returning.
+- `begin()` fires session creation; it is called before the model runs so the
+  session exists by the time the event lands.
+- Identity is real Convex ids, never phone numbers: `users._id` /
+  `careCases._id` for the care agent, `strangers._id` for the doorman.
+- Message bodies are PHI-adjacent. Capture is on per the integration request;
+  `AGNOST_DISABLE_CONTENT=true` redacts input/output without removing the
+  telemetry.
 
-## Test matrix
+## Deployment trap
 
-| Input | Expected | Note |
-|-------|----------|------|
-| `+447911123456` | `+447911123456` | UK with `+` — already worked |
-| `447911123456` | `+447911123456` | UK without `+` — **bug fix** |
-| `+1 (651) 555-1234` | `+16515551234` | US E.164 with formatting |
-| `(651) 555-1234` | `+16515551234` | US 10-digit — preserved |
-| `16515551234` | `+16515551234` | US 11-digit — preserved |
-| `joe@example.com` | `joe@example.com` | **bug fix** |
-| `JOE@Example.COM` | `joe@example.com` | normalize case |
-| `  joe@example.com  ` | `joe@example.com` | trim |
-| `+12` | `null` | too short |
-| `not-a-handle` | `null` | invalid |
-| `""` / `undefined` | `null` | empty |
+`.env.local` still points at `dev:valiant-tortoise-962`, which is retired and
+intentionally paused. Every Convex command without `--prod` targets it. The
+live deployment is `keen-raccoon-606`. Worth pointing `.env.local` at prod or
+deleting the dead deployment so the next session doesn't repeat this.
 
-## Schema decision (not in this PR)
+## Verification on prod
 
-`users.phone` and `careContacts.phone` are typed `string` and named for phone. Emails will fit in the same column once normalization stops rejecting them — Convex `by_phone` indexes work fine with email keys (any unique string).
-
-**Renaming `phone` → `handle`** across the schema, indexes, and queries is a separate ~6–8 file refactor with a migration. Defer to a follow-up PR.
-
-## Risk
-
-- `careContacts.getByPhone` (`careContacts.ts:86`) currently falls back to raw input when normalization fails — that fallback masks the bug today and continues to work after the fix, but should be re-examined in the schema-rename follow-up.
-- `messages.senderPhone` index will receive email keys for the first time once an email-handle user appears. Convex indexes are agnostic to string contents — safe.
-- The web signup form uses the same normalizer. Today it returns "Please enter a valid phone number." for international input — after this fix, valid international + emails pass. The form currently asks only for "phone"; copy may want updating in a follow-up, but the data path is correct.
-
-## Out of scope
-
-- Schema rename (`phone` → `handle`)
-- Web signup form copy
-- UI changes to display email vs phone in contact lists
+Set `AGNOST_DEBUG=true` on prod for the first turn — the Convex logs then print
+`[agnost.events] Event sent successfully: <id>` on a 200 from api.agnost.ai,
+which is server-side proof independent of the dashboard. Unset it once the
+conversation shows up in Agnost.
 
 ## Review
-
-**Root cause confirmed at runtime path:** an inbound iMessage from an Apple-ID
-email arrives as `senderPhone = "clintonksang@gmail.com"`
-(`extractSenderPhone`, `linqClient.ts`). In `handler.ts`, a new sender hits
-`createOnboardingUserAndCareCase`, which calls `normalizePhone(email)` → `null`
-→ `throw new Error("Cannot normalize phone")`. The whole handler aborts before
-any reply is sent. Phone senders normalize fine, so they reply. This matches the
-reported symptom exactly.
-
-**Changes:**
-- Added `convex/lib/handles.ts` — single `normalizeHandle()` accepting E.164
-  phones, bare international numbers (8–15 digits), bare US 10/11-digit, and
-  email handles (trim + lowercase + conservative regex). Returns `null` only on
-  truly invalid input.
-- `convex/mutations.ts` — `normalizePhone` now delegates to `normalizeHandle`
-  (export name kept to avoid churn in `handler.ts` / tests; rename deferred).
-- `convex/careContacts.ts` — `normalizeOptionalPhone` now delegates.
-- Added `convex/lib/handles.test.ts` covering the full test matrix.
-
-**Verification not yet run** — environment blocker (no `node_modules`, disk
-full). Once unblocked: `npm install` → `npx convex dev` → `npx tsc --noEmit` →
-`npm test`, then the dev smoke test with an email sender.
+- One Agnost event per real agent turn, never per model call: the deterministic
+  reply paths (calendar connect, contact identity clarification, outreach
+  approval) are turns too, and the approval path carries
+  `tool=care_contact_outreach`.
+- Turns that end before identity resolves emit nothing — group chats, known
+  agents, velocity-flagged strangers, exhausted doorman budget. No empty
+  sessions.
+- `handleMessage` reports `users._id` / `careCases._id`; `runDoorman` reports
+  `strangers._id`. Phone numbers are never sent.
