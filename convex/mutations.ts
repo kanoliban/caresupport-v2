@@ -18,6 +18,7 @@ import {
 } from "./lib/memory";
 import { retrieveCareContext } from "./lib/knowledge/retrieveCareContext";
 import { normalizeHandle } from "./lib/handles";
+import { scheduleTitlesMatch } from "./lib/scheduleIdentity";
 
 const directionValidator = v.union(
   v.literal("inbound"),
@@ -868,31 +869,55 @@ export const upsertScheduleItem = internalMutation({
     const endTime = validateTime24h(args.endTime);
     const recurrence = validateRecurrence(args.recurrence);
 
-    const existing = await ctx.db
+    const activeItems = await ctx.db
       .query("scheduleItems")
       .withIndex("by_care_case", (q) => q.eq("careCaseId", args.careCaseId))
-      .filter((q) => q.eq(q.field("title"), args.title))
-      .first();
+      .filter((q) => q.neq(q.field("status"), "cancelled"))
+      .collect();
+    const exactTitle = args.title.trim().toLocaleLowerCase();
+    const relatedItems = activeItems.filter((item) => {
+      const isExactMatch = item.title.trim().toLocaleLowerCase() === exactTitle;
+      const isStableTitleMatch =
+        item.type === args.type && scheduleTitlesMatch(item.title, args.title);
+      return isExactMatch || isStableTitleMatch;
+    });
+    const existing = relatedItems.at(-1);
 
-    if (args.action === "remove" && existing) {
-      await ctx.db.patch(existing._id, { status: "cancelled" });
+    if (args.action === "remove" && relatedItems.length > 0) {
+      await Promise.all(
+        relatedItems.map((item) => ctx.db.patch(item._id, { status: "cancelled" })),
+      );
       return null;
     }
 
     if (existing) {
-      const patch: Record<string, string> = {};
-      if (date) patch.date = date;
-      if (time) patch.time = time;
-      if (endTime) patch.endTime = endTime;
-      if (recurrence) patch.recurrence = recurrence;
+      const patch: Partial<Doc<"scheduleItems">> = {};
+      if (date !== undefined) patch.date = date;
+      if (time !== undefined) patch.time = time;
+      if (endTime !== undefined) patch.endTime = endTime;
+      if (recurrence !== undefined) patch.recurrence = recurrence;
       if (args.location) patch.location = args.location;
       if (args.notes) patch.notes = args.notes;
       if (args.provider) patch.provider = args.provider;
       await ctx.db.patch(existing._id, patch);
+
+      // A previous model response may already have created a second row under
+      // a time-stamped variant of the title. Retire those stale rows so their
+      // daily digest and scheduled jobs cannot continue to fire.
+      await Promise.all(
+        relatedItems
+          .filter((item) => item._id !== existing._id)
+          .map((item) => ctx.db.patch(item._id, { status: "cancelled" })),
+      );
+
       // Returning the id + resolved start lets the caller (handler) schedule a
       // pre-event reminder. We re-validate at fire time, so no need to cancel
       // the prior job on reschedule.
-      return { scheduleItemId: existing._id, date, time };
+      return {
+        scheduleItemId: existing._id,
+        date: date ?? existing.date,
+        time: time ?? existing.time,
+      };
     } else if (args.action === "add") {
       const scheduleItemId = await ctx.db.insert("scheduleItems", {
         careCaseId: args.careCaseId,

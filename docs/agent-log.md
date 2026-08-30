@@ -680,3 +680,27 @@ Read the last 2-3 entries before starting work.
 ### Concerns
 - This was a synthetic Convex function smoke, not a real inbound Linq webhook/iMessage test.
 - Dev had to be cleared because stale data blocked schema validation. Treat prod separately; do not reset or deploy prod without an explicit production decision.
+
+## 2026-08-30 — Codex
+
+### What I did
+- Fixed the stale recurring-reminder path behind the CareSupport screenshot.
+- Added stable schedule-title matching that ignores embedded clock times and reminder noise, so a model update such as `Ebise insulin at 4pm` reconciles with the existing `Ebise insulin` row instead of creating a second daily reminder.
+- Updated the persistence boundary to cancel related legacy duplicate rows during a correction and to preserve existing date/time fields when an update only supplies one of them.
+- Added digest-side deduplication so already-created stale variants cannot both appear in the morning reminder.
+- Tightened the prompt contract to keep schedule titles stable and put changed times in the typed `time` field.
+- Added regression tests for time-stamped title updates, legacy duplicate cleanup, digest selection, and prompt guidance.
+- Installed local dependencies with `npm ci` for verification. npm reported 7 existing audit findings; no dependency versions were changed.
+
+### State I'm leaving
+- Local code is fixed and verified.
+- `npm run typecheck` passes.
+- `npm test` passes: 29 files / 358 tests.
+- No Convex deploy, production data migration, or live-data mutation was run in this session.
+
+### What the next agent should know
+- The persistence fix handles future corrections and cleans related stale rows when the user corrects a reminder again.
+- Digest selection also protects existing data until each affected reminder is corrected.
+
+### Concerns
+- This is local verification only; hosted behavior still needs a separately approved deploy and a production smoke test.

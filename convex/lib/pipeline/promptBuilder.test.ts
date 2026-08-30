@@ -176,6 +176,20 @@ describe("buildSystemBlocks", () => {
     );
   });
 
+  it("keeps schedule time changes on the existing reminder item", () => {
+    const blocks = buildSystemBlocks(makeInput());
+    const responseFormatBlock = blocks.find((block) =>
+      block.text.includes("RESPONSE FORMAT"),
+    );
+
+    expect(responseFormatBlock?.text).toContain(
+      'copy its title exactly from the CARE CASE Schedule context',
+    );
+    expect(responseFormatBlock?.text).toContain(
+      'never add a second reminder for the time change',
+    );
+  });
+
   it("describes guardrailed outreach as the current runtime boundary", () => {
     const blocks = buildSystemBlocks(makeInput());
     const responseFormatBlock = blocks.find((block) =>

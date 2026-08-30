@@ -14,6 +14,7 @@ import {
 import type { DigestItem } from "./lib/digestComposer";
 import { sendMessage, sendMessageSequence, splitIntoBubbles } from "./lib/linqClient";
 import { zonedDateTimeToUtcMs } from "./lib/reminderTiming";
+import { selectLatestScheduleItems } from "./lib/scheduleIdentity";
 import { isTestChat } from "./handler";
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
@@ -61,7 +62,7 @@ export const sendDailyDigest = internalAction({
       return { sent: false, reason: "already_sent_today" };
     }
 
-    const items: DigestItem[] = digestData.scheduleItems
+    const items: DigestItem[] = selectLatestScheduleItems(digestData.scheduleItems)
       .filter((item: Doc<"scheduleItems">) => {
         if (item.date === todayLocalIso) return true;
         if (item.recurrence && recurrenceMatchesToday(item.recurrence, todayLocalIso)) {

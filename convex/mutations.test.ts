@@ -412,4 +412,86 @@ describe("upsertScheduleItem validation", () => {
     });
     expect(compiled?.careCaseContext).toContain("Morning meds");
   });
+
+  it("updates a reminder when the model includes the new time in its title", async () => {
+    const t = convexTest(schema, modules);
+    const { careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16517037984", chatId: "chat-time-change" },
+    );
+
+    await t.mutation(internal.mutations.upsertScheduleItem, {
+      careCaseId,
+      action: "add",
+      type: "reminder",
+      title: "Ebise insulin",
+      time: "14:15",
+      recurrence: "daily",
+    });
+
+    const result = await t.mutation(internal.mutations.upsertScheduleItem, {
+      careCaseId,
+      action: "update",
+      type: "reminder",
+      title: "Ebise insulin at 4pm",
+      time: "16:00",
+      recurrence: "daily",
+    });
+    const items = await t.query(api.scheduleItems.listByCareCase, { careCaseId });
+
+    expect(result).toMatchObject({ time: "16:00" });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      title: "Ebise insulin",
+      time: "16:00",
+      recurrence: "daily",
+      status: "scheduled",
+    });
+  });
+
+  it("cancels stale duplicate reminder rows during a later correction", async () => {
+    const t = convexTest(schema, modules);
+    const { careCaseId } = await t.mutation(
+      internal.mutations.createOnboardingUserAndCareCase,
+      { phone: "+16517037985", chatId: "chat-duplicate-cleanup" },
+    );
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("scheduleItems", {
+        careCaseId,
+        type: "reminder",
+        title: "Ebise insulin",
+        time: "14:15",
+        recurrence: "daily",
+        status: "scheduled",
+      });
+      await ctx.db.insert("scheduleItems", {
+        careCaseId,
+        type: "reminder",
+        title: "Ebise insulin at 4pm",
+        time: "16:00",
+        recurrence: "daily",
+        status: "scheduled",
+      });
+    });
+
+    await t.mutation(internal.mutations.upsertScheduleItem, {
+      careCaseId,
+      action: "update",
+      type: "reminder",
+      title: "Ebise insulin at 4 PM",
+      time: "16:00",
+      recurrence: "daily",
+    });
+    const items = await t.query(api.scheduleItems.listByCareCase, { careCaseId });
+
+    expect(items).toHaveLength(2);
+    expect(items.filter((item) => item.status === "scheduled")).toHaveLength(1);
+    expect(items.find((item) => item.status === "scheduled")).toMatchObject({
+      time: "16:00",
+    });
+    expect(items.find((item) => item.time === "14:15")).toMatchObject({
+      status: "cancelled",
+    });
+  });
 });
