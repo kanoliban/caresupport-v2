@@ -46,6 +46,18 @@ import {
 } from "./lib/promptContent";
 import { normalizeMemoryCategory } from "./lib/memory";
 import {
+  UNSUPPORTED_STOP_CLAIM_RESPONSE,
+  detectResumeIntent,
+  detectStopIntent,
+  doesReplyClaimNotificationStop,
+  resumeConfirmationResponse,
+  stopConfirmationResponse,
+} from "./lib/stopIntent";
+import {
+  checkMedicationWriteGrounding,
+  describeMedicationBlock,
+} from "./lib/careWriteGuards";
+import {
   DOORMAN_SYSTEM_PROMPT,
   parseDoormanResponse,
 } from "./lib/doorman";
@@ -1045,6 +1057,100 @@ export const handleMessage = internalAction({
       });
     }
 
+    // Stop / resume intent, resolved mechanically before the model sees the
+    // turn. The suppression row and the confirmation text are produced by the
+    // same code path here, which is the fix for the original bug: previously
+    // "Stop" only ever reached the model, so the agent could say it had stopped
+    // while the 8:00 AM cron went on sending.
+    //
+    // Care contacts opt out through their own record (contacts are deactivated
+    // in contactReplies.applyInboundReplyToEvent), so this path is for the
+    // coordinator's own thread.
+    if (!careContactReply) {
+      const activeSuppression = await ctx.runQuery(
+        internal.notifications.getSuppressionState,
+        { careCaseId, channel: "all" },
+      );
+
+      if (activeSuppression.suppressed && detectResumeIntent(messageBody)) {
+        const released = await ctx.runMutation(
+          internal.notifications.releaseSuppressions,
+          { careCaseId, sourceMessageId: inboundMessageId },
+        );
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId,
+          userId,
+          event: "notification_resumed",
+          phone: senderPhone,
+          details: {
+            triggerMessage: messageBody.slice(0, 200),
+            sourceMessageId: inboundMessageId,
+            matchedCount: released.released,
+          },
+          timestamp: now,
+        });
+
+        const reply = resumeConfirmationResponse(activeUser.name);
+        const outboundMessageId = await logOutbound(
+          ctx, careCaseId, userId, senderPhone, activeUser.name, reply, now,
+        );
+        const linqMessageIds = await sendResponse(chatId, reply, envVarsEarly, startedAt);
+        if (linqMessageIds.length > 0) {
+          await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+            messageId: outboundMessageId,
+            linqMessageId: linqMessageIds[0],
+          });
+        }
+        turn.setProperties({ path: "notification_resume" });
+        return await turn.finish({ success: true, response: reply });
+      }
+
+      const stopIntent = detectStopIntent(messageBody);
+      if (stopIntent) {
+        // Always honor the stop immediately and for every scheduled channel.
+        // Whether a stop should instead prompt for scope — and what happens to
+        // a safety-critical reminder on a muted channel — is an open product
+        // question; see the PR description. Suppressing first is the safe half
+        // of that decision, and scopeHint records what the sender named so the
+        // other half can be decided from real data.
+        await ctx.runMutation(internal.notifications.suppressChannel, {
+          careCaseId,
+          userId,
+          channel: "all",
+          requestText: stopIntent.matchedText,
+          scopeHint: stopIntent.scopeHint,
+          sourceMessageId: inboundMessageId,
+        });
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId,
+          userId,
+          event: "notification_suppressed",
+          phone: senderPhone,
+          details: {
+            channel: "all",
+            scopeHint: stopIntent.scopeHint,
+            triggerMessage: stopIntent.matchedText.slice(0, 200),
+            sourceMessageId: inboundMessageId,
+          },
+          timestamp: now,
+        });
+
+        const reply = stopConfirmationResponse(activeUser.name);
+        const outboundMessageId = await logOutbound(
+          ctx, careCaseId, userId, senderPhone, activeUser.name, reply, now,
+        );
+        const linqMessageIds = await sendResponse(chatId, reply, envVarsEarly, startedAt);
+        if (linqMessageIds.length > 0) {
+          await ctx.runMutation(internal.mutations.updateMessageLinqId, {
+            messageId: outboundMessageId,
+            linqMessageId: linqMessageIds[0],
+          });
+        }
+        turn.setProperties({ path: "notification_stop" });
+        return await turn.finish({ success: true, response: reply });
+      }
+    }
+
     if (
       careContactReply &&
       isCareContactIdentityClarification(messageBody)
@@ -1554,11 +1660,21 @@ export const handleMessage = internalAction({
     }
 
     if (parsed.careCaseMemoryUpdates.length > 0) {
+      // Care-case memory is the care log: care_note entries end up in the
+      // record for this care recipient. Stamp provenance so a note can always
+      // be traced back to the turn (and the speaker) that produced it, rather
+      // than appearing as an unattributed fact.
+      const careCaseMemoryUpdates = parsed.careCaseMemoryUpdates.map((update) => ({
+        ...update,
+        source:
+          update.source ??
+          `${careContactReply ? "care_contact_reply" : "user_message"}:${inboundMessageId}`,
+      }));
       const result = await ctx.runMutation(internal.mutations.upsertMemoryEntries, {
         userId,
         careCaseId,
         scope: "care_case",
-        updates: parsed.careCaseMemoryUpdates,
+        updates: careCaseMemoryUpdates,
       });
       memoriesSaved += result.inserted;
       if (result.inserted > 0) {
@@ -1697,8 +1813,55 @@ export const handleMessage = internalAction({
         "I can help with that, but I have not queued or sent any outreach yet. Send me the person's name, phone number, and the exact message, and I'll show it to you for approval before it goes out.";
     }
 
+    // Human-authored text for this turn plus the most recent inbound turns,
+    // used to ground writes into the care record. Also feeds the recurrence
+    // guard below.
+    //
+    // Sorted explicitly rather than relying on the array's order:
+    // getCareCaseRecentMessages returns newest-first, but building the
+    // conversation log above reverses it in place, so slicing off the front
+    // here would take the OLDEST turns — grounding a medication write against
+    // stale text while missing what the user just said.
+    const recentInboundText = [...recentMessages]
+      .filter((m: { direction: string }) => m.direction === "inbound")
+      .sort((a: { timestamp: number }, b: { timestamp: number }) => b.timestamp - a.timestamp)
+      .slice(0, 4)
+      .map((m: { body: string }) => m.body)
+      .join(" ");
+    const humanTextForGrounding = `${messageBody} ${recentInboundText}`;
+
     if (parsed.medicationUpdates?.length) {
       for (const medication of parsed.medicationUpdates) {
+        // A medication row is part of a patient record. Writing one because the
+        // model inferred a dose change nobody reported is worse than missing
+        // the update, so the write has to trace back to something a human said.
+        const verdict = checkMedicationWriteGrounding(medication, {
+          humanText: humanTextForGrounding,
+          isCareContactReply: Boolean(careContactReply),
+        });
+        if (!verdict.allowed) {
+          console.warn("[medication] blocked ungrounded write", {
+            careCaseId,
+            name: medication.name,
+            reason: verdict.reason,
+          });
+          await ctx.runMutation(internal.mutations.logAudit, {
+            careCaseId,
+            userId,
+            event: "medication_write_blocked",
+            phone: senderPhone,
+            details: {
+              medicationName: medication.name,
+              reason: describeMedicationBlock(verdict.reason),
+              status: medication.action,
+              triggerMessage: messageBody.slice(0, 200),
+              sourceMessageId: inboundMessageId,
+            },
+            timestamp: Date.now(),
+          });
+          continue;
+        }
+
         await ctx.runMutation(internal.mutations.upsertMedication, {
           careCaseId,
           action: medication.action,
@@ -1707,6 +1870,20 @@ export const handleMessage = internalAction({
           schedule: medication.schedule,
           prescriber: medication.prescriber,
           notes: medication.notes,
+        });
+        // Medication writes previously left no trace at all in auditLogs.
+        await ctx.runMutation(internal.mutations.logAudit, {
+          careCaseId,
+          userId,
+          event: "medication_updated",
+          phone: senderPhone,
+          details: {
+            medicationName: medication.name,
+            status: medication.action,
+            triggerMessage: messageBody.slice(0, 200),
+            sourceMessageId: inboundMessageId,
+          },
+          timestamp: Date.now(),
         });
       }
     }
@@ -1771,14 +1948,9 @@ export const handleMessage = internalAction({
     // which corrupts a one-off event into a repeating series. Only honor
     // recurrence when the user actually asked for repetition — checked across the
     // last few inbound messages so the "...make it weekly" → "yes" flow still works.
-    const recentInboundText = recentMessages
-      .filter((m: { direction: string }) => m.direction === "inbound")
-      .slice(0, 4)
-      .map((m: { body: string }) => m.body)
-      .join(" ");
     const userWantsRecurrence =
       /\b(every|each|recurring|recur|repeat|weekly|daily|monthly|bi-?weekly|fortnight|yearly|annual|biweekly)\b/i.test(
-        `${messageBody} ${recentInboundText}`,
+        humanTextForGrounding,
       );
 
     let calendarWriteSucceeded = false;
@@ -1966,6 +2138,20 @@ export const handleMessage = internalAction({
       smsResponse = calendarContext
         ? "I hit a snag updating your Google Calendar just now, so that change didn't go through. Want me to try again?"
         : "I'm not connected to your Google Calendar yet, so I couldn't do that. Text \"connect my calendar\" to link it — or I can keep track of it here in the meantime.";
+    }
+
+    // Mechanical honesty guard, same shape as the calendar and outreach guards
+    // above: a reply reaching this point cannot have suppressed anything (stop
+    // intent is resolved before the model runs), so a claim that messages have
+    // been stopped is a confabulation unless a suppression is genuinely active.
+    if (doesReplyClaimNotificationStop(smsResponse)) {
+      const suppressionState = await ctx.runQuery(
+        internal.notifications.getSuppressionState,
+        { careCaseId, channel: "all" },
+      );
+      if (!suppressionState.suppressed) {
+        smsResponse = UNSUPPORTED_STOP_CLAIM_RESPONSE;
+      }
     }
 
     smsResponse = stripPrivateNoteLeak(smsResponse);

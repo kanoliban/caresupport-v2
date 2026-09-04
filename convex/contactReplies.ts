@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { normalizePhone } from "./mutations";
+import { detectStopIntent } from "./lib/stopIntent";
 
 type ContactReplyResolution = {
   careCaseId: Id<"careCases">;
@@ -37,8 +38,6 @@ type CareContactReplyStatus =
 
 const WRONG_NUMBER_RE =
   /\b(wrong number|wrong person|you have the wrong|not (me|this person))\b/i;
-const STOP_REQUEST_RE =
-  /\b(stop texting|stop messaging|do not text|don't text|dont text|unsubscribe|remove me)\b/i;
 const DEFERRED_REPLY_RE =
   /\b(ask me later|check later|let me check|i'?ll check|i will check|get back to you|not sure yet|later today|tomorrow|next week|unavailable until|not available until)\b/i;
 const POSITIVE_REPLY_RE =
@@ -52,7 +51,11 @@ export function classifyCareContactReply(message: string): CareContactReplyStatu
   const normalized = message.trim();
   if (!normalized) return "needs_clarification";
   if (WRONG_NUMBER_RE.test(normalized)) return "wrong_number";
-  if (STOP_REQUEST_RE.test(normalized)) return "stop_requested";
+  // Shared with the coordinator thread's stop handling. The previous pattern
+  // required a phrase like "stop texting", so a bare "Stop" — the single most
+  // common opt-out — fell through to needs_clarification and the contact stayed
+  // active and contactable.
+  if (detectStopIntent(normalized)) return "stop_requested";
   if (NEGATIVE_REPLY_RE.test(normalized)) return "declined";
   if (!POSITIVE_REPLY_RE.test(normalized) && DEFERRED_REPLY_RE.test(normalized)) {
     return "deferred";

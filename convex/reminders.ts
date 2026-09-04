@@ -14,6 +14,12 @@ import {
 import type { DigestItem } from "./lib/digestComposer";
 import { sendMessage, sendMessageSequence, splitIntoBubbles } from "./lib/linqClient";
 import { zonedDateTimeToUtcMs } from "./lib/reminderTiming";
+import {
+  UNCHANGED_STREAK_ALERT_THRESHOLD,
+  dailyDigestDedupeKey,
+  fingerprintContent,
+  scheduleReminderDedupeKey,
+} from "./lib/notificationDedupe";
 import { isTestChat } from "./handler";
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
@@ -22,6 +28,8 @@ const MOVED_TOLERANCE_MS = 2 * 60 * 1000;
 type DigestSkipReason =
   | "no_chat_id"
   | "already_sent_today"
+  | "suppressed"
+  | "unchanged_content"
   | "dormant"
   | "nothing_to_send";
 
@@ -31,8 +39,20 @@ export interface DigestResult {
 }
 
 export const sendDailyDigest = internalAction({
-  args: { careCaseId: v.id("careCases") },
-  handler: async (ctx, { careCaseId }): Promise<DigestResult> => {
+  args: {
+    careCaseId: v.id("careCases"),
+    /**
+     * Skip the send when today's brief is byte-identical to the last one.
+     *
+     * Off by default, and deliberately so: the brief carries medication and
+     * appointment reminders whose content is *supposed* to repeat, and a
+     * silently dropped insulin reminder reads to the caregiver exactly like a
+     * handled one. The unchanged streak is always recorded and audited so the
+     * repetition is visible either way — see the open question in the PR.
+     */
+    suppressUnchanged: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { careCaseId, suppressUnchanged }): Promise<DigestResult> => {
     const cases = await ctx.runQuery(
       internal.admin.listActiveCareCasesForDigest,
       {},
@@ -44,6 +64,27 @@ export const sendDailyDigest = internalAction({
       return { sent: false, reason: "dormant" };
     }
 
+    // Durable opt-out check. This is the gate that was missing: "Stop" used to
+    // produce a reply and nothing else, so the next cron sent the same brief.
+    const suppression = await ctx.runQuery(
+      internal.notifications.getSuppressionState,
+      { careCaseId, channel: "daily_digest" },
+    );
+    if (suppression.suppressed) {
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId,
+        userId: active.userId,
+        event: "notification_skipped",
+        details: {
+          channel: "daily_digest",
+          reason: "suppressed",
+          triggerMessage: "scheduled_digest",
+        },
+        timestamp: Date.now(),
+      });
+      return { sent: false, reason: "suppressed" };
+    }
+
     const now = Date.now();
     const todayLocalIso = localDateIso(now, active.timezone);
 
@@ -53,6 +94,8 @@ export const sendDailyDigest = internalAction({
       sinceMs: now - TWO_DAYS_MS,
     });
 
+    // Cheap pre-filter. The authoritative same-day guard is the delivery claim
+    // below; this only avoids composing a brief we already know we sent.
     const alreadySent = digestData.recentDigestAudits.some(
       (audit: Doc<"auditLogs">) =>
         localDateIso(audit.timestamp, active.timezone) === todayLocalIso,
@@ -93,6 +136,50 @@ export const sendDailyDigest = internalAction({
       return { sent: false, reason: "no_chat_id" };
     }
 
+    // Claim before sending: one brief per care case per local day, and a record
+    // of whether the content actually moved since last time.
+    const claim = await ctx.runMutation(internal.notifications.claimDelivery, {
+      careCaseId,
+      userId: active.userId,
+      channel: "daily_digest",
+      dedupeKey: dailyDigestDedupeKey(careCaseId, todayLocalIso),
+      contentFingerprint: fingerprintContent(message),
+      body: message,
+    });
+    if (!claim.claimed || !claim.deliveryId) {
+      // A stop that landed after the check above still wins here.
+      return {
+        sent: false,
+        reason: claim.reason === "suppressed" ? "suppressed" : "already_sent_today",
+      };
+    }
+
+    if (claim.contentUnchanged) {
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId,
+        userId: active.userId,
+        event: "notification_unchanged",
+        details: {
+          channel: "daily_digest",
+          contentFingerprint: fingerprintContent(message),
+          unchangedStreak: claim.unchangedStreak,
+          severity:
+            claim.unchangedStreak >= UNCHANGED_STREAK_ALERT_THRESHOLD
+              ? "warning"
+              : "info",
+        },
+        timestamp: Date.now(),
+      });
+    }
+
+    if (suppressUnchanged && claim.contentUnchanged) {
+      await ctx.runMutation(internal.notifications.markDeliveryFailed, {
+        deliveryId: claim.deliveryId,
+        failureReason: "skipped_unchanged_content",
+      });
+      return { sent: false, reason: "unchanged_content" };
+    }
+
     const bubbles = splitIntoBubbles(message);
     const sendResults = await sendMessageSequence(
       active.chatId,
@@ -103,8 +190,17 @@ export const sendDailyDigest = internalAction({
       (result) => result.success && result.messageId,
     );
     if (!firstSuccess || !firstSuccess.messageId) {
+      await ctx.runMutation(internal.notifications.markDeliveryFailed, {
+        deliveryId: claim.deliveryId,
+        failureReason: "linq_send_failed",
+      });
       return { sent: false, reason: "linq_send_failed" };
     }
+
+    await ctx.runMutation(internal.notifications.markDeliverySent, {
+      deliveryId: claim.deliveryId,
+      linqMessageId: firstSuccess.messageId,
+    });
 
     await logDigestOutbound(ctx, {
       careCaseId,
@@ -162,6 +258,25 @@ export const sendScheduleItemReminder = internalAction({
       return { sent: false, reason: "item_moved" };
     }
 
+    const suppression = await ctx.runQuery(
+      internal.notifications.getSuppressionState,
+      { careCaseId: args.careCaseId, channel: "schedule_reminder" },
+    );
+    if (suppression.suppressed) {
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId: args.careCaseId,
+        userId: args.userId,
+        event: "notification_skipped",
+        details: {
+          channel: "schedule_reminder",
+          reason: "suppressed",
+          triggerMessage: "schedule_item_reminder",
+        },
+        timestamp: Date.now(),
+      });
+      return { sent: false, reason: "suppressed" };
+    }
+
     const minutes = Math.max(
       1,
       Math.round((args.expectedStartMs - Date.now()) / 60000),
@@ -171,6 +286,26 @@ export const sendScheduleItemReminder = internalAction({
         ? "in about an hour"
         : `in about ${minutes} minute${minutes === 1 ? "" : "s"}`;
     const body = `Reminder: "${item.title}" starts ${when}. Hope you're ready!`;
+
+    // One reminder per item per scheduled start, however many times the job is
+    // queued or replayed.
+    const claim = await ctx.runMutation(internal.notifications.claimDelivery, {
+      careCaseId: args.careCaseId,
+      userId: args.userId,
+      channel: "schedule_reminder",
+      dedupeKey: scheduleReminderDedupeKey(
+        args.scheduleItemId,
+        args.expectedStartMs,
+      ),
+      contentFingerprint: fingerprintContent(body),
+      body,
+    });
+    if (!claim.claimed || !claim.deliveryId) {
+      return {
+        sent: false,
+        reason: claim.reason === "suppressed" ? "suppressed" : "already_sent",
+      };
+    }
 
     const messageId = await ctx.runMutation(internal.mutations.logMessage, {
       careCaseId: args.careCaseId,
@@ -182,19 +317,52 @@ export const sendScheduleItemReminder = internalAction({
     });
 
     const linqToken = process.env.LINQ_API_TOKEN ?? "";
-    let linqSent = false;
-    if (linqToken && args.chatId && !isTestChat(args.chatId)) {
+    const attemptedLinq = Boolean(
+      linqToken && args.chatId && !isTestChat(args.chatId),
+    );
+    let sentLinqMessageId: string | undefined;
+    if (attemptedLinq) {
       const bubbles = splitIntoBubbles(body);
       const results = await sendMessageSequence(args.chatId, bubbles, linqToken);
       const firstSuccess = results.find((r) => r.success && r.messageId);
       if (firstSuccess?.messageId) {
-        linqSent = true;
+        sentLinqMessageId = firstSuccess.messageId;
         await ctx.runMutation(internal.mutations.updateMessageLinqId, {
           messageId,
           linqMessageId: firstSuccess.messageId,
         });
       }
     }
+    const linqSent = Boolean(sentLinqMessageId);
+
+    // Only a real provider attempt can fail. Test chats and unconfigured
+    // deployments deliberately log the reminder without sending, which is a
+    // delivery to the web UI rather than a failure — but a provider that
+    // rejected the send must never leave durable state saying a care reminder
+    // went out.
+    if (attemptedLinq && !linqSent) {
+      await ctx.runMutation(internal.notifications.markDeliveryFailed, {
+        deliveryId: claim.deliveryId,
+        failureReason: "linq_send_failed",
+      });
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId: args.careCaseId,
+        userId: args.userId,
+        event: "message_failed",
+        details: {
+          channel: "schedule_reminder",
+          failureReason: "linq_send_failed",
+          triggerMessage: "schedule_item_reminder",
+        },
+        timestamp: Date.now(),
+      });
+      return { sent: false, reason: "linq_send_failed" };
+    }
+
+    await ctx.runMutation(internal.notifications.markDeliverySent, {
+      deliveryId: claim.deliveryId,
+      linqMessageId: sentLinqMessageId,
+    });
 
     await ctx.runMutation(internal.mutations.logAudit, {
       careCaseId: args.careCaseId,
@@ -328,6 +496,25 @@ export const dispatchCoordinationFollowUps = internalAction({
     }
 
     for (const item of coordinatorUpdates) {
+      // Coordination status updates are agent-initiated sends to the
+      // coordinator, so they honor the same opt-out as the daily brief.
+      // (Outreach follow-ups above go to care contacts, whose opt-out is
+      // recorded on the contact itself — see contactReplies.applyInboundReplyToEvent.)
+      const suppression = await ctx.runQuery(
+        internal.notifications.getSuppressionState,
+        { careCaseId: item.careCaseId, channel: "coordination_status" },
+      );
+      if (suppression.suppressed) {
+        await ctx.runMutation(internal.outreachAttempts.markCoordinationStatusSkipped, {
+          coordinationEventId: item.coordinationEventId,
+          userId: item.userId,
+          reason: "notifications_suppressed",
+          now,
+        });
+        report.skipped += 1;
+        continue;
+      }
+
       if (!item.userChatId) {
         await ctx.runMutation(internal.outreachAttempts.markCoordinationStatusSkipped, {
           coordinationEventId: item.coordinationEventId,
