@@ -76,6 +76,12 @@ const eventValidator = v.union(
   v.literal("calendar_event_updated"),
   v.literal("calendar_event_deleted"),
   v.literal("calendar_event_duplicate_skipped"),
+  v.literal("notification_suppressed"),
+  v.literal("notification_resumed"),
+  v.literal("notification_skipped"),
+  v.literal("notification_unchanged"),
+  v.literal("medication_updated"),
+  v.literal("medication_write_blocked"),
 );
 
 const detailsValidator = v.object({
@@ -108,6 +114,12 @@ const detailsValidator = v.object({
   calendarEventTitle: v.optional(v.string()),
   calendarEventDate: v.optional(v.string()),
   calendarAccountEmail: v.optional(v.string()),
+  channel: v.optional(v.string()),
+  scopeHint: v.optional(v.string()),
+  dedupeKey: v.optional(v.string()),
+  contentFingerprint: v.optional(v.string()),
+  unchangedStreak: v.optional(v.number()),
+  medicationName: v.optional(v.string()),
 });
 
 const scheduleTypeValidator = v.union(

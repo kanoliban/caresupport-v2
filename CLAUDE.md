@@ -35,6 +35,8 @@ The active Convex schema is intentionally small:
 - `careContacts`
 - `coordinationEvents`
 - `outreachAttempts`
+- `notificationSuppressions`
+- `notificationDeliveries`
 - `auditLogs`
 
 The current prompt/runtime can:
@@ -50,6 +52,9 @@ The current prompt/runtime can:
 - map care contact replies back to the correct care case, contact, event, and
   outreach attempt
 - record self-corrections
+- honor a "stop" as durable suppression that every scheduled sender reads
+- deduplicate scheduled sends by key and detect unchanged repeat content
+- refuse medication writes it cannot trace back to human text
 - keep an audit trail
 
 The current prompt/runtime cannot yet:

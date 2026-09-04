@@ -153,6 +153,19 @@ const careClaimPromotionTarget = v.union(
   v.literal("memory_entry"),
 );
 
+const notificationChannel = v.union(
+  v.literal("all"),
+  v.literal("daily_digest"),
+  v.literal("schedule_reminder"),
+  v.literal("coordination_status"),
+);
+
+const notificationDeliveryStatus = v.union(
+  v.literal("claimed"),
+  v.literal("sent"),
+  v.literal("failed"),
+);
+
 // 2026-06-17: Convex schema for CareSupport runtime tables; includes calendar account metadata and duplicate-write audit events.
 const auditEvent = v.union(
   v.literal("context_load"),
@@ -179,6 +192,12 @@ const auditEvent = v.union(
   v.literal("calendar_event_updated"),
   v.literal("calendar_event_deleted"),
   v.literal("calendar_event_duplicate_skipped"),
+  v.literal("notification_suppressed"),
+  v.literal("notification_resumed"),
+  v.literal("notification_skipped"),
+  v.literal("notification_unchanged"),
+  v.literal("medication_updated"),
+  v.literal("medication_write_blocked"),
 );
 
 const auditDetails = v.object({
@@ -211,6 +230,12 @@ const auditDetails = v.object({
   calendarEventTitle: v.optional(v.string()),
   calendarEventDate: v.optional(v.string()),
   calendarAccountEmail: v.optional(v.string()),
+  channel: v.optional(v.string()),
+  scopeHint: v.optional(v.string()),
+  dedupeKey: v.optional(v.string()),
+  contentFingerprint: v.optional(v.string()),
+  unchangedStreak: v.optional(v.number()),
+  medicationName: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -461,6 +486,50 @@ export default defineSchema({
     .index("by_care_case", ["careCaseId"])
     .index("by_care_case_timestamp", ["careCaseId", "timestamp"])
     .index("by_event", ["event"]),
+
+  // Durable record of "stop texting me". The agent's reply is not the state
+  // change; this row is. Every scheduled sender reads it before sending.
+  notificationSuppressions: defineTable({
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    channel: notificationChannel,
+    active: v.boolean(),
+    // What the sender actually typed, and whether they named something
+    // narrower than "everything". We always suppress the whole channel; the
+    // hint is recorded so a scope policy can be decided from real data.
+    requestText: v.optional(v.string()),
+    scopeHint: v.optional(v.string()),
+    sourceMessageId: v.optional(v.id("messages")),
+    suppressedAt: v.number(),
+    releasedAt: v.optional(v.number()),
+    releasedBySourceMessageId: v.optional(v.id("messages")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_care_case_active", ["careCaseId", "active"])
+    .index("by_care_case_channel_active", ["careCaseId", "channel", "active"])
+    .index("by_user_active", ["userId", "active"]),
+
+  // One row per scheduled send, claimed before the send goes out. The dedupe
+  // key makes delivery at-most-once per window; the content fingerprint makes
+  // an unchanging notification visible instead of silently repeating.
+  notificationDeliveries: defineTable({
+    careCaseId: v.id("careCases"),
+    userId: v.id("users"),
+    channel: notificationChannel,
+    dedupeKey: v.string(),
+    contentFingerprint: v.string(),
+    // How many consecutive sends on this channel carried identical content.
+    unchangedStreak: v.number(),
+    body: v.string(),
+    status: notificationDeliveryStatus,
+    linqMessageId: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    claimedAt: v.number(),
+    sentAt: v.optional(v.number()),
+  })
+    .index("by_dedupe_key", ["dedupeKey"])
+    .index("by_care_case_channel", ["careCaseId", "channel"]),
 
   connectedAccounts: defineTable({
     userId: v.id("users"),
