@@ -147,7 +147,11 @@ export const sendDailyDigest = internalAction({
       body: message,
     });
     if (!claim.claimed || !claim.deliveryId) {
-      return { sent: false, reason: "already_sent_today" };
+      // A stop that landed after the check above still wins here.
+      return {
+        sent: false,
+        reason: claim.reason === "suppressed" ? "suppressed" : "already_sent_today",
+      };
     }
 
     if (claim.contentUnchanged) {
@@ -297,7 +301,10 @@ export const sendScheduleItemReminder = internalAction({
       body,
     });
     if (!claim.claimed || !claim.deliveryId) {
-      return { sent: false, reason: "already_sent" };
+      return {
+        sent: false,
+        reason: claim.reason === "suppressed" ? "suppressed" : "already_sent",
+      };
     }
 
     const messageId = await ctx.runMutation(internal.mutations.logMessage, {
@@ -310,8 +317,11 @@ export const sendScheduleItemReminder = internalAction({
     });
 
     const linqToken = process.env.LINQ_API_TOKEN ?? "";
+    const attemptedLinq = Boolean(
+      linqToken && args.chatId && !isTestChat(args.chatId),
+    );
     let sentLinqMessageId: string | undefined;
-    if (linqToken && args.chatId && !isTestChat(args.chatId)) {
+    if (attemptedLinq) {
       const bubbles = splitIntoBubbles(body);
       const results = await sendMessageSequence(args.chatId, bubbles, linqToken);
       const firstSuccess = results.find((r) => r.success && r.messageId);
@@ -324,6 +334,30 @@ export const sendScheduleItemReminder = internalAction({
       }
     }
     const linqSent = Boolean(sentLinqMessageId);
+
+    // Only a real provider attempt can fail. Test chats and unconfigured
+    // deployments deliberately log the reminder without sending, which is a
+    // delivery to the web UI rather than a failure — but a provider that
+    // rejected the send must never leave durable state saying a care reminder
+    // went out.
+    if (attemptedLinq && !linqSent) {
+      await ctx.runMutation(internal.notifications.markDeliveryFailed, {
+        deliveryId: claim.deliveryId,
+        failureReason: "linq_send_failed",
+      });
+      await ctx.runMutation(internal.mutations.logAudit, {
+        careCaseId: args.careCaseId,
+        userId: args.userId,
+        event: "message_failed",
+        details: {
+          channel: "schedule_reminder",
+          failureReason: "linq_send_failed",
+          triggerMessage: "schedule_item_reminder",
+        },
+        timestamp: Date.now(),
+      });
+      return { sent: false, reason: "linq_send_failed" };
+    }
 
     await ctx.runMutation(internal.notifications.markDeliverySent, {
       deliveryId: claim.deliveryId,

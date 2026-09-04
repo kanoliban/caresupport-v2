@@ -23,11 +23,25 @@ describe("detectStopIntent", () => {
       "unsubscribe",
       "cancel these reminders",
       "turn off the notifications",
-      "take me off this",
+      "take me off this list",
+      "remove me from these texts",
       "quit messaging me",
     ];
     for (const message of messages) {
       expect(detectStopIntent(message), message).not.toBeNull();
+    }
+  });
+
+  it("does not mute the thread on staffing language", () => {
+    // #given "remove me"/"take me off" used about shifts, not messages
+    const messages = [
+      "take me off Tuesday's shift",
+      "remove me from the coverage schedule",
+      "please take me off the rotation for next week",
+    ];
+    // #then the coordinator is not blanket-muted and no contact is deactivated
+    for (const message of messages) {
+      expect(detectStopIntent(message), message).toBeNull();
     }
   });
 

@@ -77,7 +77,14 @@ const STOP_PHRASE_RE = new RegExp(
     String.raw`\b(don'?t|do not|please don'?t)\s+(text|message|msg|ping)\b`,
     // "turn off the reminders"
     String.raw`\bturn off\b[^.?!\n]{0,24}\b(${MESSAGING_NOUN})\b`,
-    String.raw`\b(unsubscribe|opt me out|remove me|take me off)\b`,
+    // Unambiguous on their own — these are only ever about messaging.
+    String.raw`\b(unsubscribe|opt me out)\b`,
+    // "remove me" and "take me off" are NOT unambiguous in a care thread:
+    // "take me off Tuesday's shift" and "remove me from the coverage schedule"
+    // are staffing instructions. Suppressing every channel — or deactivating a
+    // care contact and revoking their consent — on those would be its own
+    // incident, so they need a messaging target.
+    String.raw`\b(remove me|take me off)\b[^.?!\n]{0,24}\b(${MESSAGING_NOUN}|list|thread)\b`,
     String.raw`\bleave me alone\b`,
   ].join("|"),
   "i",

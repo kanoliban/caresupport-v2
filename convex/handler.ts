@@ -1813,10 +1813,18 @@ export const handleMessage = internalAction({
         "I can help with that, but I have not queued or sent any outreach yet. Send me the person's name, phone number, and the exact message, and I'll show it to you for approval before it goes out.";
     }
 
-    // Human-authored text for this turn plus the recent inbound turns, used to
-    // ground writes into the care record. Also feeds the recurrence guard below.
-    const recentInboundText = recentMessages
+    // Human-authored text for this turn plus the most recent inbound turns,
+    // used to ground writes into the care record. Also feeds the recurrence
+    // guard below.
+    //
+    // Sorted explicitly rather than relying on the array's order:
+    // getCareCaseRecentMessages returns newest-first, but building the
+    // conversation log above reverses it in place, so slicing off the front
+    // here would take the OLDEST turns — grounding a medication write against
+    // stale text while missing what the user just said.
+    const recentInboundText = [...recentMessages]
       .filter((m: { direction: string }) => m.direction === "inbound")
+      .sort((a: { timestamp: number }, b: { timestamp: number }) => b.timestamp - a.timestamp)
       .slice(0, 4)
       .map((m: { body: string }) => m.body)
       .join(" ");

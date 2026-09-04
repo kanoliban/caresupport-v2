@@ -65,6 +65,64 @@ describe("checkMedicationWriteGrounding", () => {
     expect(verdict).toEqual({ allowed: true });
   });
 
+  it("does not accept a dose that is merely a substring of what was said", () => {
+    // #given the user wrote 25 mg and the model wrote 5 mg
+    const verdict = checkMedicationWriteGrounding(
+      { action: "update", name: "metformin", dose: "5 mg" },
+      { ...coordinatorTurn, humanText: "her metformin is 25 mg now" },
+    );
+
+    // #then "5" inside "25" does not ground the write
+    expect(verdict).toEqual({
+      allowed: false,
+      reason: "dose_not_in_human_text",
+    });
+  });
+
+  it("requires every number in a multi-part value, not just one", () => {
+    const verdict = checkMedicationWriteGrounding(
+      { action: "update", name: "insulin", dose: "10 units, 3 times" },
+      { ...coordinatorTurn, humanText: "she takes insulin 10 units" },
+    );
+
+    expect(verdict).toEqual({
+      allowed: false,
+      reason: "dose_not_in_human_text",
+    });
+  });
+
+  it("blocks a schedule that is close to but not what was said", () => {
+    // #given the user said 8:30 and the model wrote 8:00
+    const verdict = checkMedicationWriteGrounding(
+      { action: "update", name: "insulin", schedule: "08:00 daily" },
+      { ...coordinatorTurn, humanText: "move her insulin to 08:30" },
+    );
+
+    expect(verdict).toEqual({
+      allowed: false,
+      reason: "schedule_not_in_human_text",
+    });
+  });
+
+  it("treats 8am and 08:00 as the same time", () => {
+    const verdict = checkMedicationWriteGrounding(
+      { action: "update", name: "insulin", schedule: "08:00 daily" },
+      { ...coordinatorTurn, humanText: "she takes her insulin at 8am" },
+    );
+
+    expect(verdict).toEqual({ allowed: true });
+  });
+
+  it("does not confuse a quantity with a clock time", () => {
+    // #given "14 units" — a dose, not 2 PM
+    const verdict = checkMedicationWriteGrounding(
+      { action: "update", name: "insulin", dose: "14 units" },
+      { ...coordinatorTurn, humanText: "her insulin went up to 14 units" },
+    );
+
+    expect(verdict).toEqual({ allowed: true });
+  });
+
   it("blocks a schedule time nobody named", () => {
     const verdict = checkMedicationWriteGrounding(
       { action: "update", name: "metformin", schedule: "08:00 daily" },

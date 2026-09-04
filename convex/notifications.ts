@@ -138,7 +138,7 @@ export const releaseSuppressions = internalMutation({
 
 export interface DeliveryClaim {
   claimed: boolean;
-  reason?: "duplicate_dedupe_key";
+  reason?: "duplicate_dedupe_key" | "suppressed";
   deliveryId?: Id<"notificationDeliveries">;
   contentUnchanged: boolean;
   unchangedStreak: number;
@@ -151,6 +151,12 @@ export interface DeliveryClaim {
  * send and log must not let the same brief go out again. A claim that later
  * fails to send stays claimed for its window — for an SMS channel, at-most-once
  * is the safer bias than at-least-once.
+ *
+ * Suppression is re-checked here, in the same transaction that reserves the
+ * send. Callers check it earlier too, but that read and this claim are separate
+ * transactions with a Linq round trip and digest composition between them: a
+ * STOP committing inside that window would otherwise be told messages are off
+ * and then receive one anyway. This is the check that actually holds.
  */
 export const claimDelivery = internalMutation({
   args: {
@@ -162,6 +168,20 @@ export const claimDelivery = internalMutation({
     body: v.string(),
   },
   handler: async (ctx, args): Promise<DeliveryClaim> => {
+    const suppressions = await activeSuppressions(ctx, args.careCaseId);
+    if (
+      suppressions.some(
+        (row) => row.channel === "all" || row.channel === args.channel,
+      )
+    ) {
+      return {
+        claimed: false,
+        reason: "suppressed",
+        contentUnchanged: false,
+        unchangedStreak: 0,
+      };
+    }
+
     const existing = await ctx.db
       .query("notificationDeliveries")
       .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", args.dedupeKey))

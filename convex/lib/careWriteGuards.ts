@@ -44,43 +44,79 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function numericTokens(value: string): string[] {
-  return value.match(/\d+(?:\.\d+)?/g) ?? [];
+/**
+ * Clock times, as minutes since midnight, so "8am" and "08:00" compare equal
+ * while "08:00" and "08:30" do not. Matches only expressions that are
+ * unambiguously times — a bare "14" in "14 units" is a quantity, not 2 PM.
+ */
+const TIME_PATTERN = /(\d{1,2}):(\d{2})\s*(am|pm)?|(\d{1,2})\s*(am|pm)\b/gi;
+
+function extractTimes(text: string): number[] {
+  const times: number[] = [];
+  const pattern = new RegExp(TIME_PATTERN.source, "gi");
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    const hasMinutes = match[1] !== undefined;
+    let hour = Number(hasMinutes ? match[1] : match[4]);
+    const minute = hasMinutes ? Number(match[2]) : 0;
+    const meridiem = (hasMinutes ? match[3] : match[5])?.toLowerCase();
+    if (hour > 23 || minute > 59) continue;
+    if (meridiem === "pm" && hour < 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+    times.push(hour * 60 + minute);
+  }
+  return times;
+}
+
+/** Quantities, once clock times have been taken out of the running. */
+function extractQuantities(text: string): number[] {
+  const withoutTimes = text.replace(new RegExp(TIME_PATTERN.source, "gi"), " ");
+  return (withoutTimes.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+}
+
+/**
+ * True when every number the model wrote also appears in human text, compared
+ * as whole values rather than as substrings.
+ *
+ * Substring matching would let a model-authored "5 mg" pass against a human's
+ * "25 mg", and matching on *any* number would let a multi-part value through on
+ * one coincidence — in exactly the hallucination case this guard exists to
+ * catch. Every component has to be accounted for.
+ *
+ * A value with no numbers at all ("as directed", "twice daily") carries no
+ * numeric claim and is left to the name check.
+ */
+function numbersAppearInHumanText(value: string, humanText: string): boolean {
+  const humanTimes = new Set(extractTimes(humanText));
+  if (!extractTimes(value).every((time) => humanTimes.has(time))) {
+    return false;
+  }
+
+  const humanQuantities = new Set(extractQuantities(humanText));
+  return extractQuantities(value).every((quantity) =>
+    humanQuantities.has(quantity),
+  );
 }
 
 /**
  * True when the medication's name shows up in what a human wrote. Multi-word
  * brand/generic names ("Lantus insulin glargine") match on any meaningful
- * token, so "up her Lantus" grounds a write against the full name.
+ * whole word, so "up her Lantus" grounds a write against the full name.
  */
-function nameAppearsInHumanText(name: string, humanText: string): boolean {
+function nameAppearsInHumanText(name: string, normalizedHumanText: string): boolean {
   const normalizedName = normalize(name);
   if (!normalizedName) return false;
-  if (humanText.includes(normalizedName)) return true;
+  // A multi-word name may appear verbatim as a phrase.
+  if (normalizedHumanText.includes(normalizedName)) return true;
 
   const tokens = normalizedName.split(" ").filter((token) => token.length >= 4);
   if (tokens.length === 0) {
     // Short names ("D3", "B12") have no safe partial match — require the whole
-    // thing, which the includes() check above already tested.
+    // thing, which the phrase check above already tested.
     return false;
   }
-  return tokens.some((token) => humanText.includes(token));
-}
-
-/**
- * A numeric value (a dose, a clock time) is grounded only if the same number
- * appears in human text. This is the specific guard against a phantom dose:
- * the model asking "did the dose change too?" and then writing down an answer
- * nobody gave.
- */
-function numbersAppearInHumanText(value: string, humanText: string): boolean {
-  const numbers = numericTokens(value);
-  if (numbers.length === 0) {
-    // Non-numeric values ("as directed", "twice daily") carry no dosage claim
-    // we can check this way.
-    return true;
-  }
-  return numbers.some((number) => humanText.includes(number));
+  const humanWords = new Set(normalizedHumanText.split(" "));
+  return tokens.some((token) => humanWords.has(token));
 }
 
 export function checkMedicationWriteGrounding(
@@ -97,16 +133,21 @@ export function checkMedicationWriteGrounding(
     return { allowed: false, reason: "missing_medication_name" };
   }
 
-  const humanText = normalize(context.humanText);
-  if (!nameAppearsInHumanText(update.name, humanText)) {
+  // Names compare against normalized text; numbers compare against the raw
+  // text, which still has the colons that make a clock time readable.
+  const normalizedHumanText = normalize(context.humanText);
+  if (!nameAppearsInHumanText(update.name, normalizedHumanText)) {
     return { allowed: false, reason: "medication_name_not_in_human_text" };
   }
 
-  if (update.dose && !numbersAppearInHumanText(update.dose, humanText)) {
+  if (update.dose && !numbersAppearInHumanText(update.dose, context.humanText)) {
     return { allowed: false, reason: "dose_not_in_human_text" };
   }
 
-  if (update.schedule && !numbersAppearInHumanText(update.schedule, humanText)) {
+  if (
+    update.schedule &&
+    !numbersAppearInHumanText(update.schedule, context.humanText)
+  ) {
     return { allowed: false, reason: "schedule_not_in_human_text" };
   }
 

@@ -160,6 +160,48 @@ describe("stop intent reaches the scheduled sender", () => {
     expect(result).toEqual({ sent: true });
   });
 
+  it("does not record a reminder as delivered when the provider rejected it", async () => {
+    // #given a real chat and a Linq API that fails the send
+    const t = convexTest(schema, modules);
+    const { careCaseId, userId } = await createActiveCareCaseWithMorningInsulin(t);
+    const scheduleItemId = await t.run(async (ctx) =>
+      ctx.db.insert("scheduleItems", {
+        careCaseId,
+        type: "appointment",
+        title: "Dialysis",
+        date: "2026-09-10",
+        time: "14:00",
+        status: "scheduled",
+      }),
+    );
+    process.env.LINQ_API_TOKEN = "token";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 500,
+        text: () => Promise.resolve("upstream error"),
+      }),
+    );
+
+    // #when the reminder fires
+    const result = await t.action(internal.reminders.sendScheduleItemReminder, {
+      scheduleItemId,
+      careCaseId,
+      userId,
+      chatId: "imsg-chat-real",
+      expectedStartMs: Date.parse("2026-09-10T19:00:00Z"),
+      title: "Dialysis",
+    });
+
+    // #then durable state says failed, not delivered
+    expect(result).toEqual({ sent: false, reason: "linq_send_failed" });
+    const deliveries = await t.run(async (ctx) =>
+      ctx.db.query("notificationDeliveries").collect(),
+    );
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0].status).toBe("failed");
+  });
+
   it("blocks a schedule-item reminder too, not just the daily brief", async () => {
     const t = convexTest(schema, modules);
     const { careCaseId, userId } = await createActiveCareCaseWithMorningInsulin(t);
@@ -279,6 +321,35 @@ describe("delivery idempotency", () => {
       claimed: false,
       reason: "duplicate_dedupe_key",
     });
+  });
+
+  it("refuses the claim when a stop landed after the caller's suppression check", async () => {
+    // #given the digest already passed its suppression check, then the user
+    // texts STOP while the brief is being composed and sent
+    const t = convexTest(schema, modules);
+    const { careCaseId, userId } = await createActiveCareCaseWithMorningInsulin(t);
+    await t.mutation(internal.notifications.suppressChannel, {
+      careCaseId,
+      userId,
+      channel: "all",
+    });
+
+    // #when the send is reserved
+    const claim = await t.mutation(internal.notifications.claimDelivery, {
+      careCaseId,
+      userId,
+      channel: "daily_digest",
+      dedupeKey: dailyDigestDedupeKey(careCaseId, "2026-09-04"),
+      contentFingerprint: fingerprintContent("Today: Insulin at 8 AM."),
+      body: "Today: Insulin at 8 AM.",
+    });
+
+    // #then the stop still wins — the claim and the check are one transaction
+    expect(claim).toMatchObject({ claimed: false, reason: "suppressed" });
+    const rows = await t.run(async (ctx) =>
+      ctx.db.query("notificationDeliveries").collect(),
+    );
+    expect(rows).toHaveLength(0);
   });
 
   it("counts consecutive identical briefs — three days would now be visible", async () => {
